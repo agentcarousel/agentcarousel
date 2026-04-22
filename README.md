@@ -2,9 +2,9 @@
 
 > **My agent skill is better with Claude than Gemini and I have *proof***
 
-**Evaluate AI agents and skills the way regulators would audit them: reproducible runs, scored rubrics, signed evidence.**
+Evaluate AI agents and skills the way regulators would audit them with reproducible runs, scored rubrics, and signed evidence.
 
-## Install
+## Installation
 
 ```bash
 curl -fsSL "https://install.agentcarousel.com" | sh
@@ -39,10 +39,10 @@ agc --help
 
 ## Security
 
-Report vulnerabilities through the contact process described in `[SECURITY.md](SECURITY.md)`. Do **not** file public security issues with exploit details before maintainers acknowledge receipt.
+Report vulnerabilities through the contact process described in [SECURITY.md](SECURITY.md). Do **not** file public security issues with exploit details before maintainers acknowledge receipt.
 
 ---
 
 ## Contributing
 
-The CLI is developed in a different workspace. Contributions to **fixtures** or docs that ship here may be accepted. Feature work on the core product is coordinated out-of-band. See `[CONTRIBUTING.md](CONTRIBUTING.md)`.
+The CLI is developed in a different workspace. Contributions to **fixtures** or docs that ship here may be accepted. Feature work on the core product is coordinated out-of-band. See [CONTRIBUTING.md](CONTRIBUTING.md).
