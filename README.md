@@ -4,6 +4,8 @@
 
 Evaluate AI agents and skills the way regulators would audit them with reproducible runs, scored rubrics, and signed evidence.
 
+<small>Compiled and built in Rust</small>
+
 ## Installation
 
 ```bash
