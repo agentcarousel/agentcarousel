@@ -20,7 +20,7 @@ curl -fsSL "https://raw.githubusercontent.com/agentcarousel/agentcarousel/v0.1.0
 
 `install.sh` picks the archive for your architecture, verifies checksums, and installs the binary to `${AGENTCAROUSEL_INSTALL_DIR:-$HOME/.local/bin}`.
 
-On Windows, download the `.zip` from the [Releases](https://github.com/agentcarousel/agentcarousel/releases) page.
+On Windows, download the `.zip` from the [Releases](http://github.com/agentcarousel/agentcarousel/releases) page.
 
 ## `agc` shorthand
 
