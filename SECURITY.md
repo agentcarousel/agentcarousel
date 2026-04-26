@@ -11,3 +11,7 @@ Security updates are applied to the **latest** minor release line where practica
 ## Scope
 
 This policy covers the `agentcarousel` binary and scripts in this repository.
+
+## Trust posture and ATF alignment
+
+AgentCarousel is an **evidence and CI-gates** tool aligned *in spirit* with the [Agentic Trust Framework](https://github.com/massivescale-ai/agentic-trust-framework).

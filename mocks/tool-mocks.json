@@ -1,0 +1,7 @@
+[
+  {
+    "tool": "inventory_lookup",
+    "args_match": { "item": "Widget A" },
+    "response": { "item": "Widget A", "available": 12 }
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "example-skill/positive" },
+    "response": { "content": "Summary: short note." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "example-skill/tool-call" },
+    "response": { "content": "Widget A has 12 units available." }
+  }
+]

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install agentcarousel from GitHub (latest tag).
 # Usage:
-#   curl -fsSL https://install.agentcarousel.com | sh
+#   curl -fsSL http://install.agentcarousel.com | sh
 
 set -eu
 
@@ -75,7 +75,15 @@ if curl -fsSL -o "${TMP}/SHA256SUMS" "${SUMS_URL}" 2>/dev/null; then
 fi
 
 INSTALL_DIR="${AGENTCAROUSEL_INSTALL_DIR:-${HOME}/.local/bin}"
-mkdir -p "${INSTALL_DIR}"
+if ! mkdir -p "${INSTALL_DIR}"; then
+  echo "install.sh: could not create install directory: ${INSTALL_DIR}" >&2
+  echo "Typical fix if ~/.local was created by root:" >&2
+  echo '  sudo chown -R "$(whoami)" "${HOME}/.local"' >&2
+  echo "Or pick a directory you own, then:" >&2
+  echo '  mkdir -p "${HOME}/bin"' >&2
+  echo '  AGENTCAROUSEL_INSTALL_DIR="${HOME}/bin" curl -fsSL https://install.agentcarousel.com | sh' >&2
+  exit 1
+fi
 
 tar -xzf "${TMP}/${ASSET}" -C "${TMP}"
 # Expect single binary named agentcarousel at archive root
@@ -107,13 +115,29 @@ setup_alias() {
       ;;
   esac
 
-  shell_name="$(basename "${SHELL:-}")"
-  case "${shell_name}" in
+  # curl | sh runs this script as sh; $SHELL may still be sh in some environments.
+  # Pick an rc file that matches common login shells when basename is not bash/zsh.
+  shell_base="$(basename "${SHELL:-}")"
+  case "${shell_base}" in
     bash) rc_file="${HOME}/.bashrc" ;;
     zsh) rc_file="${HOME}/.zshrc" ;;
     *)
-      echo "Skipping alias setup (unsupported shell: ${shell_name:-unknown})."
-      return
+      case "$(uname -s)" in
+        Darwin)
+          rc_file="${HOME}/.zshrc"
+          echo "Note: installer ran as sh; adding alias to ${rc_file} (macOS default is zsh)." >&2
+          ;;
+        *)
+          if [ -f "${HOME}/.bashrc" ]; then
+            rc_file="${HOME}/.bashrc"
+          elif [ -f "${HOME}/.zshrc" ]; then
+            rc_file="${HOME}/.zshrc"
+          else
+            rc_file="${HOME}/.bashrc"
+            echo "Note: installer ran as sh; adding alias to ${rc_file}. If you use zsh, move the line to ~/.zshrc." >&2
+          fi
+          ;;
+      esac
       ;;
   esac
 

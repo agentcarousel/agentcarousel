@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agentcarousel Fixture",
+  "type": "object",
+  "required": ["schema_version", "skill_or_agent", "cases"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "skill_or_agent": { "type": "string", "minLength": 1 },
+    "defaults": { "type": "object" },
+    "bundle_id": { "type": "string", "minLength": 1 },
+    "bundle_version": { "type": "string", "minLength": 1 },
+    "certification_track": {
+      "type": "string",
+      "enum": ["none", "candidate", "stable", "trusted"]
+    },
+    "risk_tier": { "type": "string", "enum": ["low", "medium", "high"] },
+    "data_handling": {
+      "type": "string",
+      "enum": ["synthetic-only", "no-pii", "pii-reviewed"]
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "input", "expected"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "timeout_secs": { "type": "integer", "minimum": 1 },
+          "seed": { "type": "integer", "minimum": 0 },
+          "input": {
+            "type": "object",
+            "required": ["messages"],
+            "properties": {
+              "messages": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["role", "content"],
+                  "properties": {
+                    "role": { "type": "string" },
+                    "content": { "type": "string" }
+                  }
+                }
+              },
+              "context": { "type": "object" },
+              "env_overrides": { "type": "object" }
+            }
+          },
+          "expected": { "type": "object" }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

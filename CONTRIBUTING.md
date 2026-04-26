@@ -10,12 +10,16 @@ Do **not** open a public issue for undisclosed vulnerabilities. Follow [SECURITY
 
 ---
 
+## Public fixture policy
+
+Fixtures that ship in the main branch must be **safe to run offline** in CI (`validate` + `test --offline`) and must **not** embed secrets, private keys, or customer data. They will be reviewed before acceptance.
+
 ## Fixture proposals (issue first)
 
 1. **Open an issue** in this repository. Use a title such as `Fixture proposal: <skill-or-agent-id>`.
 2. In the issue body, work through the intake checklist below.
 3. Wait for maintainer feedback. They may ask for clarifications.
-4. Implementation happens in the canonical workspace. After an issue is accepted, maintainers either land the change themselves or point you to the agreed contribution path (for example a private fork, patch bundle, or source repo).
+4. After an issue is accepted, maintainers either land the change themselves or point you to the agreed contribution path (for example a maintainer fork, patch bundle, or upstream source repo).
 
 ### Intake checklist
 
@@ -32,8 +36,9 @@ Copy the block into your issue and fill it in.
 
 **Rules of engagement**:
 
-- Pair a **happy path** with at least one **failure-mode** case in the design before implementation.
+- Pair a **happy-path** case with at least one **failure-mode** case in the design before implementation.
 - Prefer `agentcarousel init` to scaffold templates.
+- Always `init -> validate -> test --offline`
 
 ---
 

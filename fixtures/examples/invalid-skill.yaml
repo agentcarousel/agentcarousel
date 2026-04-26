@@ -1,0 +1,10 @@
+schema_version: 1
+skill_or_agent: Bad_Skill
+cases:
+  - id: wrong-prefix/positive
+    input:
+      messages:
+        - role: user
+          content: "Summarize this short note."
+    expected:
+      tool_sequence: []
