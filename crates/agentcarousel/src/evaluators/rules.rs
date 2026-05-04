@@ -101,22 +101,21 @@ fn check_tool_sequence(
         .filter(|expectation| expectation.order == ToolOrder::Strict)
         .collect();
 
-    if !strict_expected.is_empty() {
-        if actual_tools.len() != strict_expected.len()
+    if !strict_expected.is_empty()
+        && (actual_tools.len() != strict_expected.len()
             || !strict_expected
                 .iter()
                 .zip(actual_steps.iter())
-                .all(|(expected, actual)| tool_matches(expected, actual))
-        {
-            failures.push(format!(
-                "tool sequence mismatch: expected {:?}, got {:?}",
-                strict_expected
-                    .iter()
-                    .map(|expectation| expectation.tool.clone())
-                    .collect::<Vec<_>>(),
-                actual_tools
-            ));
-        }
+                .all(|(expected, actual)| tool_matches(expected, actual)))
+    {
+        failures.push(format!(
+            "tool sequence mismatch: expected {:?}, got {:?}",
+            strict_expected
+                .iter()
+                .map(|expectation| expectation.tool.clone())
+                .collect::<Vec<_>>(),
+            actual_tools
+        ));
     }
 
     let subsequence_expected: Vec<&agentcarousel_core::ToolCallExpectation> = sequence

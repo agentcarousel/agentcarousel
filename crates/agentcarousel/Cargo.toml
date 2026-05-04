@@ -1,6 +1,6 @@
 [package]
 name = "agentcarousel"
-version = "0.4.0"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.95"
 description = "Evaluate agents and skills with YAML fixtures, run cases (mock or live), and keep run rows in SQLite for reports and evidence export."
