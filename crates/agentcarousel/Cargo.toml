@@ -1,0 +1,56 @@
+[package]
+name = "agentcarousel"
+version = "0.4.0"
+edition = "2021"
+rust-version = "1.95"
+description = "Evaluate agents and skills with YAML fixtures, run cases (mock or live), and keep run rows in SQLite for reports and evidence export."
+readme = "../../README.md"
+license = "Apache-2.0"
+repository = "https://github.com/agentcarousel/agentcarousel"
+documentation = "https://docs.rs/agentcarousel"
+homepage = "https://agentcarousel.com"
+keywords = ["fixtures", "agents", "skills", "testing", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "agentcarousel"
+path = "src/main.rs"
+
+[[bin]]
+name = "agc"
+path = "src/bin/agc.rs"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+console = "0.15"
+flate2 = "1"
+globset = "0.4"
+indicatif = "0.17"
+jsonschema = "0.17"
+openrouter-rs = "0.8.0"
+quick-xml = { version = "0.31", features = ["serialize"] }
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+similar = "2"
+tar = "0.4"
+thiserror = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+toml = "0.8"
+ulid = "1"
+walkdir = "2"
+
+[dev-dependencies]
+assert_cmd = "2"
+chrono = "0.4"
+mockito = "1"
+serde_json = "1"
+tempfile = "3"

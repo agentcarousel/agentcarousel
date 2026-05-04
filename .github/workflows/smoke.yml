@@ -1,0 +1,86 @@
+name: smoke
+
+# Prove released binaries against curated fixtures (no API keys).
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (e.g. v0.2.0); leave empty for latest GitHub release"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 15 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            triple: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    env:
+      REPO: agentcarousel/agentcarousel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: ver
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION}" ]; then
+            TAG="${INPUT_VERSION}"
+          else
+            TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          fi
+          case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download and extract binary
+        shell: bash
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          ASSET="agentcarousel-${TAG}-${TRIPLE}.tar.gz"
+          URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
+          echo "Downloading ${URL}"
+          curl -fL --retry 3 --retry-delay 1 -o "dist.tar.gz" "${URL}"
+          tar -xzf "dist.tar.gz"
+          chmod +x agentcarousel
+          echo "${PWD}" >> "${GITHUB_PATH}"
+
+      - name: Validate good fixture
+        run: agentcarousel validate fixtures/skills/example-skill.yaml
+
+      - name: Validate bad fixture (expect failure)
+        shell: bash
+        run: |
+          set +e
+          agentcarousel validate fixtures/examples/invalid-skill.yaml
+          code=$?
+          set -e
+          if [ "${code}" -eq 0 ]; then
+            echo "expected validate to fail for invalid-skill fixture"
+            exit 1
+          fi
+
+      - name: Offline smoke tests
+        run: agentcarousel test fixtures/skills/example-skill.yaml --offline true --filter-tags smoke

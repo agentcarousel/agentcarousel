@@ -1,0 +1,300 @@
+# agentcarousel fixture — deslop
+# Standard Tier
+# Source skill: agentcarousel/skills/deslop/SKILL.md
+# Intake:        open an issue (see CONTRIBUTING.md) before large changes
+# Process harness: mocks/deslop-harness/run.sh
+
+schema_version: 1
+skill_or_agent: deslop
+
+defaults:
+  timeout_secs: 45
+  tags: [code-quality, refactoring, nightly, standard-tier]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Remove AI-generated comments (smoke) ──────────────────────────────
+  - id: deslop/positive-comment-removal
+    description: >
+      Diff with AI-generated "explain every line" style comments inconsistent with local
+      code style. Skill must remove them without changing behavior and produce a 1–3
+      sentence summary. Pass requires no AI comment patterns in output and concise summary.
+    tags: [smoke, happy-path, code-quality]
+    seed: 6001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff against main and clean up AI slop:
+
+            ```diff
+            diff --git a/src/auth/session.ts b/src/auth/session.ts
+            index abc1234..def5678 100644
+            --- a/src/auth/session.ts
+            +++ b/src/auth/session.ts
+            @@ -12,6 +12,22 @@ import { db } from '../db';
+            +// Import the crypto module for token generation
+            +import crypto from 'crypto';
+            +
+            +// Define the function to create a new session token
+            +function createSessionToken(): string {
+            +  // Generate a random 32-byte buffer
+            +  const buffer = crypto.randomBytes(32);
+            +  // Convert the buffer to a hexadecimal string
+            +  const token = buffer.toString('hex');
+            +  // Return the token string
+            +  return token;
+            +}
+            +
+            +// Export the session token creation function
+            +export { createSessionToken };
+            ```
+
+            Local style: no inline comments except for non-obvious intent. No export comments.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: not_contains
+          value: "// Import the crypto module"
+        - kind: not_contains
+          value: "// Define the function"
+        - kind: not_contains
+          value: "// Generate a random"
+        - kind: not_contains
+          value: "// Convert the buffer"
+        - kind: not_contains
+          value: "// Return the token"
+        - kind: not_contains
+          value: "// Export the session"
+        - kind: regex
+          value: 'crypto\.randomBytes|createSessionToken'
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: slop-comments-removed
+          description: >
+            All AI-generated "narrate every line" comments removed. A perfect score
+            has zero comments of the form "// [verb] the [noun]" that narrate
+            self-evident code.
+          weight: 0.50
+          auto_check:
+            kind: not_contains
+            value: "// Import the"
+
+        - id: code-preserved
+          description: >
+            The function logic (crypto.randomBytes, toString, return) is preserved — only
+            comments are removed, not code.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: 'crypto\.randomBytes.*32|randomBytes.*32'
+
+        - id: concise-summary
+          description: >
+            Summary is 1–3 sentences. A perfect score communicates what was removed and
+            confirms no behavioral changes.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(removed|cleaned|stripped).*(comment|annotation)'
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/deslop-harness/run.sh"]
+
+  # ── Case 2: Remove TypeScript any-casts ───────────────────────────────────
+  - id: deslop/positive-any-cast
+    description: >
+      TypeScript diff with `as any` casts introduced by AI generation. Skill must remove
+      or replace them with proper types consistent with the surrounding codebase.
+    tags: [happy-path, code-quality]
+    seed: 6002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Clean up AI slop in this diff:
+
+            ```diff
+            diff --git a/src/api/handlers.ts b/src/api/handlers.ts
+            --- a/src/api/handlers.ts
+            +++ b/src/api/handlers.ts
+            @@ -5,8 +5,14 @@
+            +async function processPayload(req: Request): Promise<void> {
+            +  const body = req.body as any;
+            +  const userId = (body as any).userId as any;
+            +  const data = (body as any).payload as any;
+            +  await db.users.update(userId as any, data as any);
+            +}
+            ```
+
+            Local style: strict TypeScript, never use `as any`. Use proper Request body types.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: not_contains
+          value: "as any"
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: any-casts-removed
+          description: >
+            All `as any` casts removed. A perfect score replaces them with proper type
+            assertions or inferred types.
+          weight: 0.60
+          auto_check:
+            kind: not_contains
+            value: "as any"
+
+        - id: behavior-preserved
+          description: >
+            Function logic preserved — db.users.update still called with userId and data.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: 'db\.users\.update'
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/deslop-harness/run.sh"]
+
+  # ── Case 3: Flatten over-nested logic ─────────────────────────────────────
+  - id: deslop/positive-nested-logic
+    description: >
+      AI-introduced over-nested if/else that could be expressed with early returns.
+      Skill must flatten it without behavioral change and produce a concise summary.
+    tags: [happy-path, code-quality]
+    seed: 6003
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Clean up this AI-generated code:
+
+            ```diff
+            diff --git a/src/utils/validate.ts b/src/utils/validate.ts
+            --- a/src/utils/validate.ts
+            +++ b/src/utils/validate.ts
+            @@ -1,3 +1,20 @@
+            +function validateUser(user: User): ValidationResult {
+            +  if (user !== null) {
+            +    if (user !== undefined) {
+            +      if (user.id !== null) {
+            +        if (user.id !== undefined) {
+            +          if (user.name !== null && user.name !== undefined) {
+            +            if (user.email && user.email.includes('@')) {
+            +              return { valid: true };
+            +            } else {
+            +              return { valid: false, error: 'invalid email' };
+            +            }
+            +          } else {
+            +            return { valid: false, error: 'missing name' };
+            +          }
+            +        } else {
+            +          return { valid: false, error: 'missing id' };
+            +        }
+            +      } else {
+            +        return { valid: false, error: 'missing id' };
+            +      }
+            +    } else {
+            +      return { valid: false, error: 'missing user' };
+            +    }
+            +  } else {
+            +    return { valid: false, error: 'missing user' };
+            +  }
+            +}
+            ```
+
+            Local style: guard clauses / early returns, max 2 levels of nesting.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(early return|guard clause|flatten|simplif)'
+        - kind: regex
+          value: 'validateUser'
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: nesting-reduced
+          description: >
+            Nesting depth reduced to 2 or fewer levels using early returns/guard clauses.
+            A perfect score uses `if (!user) return { valid: false }` pattern.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(return.*valid.*false|guard|early return|if.*!user)'
+
+        - id: behavior-preserved
+          description: >
+            All six return conditions (missing user, missing id, missing name, invalid email,
+            valid) are preserved in the refactored version.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: "invalid email"
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/deslop-harness/run.sh"]
+
+  # ── Case 4: Failure mode — already clean diff ─────────────────────────────
+  - id: deslop/failure-mode-clean-diff
+    description: >
+      The diff is already clean — no AI slop patterns present. Skill must confirm no
+      changes are needed with a concise summary rather than inventing changes.
+    tags: [error-handling, code-quality]
+    timeout_secs: 20
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff for AI slop:
+
+            ```diff
+            diff --git a/src/auth/tokens.ts b/src/auth/tokens.ts
+            --- a/src/auth/tokens.ts
+            +++ b/src/auth/tokens.ts
+            @@ -8,0 +9,6 @@
+            +export function rotateToken(userId: string): string {
+            +  const token = generateSecureToken();
+            +  tokenStore.set(userId, token);
+            +  return token;
+            +}
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(clean|no.*slop|no.*change|already|good|looks good|nothing to remove|minimal)'
+        - kind: not_contains
+          value: "// Export"
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: no-invented-changes
+          description: >
+            Skill confirms the diff is clean without inventing changes or removing
+            valid code. A perfect score is a brief "looks clean" confirmation.
+          weight: 1.0
+          auto_check:
+            kind: regex
+            value: '(?i)(clean|no.*slop|no.*change|nothing.*remov|looks good)'

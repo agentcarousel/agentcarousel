@@ -1,0 +1,711 @@
+# agentcarousel fixture — terraform-sentinel-scaffold
+# Certification Tier: Candidate
+# Source skill: agentcarousel/skills/terraform-sentinel-scaffold/SKILL.md
+# Intake:        open an issue (see CONTRIBUTING.md) before large changes
+# Golden files:  fixtures/golden/terraform-sentinel-scaffold/
+# Bundle:        fixtures/bundles/terraform-sentinel-scaffold/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: terraform-sentinel-scaffold
+
+bundle_id: agentcarousel/terraform-sentinel-scaffold
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: medium
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 45
+  tags: [devops, terraform, sentinel, iac, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: AWS MFA enforcement -> IAM stub (smoke + certification) ───────────
+  - id: terraform-sentinel-scaffold/positive-aws-mfa
+    description: >
+      Given an AWS-targeting Sentinel policy that enforces MFA on IAM users, the skill
+      must produce a stub aws_iam_user or aws_iam_user_login_profile resource block with
+      the MANDATORY label on line 1 and the Terraform Registry documentation URL on line 2.
+      No running of Terraform is expected. Pass requires correct resource type, label, and URL.
+    tags: [smoke, happy-path, devops, terraform, certification]
+    seed: 2001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Here is a Sentinel policy file. Generate the Terraform HCL stub:
+
+            ```sentinel
+            # File: enforce-mfa.sentinel
+            # Policy: Enforce MFA for all IAM users
+
+            import "tfplan/v2" as tfplan
+
+            allIAMUsers = filter tfplan.resource_changes as _, rc {
+              rc.type is "aws_iam_user" and
+              rc.change.actions contains "create"
+            }
+
+            mfaEnabled = rule {
+              all allIAMUsers as _, user {
+                user.change.after.force_destroy is false
+              }
+            }
+
+            main = rule {
+              mfaEnabled
+            }
+            ```
+
+            This policy is MANDATORY (from sentinel.hcl). Generate the Terraform stub.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        # MANDATORY label must appear
+        - kind: regex
+          value: '(?i)MANDATORY'
+        # Policy path must be referenced
+        - kind: regex
+          value: '(?i)enforce-mfa\.sentinel|enforce_mfa'
+        # AWS IAM resource type
+        - kind: regex
+          value: 'aws_iam_user'
+        # Registry URL pattern
+        - kind: regex
+          value: 'registry\.terraform\.io'
+        # HCL resource block syntax
+        - kind: regex
+          value: 'resource\s+"aws_iam_user"'
+        # Minimal prose — no lengthy explanations in the stub itself
+        - kind: not_contains
+          value: "In this Terraform stub, we are creating"
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: provider-type-match
+          description: >
+            Resource types match the AWS provider implied by the policy. A perfect score
+            uses `aws_iam_user` or `aws_iam_user_login_profile` — the types referenced
+            in the Sentinel `tfplan` import. No azurerm or google types should appear.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: 'aws_iam_user'
+
+        - id: mandatory-advisory-label
+          description: >
+            MANDATORY or ADVISORY label appears on the first comment line of the HCL block.
+            A perfect score has exactly `# MANDATORY — enforce-mfa.sentinel` or equivalent
+            as the first line of the generated stub block.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '#\s*(MANDATORY|ADVISORY).*enforce.mfa|enforce.mfa.*#\s*(MANDATORY|ADVISORY)'
+
+        - id: registry-url-present
+          description: >
+            Second line of the HCL block is a Terraform Registry documentation URL for the
+            resource type. A perfect score has `# https://registry.terraform.io/providers/hashicorp/aws/...`
+            as the second comment line.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: 'registry\.terraform\.io/providers/hashicorp/aws'
+
+        - id: no-inline-prose
+          description: >
+            Output consists primarily of HCL stub blocks with minimal prose. A perfect score
+            has no lengthy paragraph explanations embedded within the code blocks — only
+            brief comment annotations per the skill contract.
+          weight: 0.15
+          auto_check:
+            kind: not_contains
+            value: "In order to comply with"
+
+        - id: starter-only-noted
+          description: >
+            Response notes that this is a starter stub and TFE/plan govern truth — per the
+            skill's contract. A perfect score includes at least one mention of "starter"
+            or "TFE" or "plan governs" or equivalent.
+          weight: 0.10
+          auto_check:
+            kind: regex
+            value: '(?i)(starter|TFE|plan.*govern|govern.*plan|beginning|initial)'
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/terraform-sentinel-scaffold/aws-mfa-stub.tf
+      golden_threshold: 0.85
+
+  - id: terraform-sentinel-scaffold/judge-spot-check
+    description: >
+      Minimal Sentinel stub request; judge scores rubric on Sentinel/Terraform alignment.
+      Run with `--evaluator all --judge`.
+    tags: [certification, judge]
+    seed: 2099
+
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are a HashiCorp Sentinel and Terraform security engineer judge. Score each rubric item from 0.0 to 1.0 using the policy text, user request, and assistant HCL output.
+
+        Apply: tfplan/v2-style resource_change semantics; MANDATORY vs ADVISORY enforcement labels as stated; provider/resource types must match the Sentinel filters (no unrelated clouds); include Terraform Registry documentation URL for the resource; minimal stub — no tutorial prose inside the block.
+
+        Canonical prose: docs/judge-prompts/terraform-sentinel-scaffold-v1.md
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Sentinel snippet (MANDATORY): enforce MFA on new `aws_iam_user` creates.
+            Output only the Terraform HCL stub: line 1 `# MANDATORY — enforce-mfa.sentinel`,
+            line 2 registry URL for `aws_iam_user`, then a minimal `resource "aws_iam_user"` block.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)MANDATORY'
+        - kind: regex
+          value: 'aws_iam_user'
+        - kind: regex
+          value: 'registry\.terraform\.io'
+
+      rubric:
+        - id: label-and-registry
+          description: First comment line is MANDATORY/ADVISORY; registry URL present for aws_iam_user.
+          weight: 0.6
+          auto_check:
+            kind: regex
+            value: '(?i)MANDATORY'
+
+        - id: stub-shape
+          description: Contains a Terraform resource block for aws_iam_user without long prose paragraphs.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: 'resource\s+"aws_iam_user"'
+
+  # ── Case 2: Azure storage encryption → azurerm stub ──────────────────────
+  - id: terraform-sentinel-scaffold/positive-azure-encryption
+    description: >
+      Given an Azure-targeting Sentinel policy enforcing storage encryption, the skill
+      produces an azurerm_storage_account stub with MANDATORY label and Registry URL.
+      Pass requires azurerm_ resource type, correct label, and Registry URL on line 2.
+    tags: [smoke, happy-path, devops, terraform, certification]
+    seed: 2002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate Terraform stub for this Azure policy:
+
+            ```sentinel
+            # File: require-storage-encryption.sentinel
+            import "tfplan/v2" as tfplan
+
+            storageAccounts = filter tfplan.resource_changes as _, rc {
+              rc.type is "azurerm_storage_account" and
+              rc.change.actions contains "create"
+            }
+
+            encryptionEnabled = rule {
+              all storageAccounts as _, sa {
+                sa.change.after.enable_https_traffic_only is true and
+                sa.change.after.min_tls_version is "TLS1_2"
+              }
+            }
+
+            main = rule { encryptionEnabled }
+            ```
+
+            MANDATORY policy. No sentinel.hcl present; apply MANDATORY by default.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)MANDATORY'
+        - kind: regex
+          value: 'azurerm_storage_account'
+        - kind: regex
+          value: 'registry\.terraform\.io'
+        - kind: regex
+          value: 'resource\s+"azurerm_storage_account"'
+        - kind: not_contains
+          value: "aws_"
+        - kind: not_contains
+          value: "google_"
+
+      rubric:
+        - id: provider-type-match
+          description: >
+            azurerm_storage_account is the resource type — not aws_ or google_. A perfect
+            score uses only azurerm_ types matching the policy's tfplan import.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: 'azurerm_storage_account'
+
+        - id: mandatory-advisory-label
+          description: >
+            MANDATORY label present. A perfect score includes the policy file name
+            (require-storage-encryption.sentinel) in the label comment.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: 'MANDATORY.*require.storage|require.storage.*MANDATORY'
+
+        - id: registry-url-present
+          description: >
+            Registry URL points to the azurerm provider documentation.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: 'registry\.terraform\.io/providers/hashicorp/azurerm'
+
+        - id: https-tls-reflected
+          description: >
+            Stub attributes reflect the policy constraints: enable_https_traffic_only
+            and min_tls_version are included as commented stub attributes.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(https_traffic_only|min_tls_version|TLS)'
+
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are a certification-tier judge for Terraform Sentinel policy scaffolds.
+
+        Domain knowledge you MUST apply:
+        - Sentinel policies typically import tfplan/v2 and define a main rule.
+        - Enforcement levels: MANDATORY blocks apply hard enforcement; ADVISORY is warning-only.
+        - Provider mapping must match resource types (e.g., aws_iam_user, azurerm_storage_account).
+        - Do not accept invented resources or providers not referenced in the input.
+
+        Evaluation instructions:
+        - Use the rubric items provided in the system prompt. Score each rubric item from 0.0 to 1.0.
+        - Confirm HCL syntax is plausible for Sentinel policies (imports, rule definitions, main rule).
+        - Check that enforcement level semantics are respected and reflected in the output.
+        - Penalize invented resources, providers, or enforcement behaviors not supported by Sentinel.
+        - Prefer minimal, accurate policy stubs over verbose or speculative expansions.
+
+        Output format:
+        - Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.
+  # ── Case 3: GCP required labels → google_compute_instance stub ───────────
+  - id: terraform-sentinel-scaffold/positive-gcp-labels
+    description: >
+      Given a GCP Sentinel policy requiring labels on compute instances, the skill
+      produces a google_compute_instance stub with a labels block and an optional
+      variable block for the label values.
+    tags: [happy-path, devops, terraform, certification]
+    seed: 2003
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate Terraform stub for:
+
+            ```sentinel
+            # File: require-labels.sentinel
+            import "tfplan/v2" as tfplan
+
+            param required_labels default ["env", "owner", "cost-center"]
+
+            instances = filter tfplan.resource_changes as _, rc {
+              rc.type is "google_compute_instance" and
+              rc.change.actions contains "create"
+            }
+
+            labelsPresent = rule {
+              all instances as _, inst {
+                all required_labels as label {
+                  inst.change.after.labels[label] is not null
+                }
+              }
+            }
+
+            main = rule { labelsPresent }
+            ```
+
+            ADVISORY policy from sentinel.hcl.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)ADVISORY'
+        - kind: regex
+          value: 'google_compute_instance'
+        - kind: regex
+          value: 'registry\.terraform\.io'
+        - kind: regex
+          value: '(?i)(label|variable)'
+        - kind: not_contains
+          value: "aws_"
+        - kind: not_contains
+          value: "azurerm_"
+
+      rubric:
+        - id: provider-type-match
+          description: >
+            google_compute_instance resource type used. No AWS or Azure types.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: 'google_compute_instance'
+
+        - id: advisory-label
+          description: >
+            ADVISORY label present (not MANDATORY) reflecting sentinel.hcl policy tier.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: 'ADVISORY.*require.labels|require.labels.*ADVISORY|#.*ADVISORY'
+
+        - id: param-to-variable
+          description: >
+            `param required_labels` block generates a corresponding variable block in
+            variables.tf or inline. A perfect score includes `variable "required_labels"` or
+            equivalent.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: 'variable\s+"required_labels"|variable.*required_labels'
+
+        - id: labels-block
+          description: >
+            Stub includes a `labels` attribute block reflecting the policy constraint.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)labels\s*='
+
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are a certification-tier judge for Terraform Sentinel policy scaffolds.
+
+        Domain knowledge you MUST apply:
+        - Sentinel policies typically import tfplan/v2 and define a main rule.
+        - Enforcement levels: MANDATORY blocks apply hard enforcement; ADVISORY is warning-only.
+        - Provider mapping must match resource types (e.g., aws_iam_user, azurerm_storage_account).
+        - Do not accept invented resources or providers not referenced in the input.
+
+        Evaluation instructions:
+        - Use the rubric items provided in the system prompt. Score each rubric item from 0.0 to 1.0.
+        - Confirm HCL syntax is plausible for Sentinel policies (imports, rule definitions, main rule).
+        - Check that enforcement level semantics are respected and reflected in the output.
+        - Penalize invented resources, providers, or enforcement behaviors not supported by Sentinel.
+        - Prefer minimal, accurate policy stubs over verbose or speculative expansions.
+
+        Output format:
+        - Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.
+  # ── Case 4: Multi-provider policy set ─────────────────────────────────────
+  - id: terraform-sentinel-scaffold/positive-multi-provider
+    description: >
+      A policy set with two policies targeting AWS and Azure respectively. The skill
+      must produce separate stubs for each provider without mixing types. Pass requires
+      both aws_ and azurerm_ stubs as distinct blocks, each with their own label/URL lines.
+    tags: [happy-path, devops, terraform, certification]
+    seed: 2004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            I have two policies in my set. Generate stubs for both:
+
+            ```sentinel
+            # File: aws-s3-encryption.sentinel
+            import "tfplan/v2" as tfplan
+            buckets = filter tfplan.resource_changes as _, rc {
+              rc.type is "aws_s3_bucket"
+            }
+            main = rule {
+              all buckets as _, b { b.change.after.server_side_encryption_configuration is not null }
+            }
+            ```
+
+            ```sentinel
+            # File: azure-nsg-rules.sentinel
+            import "tfplan/v2" as tfplan
+            nsgs = filter tfplan.resource_changes as _, rc {
+              rc.type is "azurerm_network_security_group"
+            }
+            main = rule {
+              all nsgs as _, nsg { length(nsg.change.after.security_rule) > 0 }
+            }
+            ```
+
+            Both are MANDATORY.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: 'aws_s3_bucket'
+        - kind: regex
+          value: 'azurerm_network_security_group'
+        - kind: regex
+          value: '(?i)MANDATORY.*aws.s3|aws.s3.*MANDATORY'
+        - kind: regex
+          value: '(?i)MANDATORY.*azure.nsg|azure.nsg.*MANDATORY|MANDATORY.*azurerm'
+
+      rubric:
+        - id: both-providers-present
+          description: >
+            Output contains stubs for both AWS and Azure providers as distinct blocks.
+            A perfect score has two separate resource blocks — one aws_s3_bucket and one
+            azurerm_network_security_group — each with their own label and URL comment.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: 'aws_s3_bucket.*azurerm_network_security_group|azurerm_network_security_group.*aws_s3_bucket'
+
+        - id: no-cross-contamination
+          description: >
+            AWS and Azure resources are not mixed — no azurerm_ attributes appear in the
+            aws_s3_bucket block and vice versa.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: 'resource\s+"aws_s3_bucket"'
+
+        - id: separate-labels-per-policy
+          description: >
+            Each stub block has its own MANDATORY label referencing its specific policy file.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: 'MANDATORY.*aws.s3.*sentinel'
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/deslop-harness/count-blocks.sh", "aws_s3_bucket", "azurerm_network_security_group"]
+
+  # ── Case 5: sentinel.hcl MANDATORY vs ADVISORY distinction ───────────────
+  - id: terraform-sentinel-scaffold/positive-sentinel-hcl
+    description: >
+      When sentinel.hcl marks one policy MANDATORY and another ADVISORY, the skill
+      must correctly label each stub. Pass requires the correct label on each stub
+      corresponding to the sentinel.hcl enforcement level.
+    tags: [happy-path, devops, terraform, certification]
+    seed: 2005
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Here are my files:
+
+            sentinel.hcl:
+            ```hcl
+            policy "require-tags" {
+              source = "./require-tags.sentinel"
+              enforcement_level = "mandatory"
+            }
+
+            policy "check-naming" {
+              source = "./check-naming.sentinel"
+              enforcement_level = "advisory"
+            }
+            ```
+
+            require-tags.sentinel:
+            ```sentinel
+            import "tfplan/v2" as tfplan
+            resources = filter tfplan.resource_changes as _, rc {
+              rc.type is "aws_instance"
+            }
+            main = rule { all resources as _, r { r.change.after.tags is not null } }
+            ```
+
+            check-naming.sentinel:
+            ```sentinel
+            import "tfplan/v2" as tfplan
+            buckets = filter tfplan.resource_changes as _, rc {
+              rc.type is "aws_s3_bucket"
+            }
+            main = rule { all buckets as _, b { b.change.after.bucket matches "^prod-" } }
+            ```
+
+            Generate stubs for both.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)MANDATORY.*require.tags|require.tags.*MANDATORY|MANDATORY.*aws_instance'
+        - kind: regex
+          value: '(?i)ADVISORY.*check.naming|check.naming.*ADVISORY|ADVISORY.*aws_s3_bucket'
+        - kind: regex
+          value: 'aws_instance'
+        - kind: regex
+          value: 'aws_s3_bucket'
+
+      rubric:
+        - id: mandatory-advisory-correct
+          description: >
+            require-tags is labeled MANDATORY; check-naming is labeled ADVISORY — matching
+            sentinel.hcl enforcement_level values. A perfect score correctly assigns the
+            label from sentinel.hcl to each stub.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: 'MANDATORY.*require.tags|require.tags.*MANDATORY'
+
+        - id: both-stubs-generated
+          description: >
+            Both aws_instance and aws_s3_bucket stubs are present.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: 'aws_instance.*aws_s3_bucket|aws_s3_bucket.*aws_instance'
+
+        - id: registry-urls-both
+          description: >
+            Both stubs have Registry documentation URLs.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: 'registry\.terraform\.io'
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/terraform-sentinel-scaffold/sentinel-hcl-stubs.tf
+      golden_threshold: 0.85
+
+  # ── Case 6: Failure mode — no policy files ────────────────────────────────
+  - id: terraform-sentinel-scaffold/failure-mode-no-policy
+    description: >
+      When no Sentinel files are provided, the skill must request them rather than
+      generating speculative stubs. Pass requires a request for policy file content
+      and no generated HCL blocks.
+    tags: [error-handling, devops, terraform]
+    timeout_secs: 20
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate the Terraform stubs for my Sentinel policies.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(provide|share|attach|send|upload|paste).*(\.sentinel|policy|file)'
+        - kind: not_contains
+          value: 'resource "'
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: policy-files-requested
+          description: >
+            Skill requests the Sentinel policy file content before generating stubs.
+            A perfect score explains what format to provide (*.sentinel file content).
+          weight: 1.0
+          auto_check:
+            kind: regex
+            value: '(?i)(provide|share|paste|send).*(sentinel|\.sentinel|policy file)'
+
+  # ── Case 7: Edge case — param blocks → variables.tf ───────────────────────
+  - id: terraform-sentinel-scaffold/edge-case-param-variables
+    description: >
+      A policy with multiple param blocks. The skill must generate both the resource stub
+      and a corresponding variables.tf with variable blocks for each param. Pass requires
+      both a resource stub and variable declarations for each param.
+    tags: [edge-case, devops, terraform, certification]
+    seed: 2007
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate stub for this policy with params:
+
+            ```sentinel
+            # File: enforce-instance-type.sentinel
+            import "tfplan/v2" as tfplan
+
+            param allowed_instance_types default ["t3.micro", "t3.small", "t3.medium"]
+            param allowed_regions default ["us-east-1", "us-west-2"]
+            param require_tags default true
+
+            instances = filter tfplan.resource_changes as _, rc {
+              rc.type is "aws_instance" and
+              rc.change.actions contains "create"
+            }
+
+            main = rule {
+              all instances as _, i {
+                i.change.after.instance_type in allowed_instance_types and
+                i.change.after.availability_zone matches allowed_regions[0]
+              }
+            }
+            ```
+
+            MANDATORY. Also output a variables.tf for the params.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)MANDATORY'
+        - kind: regex
+          value: 'aws_instance'
+        - kind: regex
+          value: 'variable\s+"allowed_instance_types"'
+        - kind: regex
+          value: 'variable\s+"allowed_regions"'
+        - kind: regex
+          value: '(?i)(variable|variables\.tf)'
+
+      rubric:
+        - id: resource-stub-present
+          description: >
+            aws_instance resource stub is generated with MANDATORY label.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: 'resource\s+"aws_instance"'
+
+        - id: param-to-variable-mapping
+          description: >
+            Each param block generates a corresponding variable block. Three params should
+            produce three variable declarations: allowed_instance_types, allowed_regions,
+            require_tags.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: 'variable\s+"allowed_instance_types".*variable\s+"allowed_regions"|variable.*allowed_instance_types.*variable.*allowed_regions'
+
+        - id: default-values-preserved
+          description: >
+            Variable default values reflect the param defaults in the policy.
+            A perfect score includes the default lists from the param statements.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(default\s*=|t3\.micro|t3\.small|us-east-1)'
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/deslop-harness/count-blocks.sh", "variable", "aws_instance"]

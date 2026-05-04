@@ -1,0 +1,27 @@
+[
+  {
+    "tool": "inventory_lookup",
+    "args_match": { "item": "Widget A" },
+    "response": { "item": "Widget A", "available": 12 }
+  },
+  {
+    "tool": "product_lookup",
+    "args_match": { "sku": "SKU-42" },
+    "response": { "sku": "SKU-42", "price": 29.99, "stock": 45 }
+  },
+  {
+    "tool": "product_lookup",
+    "args_match": { "sku": "SKU-99" },
+    "response": { "error": "product not found", "sku": "SKU-99" }
+  },
+  {
+    "tool": "document_search",
+    "args_match": { "query": "GDPR compliance" },
+    "response": { "results": [{ "title": "GDPR Overview", "content": "GDPR compliance requires explicit consent before processing personal data." }] }
+  },
+  {
+    "tool": "summarize",
+    "args_match": {},
+    "response": { "summary": "GDPR compliance requires organizations to obtain explicit consent before processing personal data." }
+  }
+]

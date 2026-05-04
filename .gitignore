@@ -1,0 +1,104 @@
+# --- VCS / IDE ---
+.git/
+.worktrees/
+.cursor/
+.dirac-symbol-index/
+.idea/
+
+# --- Internal process / planning (never ship) ---
+authorizing-packages/
+docs/designs/
+docs/launch/
+fixtures/intake/
+reports/carousel-runs/
+reports/*.md
+
+# --- Local run output (never commit) ---
+agentcarousel-evidence-*/
+reports/
+/validate-report.json
+/eval-results.json
+/test-results.xml
+/history.db
+*.db-journal
+
+# --- Release / build workspace ---
+dist/
+release-assets/
+
+# --- Cargo ---
+.cargo/credentials.toml
+.cargo/credentials.json
+.direnv/
+
+# --- Rust ---
+target/
+**/target/
+
+# --- Node / JS ---
+node_modules/
+**/node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+# dist/ — see "Private workspace" (release + frontend build output)
+.next/
+.nuxt/
+out/
+build/
+coverage/
+.nyc_output/
+
+# --- MkDocs ---
+site/
+
+# --- Python ---
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Go ---
+vendor/
+
+# --- Environment ---
+.env
+.env.*
+
+# --- OS/editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# --- Logs & temp ---
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# --- Archives & large binaries ---
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.dmg
+*.iso
+*.bin
+*.wasm
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# minisign
+*.pub
+*.key

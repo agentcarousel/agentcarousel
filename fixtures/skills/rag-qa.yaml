@@ -1,0 +1,67 @@
+# agentcarousel fixture — rag-qa
+# Generic template for retrieval-augmented generation (RAG) agents.
+# Copy and adapt: replace the context/question content with your domain,
+# update mocks/agent-response.json with your skill's case IDs and expected text.
+
+schema_version: 1
+skill_or_agent: rag-qa
+
+cases:
+
+  # ── Happy path: agent answers from provided context ──────────────────────────
+  - id: rag-qa/positive-context-answer
+    tags: [smoke, happy-path]
+    description: >
+      Given a passage of context and a question, the agent produces an answer
+      that is grounded in the context. Pass requires the numeric fact from the
+      context to appear in the output.
+    input:
+      messages:
+        - role: user
+          content: |
+            Context: The Eiffel Tower was completed in 1889 and stands 330 metres tall.
+
+            Question: How tall is the Eiffel Tower?
+    expected:
+      tool_sequence: []
+      output:
+        - kind: contains
+          value: "330"
+
+  # ── Happy path: agent cites its source ───────────────────────────────────────
+  - id: rag-qa/positive-citation
+    tags: [happy-path]
+    description: >
+      Agent must quote or reference the document ID in its response to
+      demonstrate provenance tracking.
+    input:
+      messages:
+        - role: user
+          content: |
+            [DOC-001] Product manual section 3.2: The device must be powered
+            off before removing the battery.
+
+            Based on DOC-001, what must be done before removing the battery?
+    expected:
+      tool_sequence: []
+      output:
+        - kind: contains
+          value: "powered off"
+        - kind: contains
+          value: "DOC-001"
+
+  # ── Error handling: agent acknowledges missing context ───────────────────────
+  - id: rag-qa/error-missing-context
+    tags: [error-handling]
+    description: >
+      When the user references a context that was not provided, the agent must
+      acknowledge the gap rather than hallucinate an answer.
+    input:
+      messages:
+        - role: user
+          content: "What is the population of the city described in the context? [No context provided]"
+    expected:
+      tool_sequence: []
+      output:
+        - kind: contains
+          value: "context"

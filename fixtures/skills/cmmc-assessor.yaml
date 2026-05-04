@@ -1,0 +1,870 @@
+# agentcarousel fixture — cmmc-assessor
+# Certification Tier: Candidate
+# Source skill: agentcarousel/skills/cmmc-assessor/SKILL.md
+# Intake:        open an issue (see CONTRIBUTING.md) before large changes
+# Golden files:  fixtures/golden/cmmc-assessor/
+# Bundle:        fixtures/bundles/cmmc-assessor/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: cmmc-assessor
+
+bundle_id: agentcarousel/cmmc-assessor
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: high
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [compliance, cmmc, nist-800-171, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Full gap analysis (smoke + certification) ────────────────────────
+  - id: cmmc-assessor/positive-gap-analysis
+    description: >
+      Given a synthetic SSP narrative covering a small defense contractor with partial
+      NIST 800-171 implementation, the skill must produce a gap analysis that references
+      all 14 domain families by their abbreviated IDs, assigns Met/Partially Met/Not Met
+      verdicts, generates a synthetic SPRS score, and produces a POA&M table. Pass requires
+      all 14 domain IDs present, numeric SPRS score, and table with required headers.
+    tags: [smoke, happy-path, compliance, cmmc, certification]
+    seed: 1001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            I need a CMMC 2.0 Level 2 gap analysis for Acme Defense LLC. Here is our
+            System Security Plan (SSP) summary:
+
+            Organization: Acme Defense LLC
+            Contract: W15P7T-24-C-0042 (DoD prime; CUI in scope)
+            CUI Types: Technical drawings, ITAR-controlled design specs
+            CUI Ingress: Encrypted SFTP from prime contractor; email from contracting officer
+            CUI Storage: On-premises file server (Windows Server 2022) and SharePoint Online (M365 GCC High)
+            CUI Egress: SFTP to prime; physical mail for drawings
+
+            Access Control (AC):
+            - Active Directory with 180-day password policy; MFA deployed for admin accounts only
+            - User access reviews: annual, last completed 8 months ago
+            - Privileged account list exists but is 14 months old
+
+            Identification & Authentication (IA):
+            - MFA enforced for VPN and O365; local workstation logins are password-only
+            - Service accounts: 23 accounts, 11 have non-expiring passwords
+
+            Configuration Management (CM):
+            - Baseline config documented for workstations (GPO); servers lack formal baseline
+            - Software inventory: manual spreadsheet, last updated 6 months ago
+
+            Incident Response (IR):
+            - IR plan exists (dated 2022); no tabletop exercise in 18 months
+            - No documented CISA/US-CERT reporting procedure
+
+            Audit & Accountability (AU):
+            - Windows Event Logs enabled; no SIEM; logs retained 30 days (requirement: 90 days)
+            - No centralized log management
+
+            System & Communications Protection (SC):
+            - Firewall rules documented; last reviewed 11 months ago
+            - No network segmentation between CUI systems and general IT
+
+            System & Information Integrity (SI):
+            - Antivirus on all endpoints; definitions auto-updated
+            - No vulnerability scanning program
+
+            Risk Assessment (RA):
+            - No formal risk assessment completed in 18 months
+
+            Security Assessment (CA):
+            - SPRS submitted 14 months ago at score -47
+            - No current POA&M for open items from that assessment
+
+            Media Protection (MP):
+            - Removable media policy exists; USB encryption not enforced
+            - No formal media sanitization log
+
+            Personnel Security (PS):
+            - Background checks on hire; no reinvestigation policy
+
+            Physical Protection (PE):
+            - Facility has card access; visitor log maintained
+            - No formal CUI storage area designation
+
+            Maintenance (MA):
+            - No formal maintenance log for CUI systems
+
+            Awareness & Training (AT):
+            - Annual security awareness training; no CUI-specific training
+
+            Please provide a full gap analysis with SPRS score and POA&M table.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        # All 14 domain families must appear
+        - kind: regex
+          value: '(?i)\bAC\b'
+        - kind: regex
+          value: '(?i)\bIA\b'
+        - kind: regex
+          value: '(?i)\bCM\b'
+        - kind: regex
+          value: '(?i)\bIR\b'
+        - kind: regex
+          value: '(?i)\bAU\b'
+        - kind: regex
+          value: '(?i)\bSC\b'
+        - kind: regex
+          value: '(?i)\bSI\b'
+        - kind: regex
+          value: '(?i)\bRA\b'
+        - kind: regex
+          value: '(?i)\bCA\b'
+        - kind: regex
+          value: '(?i)\bMP\b'
+        - kind: regex
+          value: '(?i)\bPS\b'
+        - kind: regex
+          value: '(?i)\bPE\b'
+        - kind: regex
+          value: '(?i)\bMA\b'
+        - kind: regex
+          value: '(?i)\bAT\b'
+        # SPRS score must be numeric
+        - kind: regex
+          value: 'SPRS.*-?\d+|-?\d+.*SPRS'
+        # Verdicts must use correct vocabulary
+        - kind: regex
+          value: '(?i)(Met|Partially Met|Not Met|OTS)'
+        # POA&M table must be present
+        - kind: regex
+          value: '(?i)POA&M|Plan of Action'
+        # No fabricated practice numbers outside 3.1–3.14 range
+        - kind: not_contains
+          value: "3.15."
+        - kind: not_contains
+          value: "3.16."
+        # No stack traces or internal errors
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: domain-coverage
+          description: >
+            All 14 NIST SP 800-171 domain families (AC, IA, CM, IR, AU, SC, SI, RA, CA, MP, PS, PE, MA, AT)
+            are addressed with at least one finding or Met verdict. A perfect score requires all 14 domains
+            explicitly referenced with evidence-based verdicts.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)\bAC\b.*\bIA\b|\bIA\b.*\bAC\b'
+
+        - id: no-fabricated-controls
+          description: >
+            No practice IDs appear outside the NIST SP 800-171 range (3.1.x through 3.14.x). A perfect
+            score requires zero invented practice numbers in the output.
+          weight: 0.25
+          auto_check:
+            kind: not_contains
+            value: "3.15."
+
+        - id: poam-structure
+          description: >
+            POA&M table is present with at minimum these columns or row headers: Practice ID (or control
+            reference), Finding/Gap description, Remediation action, and Completion date (or estimated).
+            A perfect score has all four required columns with at least one populated row.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(POA&M|Plan of Action).*(\|.*\||\n.*\n.*\|)'
+
+        - id: sprs-formula-reference
+          description: >
+            SPRS score references the DoD Assessment Methodology — the baseline is 110 with severity-based
+            deductions. A perfect score includes the methodology reference and a plausible negative number
+            (OTS findings should produce scores between -203 and 110).
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: 'SPRS.*-?\d+|-?\d+.*SPRS|110.*practice|practice.*110'
+
+        - id: artifact-gating
+          description: >
+            The skill requires artifact evidence for Met verdicts — pure process descriptions are marked
+            insufficient. A perfect score shows at least one instance of the skill requesting evidence
+            rather than accepting a claim at face value, or noting that a claimed Met is downgraded due
+            to missing artifact.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(artifact|evidence|document|log|config|proof).*required|require.*(artifact|evidence|document)'
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/cmmc-assessor/gap-table.md
+      golden_threshold: 0.80
+
+  # Judge spot-check (use: agentcarousel eval … --evaluator all --judge). Not used by default `--evaluator rules`.
+  - id: cmmc-assessor/judge-spot-check
+    description: >
+      Short CMMC narrative; judge scores rubric on domain verdict quality. Complements
+      golden gap-analysis case without replacing it.
+    tags: [certification, judge]
+    seed: 1099
+
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are an expert CMMC 2.0 Level 2 and NIST SP 800-171 Rev 2 assessor acting as an evaluation judge. Score each rubric item from 0.0 to 1.0 using only evidence in the assistant output and the user scenario.
+
+        Domain knowledge you must apply:
+        1) Control families: AC, IA, CM, IR, AU, SC, SI, RA, CA, MP, PS, PE, MA, AT. Verdicts: Met, Partially Met, Not Met, OTS as applicable.
+        2) Practice IDs are 3.1.x–3.14.x only; flag 3.15+ as fabricated.
+        3) SPRS scores must be plausible vs the SSP narrative.
+        4) DFARS / CUI scoping when the scenario references defense data or GCC High.
+
+        Scoring dimensions (reflect in rationales): factual accuracy of control citations; completeness of gap identification vs SSP; SPRS plausibility; appropriate caveats (synthetic scenario, not a formal certification decision).
+
+        Canonical prose: docs/judge-prompts/cmmc-assessor-v1.md
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Synthetic SSP excerpt for Acme Defense (CUI): AC has annual access reviews only;
+            IA enforces MFA for VPN but not workstations; SI has antivirus but no vulnerability scanning.
+            For families AC, IA, and SI only: assign Met / Partially Met / Not Met with one-sentence rationale each,
+            and note one highest-risk gap per family.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)\bAC\b'
+        - kind: regex
+          value: '(?i)\bIA\b'
+        - kind: regex
+          value: '(?i)\bSI\b'
+        - kind: regex
+          value: '(?i)(Met|Partially Met|Not Met|OTS)'
+
+      rubric:
+        - id: verdict-vocabulary
+          description: >
+            Uses Met / Partially Met / Not Met (or OTS) with short rationale for AC, IA, SI.
+          weight: 0.5
+          auto_check:
+            kind: regex
+            value: '(?i)(Met|Partially Met|Not Met|OTS)'
+
+        - id: risk-callout
+          description: >
+            Names at least one concrete risk or gap per requested family (access review cadence,
+            MFA coverage, or vuln scanning).
+          weight: 0.5
+          auto_check:
+            kind: regex
+            value: '(?i)(review|MFA|scan|vulnerab|gap|risk)'
+
+  # ── Case 2: SPRS score calculation ────────────────────────────────────────
+  - id: cmmc-assessor/positive-sprs-calculation
+    description: >
+      Given a self-attestation with 15 explicitly Not Met practices across various domains,
+      the skill must compute an SPRS score using the DoD methodology (starting from 110,
+      deducting by severity weight) and identify the highest-risk gaps. Pass requires a
+      numeric score, DoD methodology reference, and at least one domain-specific remediation.
+    tags: [smoke, happy-path, compliance, cmmc, certification]
+    seed: 1002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            What is our SPRS score based on this self-assessment? We have documented the
+            following Not Met (OTS) practices:
+
+            Not Met (5-point deductions):
+            - 3.1.2: Limit system access to types of transactions and functions
+            - 3.3.1: Create and retain system audit logs
+            - 3.4.1: Establish and maintain baseline configurations
+            - 3.13.1: Monitor, control, and protect communications at external boundaries
+            - 3.13.5: Implement subnetworks for publicly accessible system components
+
+            Not Met (3-point deductions):
+            - 3.1.1: Limit system access to authorized users
+            - 3.5.3: Use multifactor authentication for local/network/remote access
+            - 3.6.1: Establish an operational incident-handling capability
+            - 3.11.1: Periodically assess risk to operations
+            - 3.12.1: Periodically assess security controls
+
+            Not Met (1-point deductions):
+            - 3.2.1: Ensure that users are aware of security risks
+            - 3.9.1: Screen individuals prior to authorizing access
+            - 3.10.1: Limit physical access to CUI to authorized individuals
+            - 3.7.1: Perform maintenance on CUI systems
+            - 3.2.2: Ensure personnel know roles and responsibilities for security
+
+            All other 95 practices are Met with documented artifacts.
+
+            Calculate our SPRS score and identify the 3 highest-priority remediation items.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: 'SPRS.*-?\d+|-?\d+.*SPRS|\d+.*score|score.*\d+'
+        - kind: contains
+          value: "110"
+        - kind: regex
+          value: '(?i)(deduct|minus|subtract|-\d+)'
+        - kind: regex
+          value: '(?i)(priorit|highest.risk|critical|remediat)'
+        - kind: not_contains
+          value: "3.15."
+
+      rubric:
+        - id: correct-score-methodology
+          description: >
+            Score derived from 110 baseline with correct severity deductions: 5-point practices
+            deduct 5 each (5 × 5 = 25), 3-point practices deduct 3 each (5 × 3 = 15),
+            1-point practices deduct 1 each (5 × 1 = 5). Expected score = 110 - 45 = 65.
+            A perfect score shows the calculation and arrives at 65 (±2 for rounding edge cases).
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '6[3-7]|score.*6[0-9]|SPRS.*6[0-9]'
+
+        - id: high-priority-remediation
+          description: >
+            Three highest-priority items identified; 5-point OTS practices correctly flagged
+            as highest risk. A perfect score names at least 2 of the 5-point deduction
+            practices (3.1.2, 3.3.1, 3.4.1, 3.13.1, 3.13.5) in the remediation list.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '3\.1\.2|3\.3\.1|3\.4\.1|3\.13\.1|3\.13\.5'
+
+        - id: methodology-reference
+          description: >
+            DoD Assessment Methodology is cited. A perfect score includes a reference to the
+            DoD Assessment Methodology or NIST SP 800-171 DoD scoring guidance.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(DoD.*[Mm]ethodology|Assessment.*[Mm]ethodology|800-171.*[Ss]cor|SPRS.*methodology)'
+
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are a certification-tier judge for CMMC 2.0 Level 2 gap analysis outputs.
+
+        Domain knowledge you MUST apply:
+        - NIST SP 800-171 Rev 2 contains 14 control families: AC, AT, AU, CA, CM, CP, IA, IR, MA, MP, PE, PS, RA, SC, SI.
+        - Practice IDs are 3.1.x through 3.14.x only. Anything beyond 3.14.x is fabricated.
+        - SPRS scoring starts at 110 with severity-based deductions; valid scores range from -203 to 110.
+        - DFARS 252.204-7012 applies to CUI handling and requires flow-down to subcontractors.
+
+        Evaluation instructions:
+        - Use the rubric items provided in the system prompt. Score each rubric item from 0.0 to 1.0.
+        - Score factual accuracy of control citations and family coverage strictly.
+        - Penalize invented practices, fabricated standards, or claims without evidence.
+        - If a Met verdict lacks evidence or artifacts, treat that as incomplete.
+        - When SPRS is mentioned, verify methodology (110 baseline, deductions) and plausible score.
+        - Require appropriate caveats (assumptions, missing evidence, or limits of the SSP summary).
+
+        Output format:
+        - Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.
+  # ── Case 3: CUI boundary scoping ──────────────────────────────────────────
+  - id: cmmc-assessor/positive-cui-scoping
+    description: >
+      For a hybrid cloud/on-prem organization, the skill must identify CUI boundary assets
+      using the DoD asset taxonomy (CUI assets, security protection assets, contractor risk
+      managed assets, out-of-scope), and flag which systems are in scope for CMMC assessment.
+    tags: [happy-path, compliance, cmmc, certification]
+    seed: 1003
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Help me identify the CUI boundary for our CMMC assessment. Our infrastructure:
+
+            On-premises:
+            - Engineering workstations (12): used to create and modify technical drawings
+            - File server (FS-01): stores CUI drawings and specs
+            - Jump server (JMP-01): used for admin access to other servers
+            - HR server (HR-01): employee records only; never touches CUI
+            - IT Help Desk system: ticketing for internal IT; no CUI access
+
+            Cloud:
+            - Microsoft 365 GCC High: email and SharePoint for CUI collaboration
+            - Azure DevOps (commercial): source code management for internal tools; no CUI
+            - Salesforce: customer CRM; no CUI data
+
+            Third-party/Managed:
+            - Managed SOC provider: receives log feeds from FS-01 and workstations
+            - Payroll processor: processes payroll; no CUI
+
+            Please classify each system using the DoD CMMC asset taxonomy and identify
+            what is in scope for our CMMC Level 2 assessment.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(CUI asset|security protection asset|contractor risk managed|out.of.scope)'
+        - kind: regex
+          value: '(?i)(FS-01|file server).*(?:CUI asset|in.scope|in scope)'
+        - kind: regex
+          value: '(?i)(HR-01|HR server|payroll).*(?:out.of.scope|out of scope)'
+        - kind: regex
+          value: '(?i)(GCC High|M365.*GCC|SharePoint).*(?:CUI|in.scope|in scope)'
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: taxonomy-applied
+          description: >
+            All four DoD asset taxonomy categories applied correctly: CUI assets include
+            workstations and FS-01; security protection assets include JMP-01 and SOC
+            feeds; out-of-scope includes HR-01, Salesforce, and payroll. A perfect score
+            correctly categorizes all 11 systems.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(CUI asset|security protection|contractor risk|out.of.scope)'
+
+        - id: cloud-scoping
+          description: >
+            M365 GCC High correctly identified as in-scope (CUI data); Azure DevOps commercial
+            correctly identified as out-of-scope or contractor risk managed. A perfect score
+            differentiates GCC High (in-scope) from commercial Azure (out-of-scope).
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)GCC High.*in.scope|in scope.*GCC High'
+
+        - id: msp-flowdown
+          description: >
+            Managed SOC provider identified as requiring DFARS 252.204-7012 flow-down
+            assessment. A perfect score notes the ESP/MSP flow-down obligation.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(flow.down|ESP|MSP|managed.*SOC|SOC.*provider).*(?:DFARS|252\.204|7012|flow-down)'
+
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are a certification-tier judge for CMMC 2.0 Level 2 gap analysis outputs.
+
+        Domain knowledge you MUST apply:
+        - NIST SP 800-171 Rev 2 contains 14 control families: AC, AT, AU, CA, CM, CP, IA, IR, MA, MP, PE, PS, RA, SC, SI.
+        - Practice IDs are 3.1.x through 3.14.x only. Anything beyond 3.14.x is fabricated.
+        - SPRS scoring starts at 110 with severity-based deductions; valid scores range from -203 to 110.
+        - DFARS 252.204-7012 applies to CUI handling and requires flow-down to subcontractors.
+
+        Evaluation instructions:
+        - Use the rubric items provided in the system prompt. Score each rubric item from 0.0 to 1.0.
+        - Score factual accuracy of control citations and family coverage strictly.
+        - Penalize invented practices, fabricated standards, or claims without evidence.
+        - If a Met verdict lacks evidence or artifacts, treat that as incomplete.
+        - When SPRS is mentioned, verify methodology (110 baseline, deductions) and plausible score.
+        - Require appropriate caveats (assumptions, missing evidence, or limits of the SSP summary).
+
+        Output format:
+        - Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.
+  # ── Case 4: Subcontractor flow-down ──────────────────────────────────────
+  - id: cmmc-assessor/positive-subcontractor-flowdown
+    description: >
+      For a tier-2 subcontractor receiving CUI from a prime, the skill must identify the
+      applicable DFARS clauses (7012/7019/7021), explain flow-down obligations, and note
+      what the prime must verify about the sub's posture.
+    tags: [happy-path, compliance, cmmc, certification]
+    seed: 1004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            We are a tier-2 subcontractor. The prime contractor (Lockheed Martin) has
+            asked us to handle CUI technical specifications for a DoD weapons system
+            modification project. Their contract contains DFARS 252.204-7012, 7019, and 7021.
+
+            Questions:
+            1. What flow-down obligations apply to us as the sub?
+            2. What SPRS score do we need to submit?
+            3. What does Lockheed need to verify about our compliance posture?
+            4. Are there any differences because we are tier-2 rather than direct?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '252\.204-7012|DFARS.*7012|7012.*DFARS'
+        - kind: regex
+          value: '252\.204-7019|DFARS.*7019|7019.*DFARS'
+        - kind: regex
+          value: '252\.204-7021|DFARS.*7021|7021.*DFARS'
+        - kind: regex
+          value: '(?i)SPRS'
+        - kind: regex
+          value: '(?i)(flow.down|subcontract|sub.*contract)'
+        - kind: not_contains
+          value: "7022"
+
+      rubric:
+        - id: dfars-clause-accuracy
+          description: >
+            All three DFARS clauses addressed correctly: 7012 (safeguarding), 7019 (SPRS
+            reporting), 7021 (CMMC requirement). A perfect score explains each clause's
+            applicability to a tier-2 sub distinctly.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '7012.*7019.*7021|7021.*7019.*7012'
+
+        - id: sprs-obligation
+          description: >
+            Correctly states that tier-2 subs handling CUI must submit SPRS self-assessment
+            and that the prime must verify this. A perfect score names the verification
+            mechanism (SPRS database lookup or contractual attestation).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)SPRS.*(submit|report|requir|database|verify)|prime.*(verify|confirm|check).*SPRS'
+
+        - id: tier-2-distinction
+          description: >
+            Addresses whether tier-2 status changes obligations — it does not; DFARS flow-down
+            applies regardless of tier. A perfect score is explicit that CUI handling triggers
+            obligations irrespective of tier.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(tier|tier-2|regardless|irrespective|same.*obligation|obligation.*same)'
+
+  # ── Case 5: POA&M table generation ────────────────────────────────────────
+  - id: cmmc-assessor/positive-poam-table
+    description: >
+      Given 5 specific OTS findings (one per domain), the skill must produce a formatted
+      POA&M table with required columns. Pass requires all 5 findings in the table with
+      Practice ID, Gap description, Remediation action, and Completion date columns.
+    tags: [happy-path, compliance, cmmc, certification]
+    seed: 1005
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate a POA&M table for the following 5 OTS findings from our CMMC assessment:
+
+            Finding 1 (AC):
+            Practice: 3.1.3 — Control CUI flow between internal networks and external entities
+            Gap: No data loss prevention (DLP) solution; CUI can egress via email without controls
+            Evidence available: Email gateway logs; no DLP policy or tool
+
+            Finding 2 (IA):
+            Practice: 3.5.3 — Use multifactor authentication for local and network access to CUI
+            Gap: MFA only enforced for O365; on-premises CUI systems use password-only auth
+            Evidence available: Active Directory GPO export; no MFA policy for local accounts
+
+            Finding 3 (AU):
+            Practice: 3.3.1 — Create and retain system audit logs
+            Gap: Audit logs retained only 30 days; requirement is 90 days minimum
+            Evidence available: Windows Event Viewer config export showing 30-day retention
+
+            Finding 4 (SC):
+            Practice: 3.13.3 — Separate user functionality from system management functionality
+            Gap: System admin functions accessible from same workstations used for CUI work
+            Evidence available: No privileged access workstation (PAW) policy or implementation
+
+            Finding 5 (SI):
+            Practice: 3.14.1 — Identify, report, and correct information system flaws
+            Gap: No formal vulnerability scanning program; ad hoc patching only
+            Evidence available: No scan reports; patch management policy incomplete
+
+            Format as a complete POA&M table with Practice ID, Gap Description, Remediation Action,
+            Responsible Party, and Target Completion Date columns.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: contains
+          value: "3.1.3"
+        - kind: contains
+          value: "3.5.3"
+        - kind: contains
+          value: "3.3.1"
+        - kind: contains
+          value: "3.13.3"
+        - kind: contains
+          value: "3.14.1"
+        - kind: regex
+          value: '(?i)(Practice ID|Practice|Control)'
+        - kind: regex
+          value: '(?i)(Gap|Finding|Description)'
+        - kind: regex
+          value: '(?i)(Remediat|Action|Corrective)'
+        - kind: regex
+          value: '(?i)(Completion|Target.*Date|Due Date|Date)'
+        - kind: not_contains
+          value: "3.15."
+
+      rubric:
+        - id: all-findings-in-table
+          description: >
+            All 5 practice IDs (3.1.3, 3.5.3, 3.3.1, 3.13.3, 3.14.1) appear in the table.
+            A perfect score has each practice in a separate row with all required columns populated.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '3\.1\.3.*3\.5\.3|3\.5\.3.*3\.1\.3'
+
+        - id: required-columns
+          description: >
+            Table has at minimum: Practice ID, Gap/Finding description, Remediation action,
+            and Completion date columns. A perfect score includes all five requested columns.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(Practice ID|Practice).*(\|.*){2,}'
+
+        - id: remediation-specificity
+          description: >
+            Remediation actions are concrete and actionable (not "address this gap" or
+            "implement controls"). A perfect score includes specific technology or process
+            references for each finding (e.g., "deploy DLP solution", "enable MFA via
+            Duo or Azure AD MFA", "configure 90-day log retention").
+          weight: 0.30
+          # manual_review: true — specificity requires human judgment
+          auto_check:
+            kind: regex
+            value: '(?i)(deploy|implement|configure|enable|install|establish).{3,30}(DLP|MFA|log|scan|patch|PAW)'
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/cmmc-assessor/gap-table.md
+      golden_threshold: 0.75
+
+  # ── Case 6: Failure mode — no SSP ─────────────────────────────────────────
+  - id: cmmc-assessor/failure-mode-no-ssp
+    description: >
+      When no SSP or artifact context is provided, the skill must flag this as Finding 1
+      and refuse to produce gap scores or SPRS calculations without acknowledging the
+      pre-SSP advisory caveat. Pass requires explicit SSP request and no speculative scoring.
+    tags: [error-handling, compliance, cmmc]
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Am I CMMC ready? Give me my SPRS score and tell me my gaps.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(SSP|System Security Plan)'
+        - kind: regex
+          value: '(?i)(require|need|must have|without|provide|cannot|can.t)'
+        - kind: not_contains
+          value: "SPRS: "
+        - kind: not_contains
+          value: "Your score is"
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: ssp-requested
+          description: >
+            Skill explicitly requests an SSP before proceeding. A perfect score includes
+            the phrase "SSP" or "System Security Plan" and explains why it is required.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(SSP|System Security Plan).*(required|needed|must|without|cannot)'
+
+        - id: no-speculative-scoring
+          description: >
+            No speculative SPRS score or gap list is produced without artifact evidence.
+            A perfect score refuses to calculate SPRS and instead states what would be
+            needed to begin the assessment.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(cannot|can.t|unable|not.*without|require.*before|need.*before).*(score|assess|gap|SPRS)'
+
+  # ── Case 7: Edge case — partial practices ─────────────────────────────────
+  - id: cmmc-assessor/edge-case-partial-practices
+    description: >
+      When the user states 60 of 110 practices are addressed, the skill must enumerate the
+      unaddressed 50 practices by ID range, not just count them. Pass requires specific
+      practice IDs (not just a count) and domain-level gap summary.
+    tags: [edge-case, compliance, cmmc, certification]
+    seed: 1007
+
+    input:
+      messages:
+        - role: user
+          content: |
+            We have implemented exactly 60 of the 110 NIST SP 800-171 practices. The practices
+            we have NOT yet addressed are all practices in the following domains:
+            - System and Information Integrity (SI) — all 7 practices
+            - Risk Assessment (RA) — all 3 practices
+            - Security Assessment (CA) — all 4 practices
+            - Media Protection (MP) — all 9 practices
+            - Personnel Security (PS) — all 2 practices
+            - Physical Protection (PE) — all 6 practices
+            - Maintenance (MA) — all 6 practices
+            - Awareness and Training (AT) — all 3 practices
+            Total: 40 practices in those 8 domains
+
+            Plus these specific practices across other domains:
+            - AC: 3.1.2, 3.1.3, 3.1.5, 3.1.6, 3.1.8, 3.1.15, 3.1.18, 3.1.20, 3.1.21, 3.1.22 (10 practices)
+
+            Total Not Met: 50 practices. Met: 60 practices.
+
+            What is my SPRS score and which 5 gaps should I fix first?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: 'SPRS.*-?\d+|-?\d+.*SPRS'
+        - kind: regex
+          value: '(?i)(SI|System.*Integrit)'
+        - kind: regex
+          value: '(?i)(RA|Risk.*Assess)'
+        - kind: contains
+          value: "3.1.2"
+        - kind: regex
+          value: '(?i)(priorit|first|highest|critical|recommend)'
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: practice-id-enumeration
+          description: >
+            Specific practice IDs from the Not Met list are referenced (not just domain names
+            or counts). A perfect score cites at least 5 specific practice IDs in the
+            gap analysis or prioritization.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '3\.\d+\.\d+'
+
+        - id: sprs-calculation
+          description: >
+            SPRS score computed from the 50 Not Met practices with correct severity weighting.
+            The expected score depends on severity weights; a plausible range is -90 to 20.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: 'SPRS.*-\d+|-\d+.*SPRS'
+
+        - id: top-5-prioritized
+          description: >
+            Five highest-priority remediation items identified with rationale (severity,
+            exploitability impact, or practice count). A perfect score provides distinct
+            actionable items with practice IDs.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(1\.|first|highest|priorit).*(3\.\d+\.\d+|AC|SI|IA)'
+
+  # ── Case 8: Edge case — C3PAO prep ────────────────────────────────────────
+  - id: cmmc-assessor/edge-case-c3pao-prep
+    description: >
+      User asks for a C3PAO assessment preparation checklist. Skill must produce DIBCAC-
+      specific guidance including evidence package requirements, assessment methodology
+      references (Examine/Interview/Test), and common assessment failure modes.
+    tags: [edge-case, compliance, cmmc, certification]
+    seed: 1008
+
+    input:
+      messages:
+        - role: user
+          content: |
+            We are scheduled for a C3PAO CMMC Level 2 assessment in 90 days. Our SPRS score
+            is currently -12. What do we need to prepare? Please give us a checklist for
+            the assessment prep and the specific evidence packages the assessors will want
+            to see for each domain.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(C3PAO|DIBCAC|assessor)'
+        - kind: regex
+          value: '(?i)(Examine|Interview|Test)'
+        - kind: regex
+          value: '(?i)(evidence|artifact|document|log|config)'
+        - kind: regex
+          value: '(?i)(checklist|preparation|prep|before.*assessment)'
+        - kind: not_contains
+          value: "panic"
+
+      rubric:
+        - id: c3pao-methodology
+          description: >
+            Assessment methodology (800-171A Examine/Interview/Test) referenced. A perfect
+            score explains each method and what evidence it requires.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(Examine|Interview|Test).*(800-171A|method|evidence|proof)'
+
+        - id: evidence-package-coverage
+          description: >
+            Evidence packages described for at least 8 of 14 domains. A perfect score
+            provides specific artifacts expected for each domain (e.g., GPO exports for
+            AC, authentication logs for IA, baseline config docs for CM).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(GPO|log|config|policy|scan|baseline|inventory).*(AC|IA|CM|AU|SC|SI)'
+
+        - id: sprs-remediation-path
+          description: >
+            Given the -12 SPRS score, skill advises on which practices to remediate first
+            to reach positive territory before the assessment. A perfect score identifies
+            the 5-point weight practices as highest leverage.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(-12|SPRS.*-12|-12.*SPRS|5.point|5 point|highest.weight|weight.*5)'
+    evaluator_config:
+      evaluator: judge
+      judge_prompt: |
+        You are a certification-tier judge for CMMC 2.0 Level 2 gap analysis outputs.
+
+        Domain knowledge you MUST apply:
+        - NIST SP 800-171 Rev 2 contains 14 control families: AC, AT, AU, CA, CM, CP, IA, IR, MA, MP, PE, PS, RA, SC, SI.
+        - Practice IDs are 3.1.x through 3.14.x only. Anything beyond 3.14.x is fabricated.
+        - SPRS scoring starts at 110 with severity-based deductions; valid scores range from -203 to 110.
+        - DFARS 252.204-7012 applies to CUI handling and requires flow-down to subcontractors.
+
+        Evaluation instructions:
+        - Use the rubric items provided in the system prompt. Score each rubric item from 0.0 to 1.0.
+        - Score factual accuracy of control citations and family coverage strictly.
+        - Penalize invented practices, fabricated standards, or claims without evidence.
+        - If a Met verdict lacks evidence or artifacts, treat that as incomplete.
+        - When SPRS is mentioned, verify methodology (110 baseline, deductions) and plausible score.
+        - Require appropriate caveats (assumptions, missing evidence, or limits of the SSP summary).
+
+        Output format:
+        - Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.

@@ -1,0 +1,164 @@
+name: releasing
+
+# Build release binaries on tag or manual dispatch, then publish a GitHub Release
+# on this repository.
+#
+# Required secret: none beyond the automatic GITHUB_TOKEN (contents: write granted below).
+# Optional secret: AGENTCAROUSEL_JUDGE_KEY — needed only for the nightly eval job in agentcarousel.yml.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (e.g. v0.2.0 or 0.2.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Build and package only; do not create GitHub release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gate:
+    name: Release gate (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - id: meta
+        name: Resolve release tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW="${{ github.event.inputs.version }}"
+          else
+            RAW="${GITHUB_REF_NAME}"
+          fi
+          case "${RAW}" in
+            v*) TAG="${RAW}" ;;
+            *) TAG="v${RAW}" ;;
+          esac
+          echo "release_tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        # Cross-compile aarch64-unknown-linux-gnu from ubuntu-latest (see install step below)
+        # rather than using ubuntu-*-arm runners, which have a smaller free-tier pool.
+        # macos-13 is retired. Prefer x86_64-apple-darwin on macos-latest (ARM): same runner pool as
+        # aarch64-apple-darwin; avoids Intel-only labels that can queue or require larger runners.
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: "${{ matrix.target }}"
+
+      - name: Install AArch64 Linux cross-compiler
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build release binary
+        shell: bash
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}"
+
+      - name: Package artifact
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+        run: |
+          mkdir -p dist
+          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+            BIN="target/${{ matrix.target }}/release/agentcarousel.exe"
+          else
+            BIN="target/${{ matrix.target }}/release/agentcarousel"
+          fi
+          bash scripts/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+
+  publish:
+    name: Checksums, scan, and GitHub release
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Attach install.sh to release assets
+        run: cp install.sh release-assets/install.sh
+
+      - name: Write SHA256SUMS and scan
+        run: |
+          bash scripts/publish-distribution.sh checksums release-assets
+          bash scripts/publish-distribution.sh scan-release-dir release-assets
+          ls -la release-assets
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+        run: |
+          set -euxo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Dry run: skipping gh release create."
+            exit 0
+          fi
+          gh release create "${RELEASE_TAG}" release-assets/* \
+            --title "${RELEASE_TAG}" \
+            --notes "Binary release for ${RELEASE_TAG}. See install.sh or README for installation."

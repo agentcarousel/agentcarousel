@@ -1,0 +1,77 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/cmmc-assessor",
+  "bundle_version": "1.0.0",
+  "case_count": 9,
+  "case_ids": [
+    "cmmc-assessor/positive-gap-analysis",
+    "cmmc-assessor/judge-spot-check",
+    "cmmc-assessor/positive-sprs-calculation",
+    "cmmc-assessor/positive-cui-scoping",
+    "cmmc-assessor/positive-subcontractor-flowdown",
+    "cmmc-assessor/positive-poam-table",
+    "cmmc-assessor/failure-mode-no-ssp",
+    "cmmc-assessor/edge-case-partial-practices",
+    "cmmc-assessor/edge-case-c3pao-prep"
+  ],
+  "certification_cases": [
+    "cmmc-assessor/positive-gap-analysis",
+    "cmmc-assessor/judge-spot-check",
+    "cmmc-assessor/positive-sprs-calculation",
+    "cmmc-assessor/positive-cui-scoping",
+    "cmmc-assessor/positive-subcontractor-flowdown",
+    "cmmc-assessor/positive-poam-table",
+    "cmmc-assessor/edge-case-partial-practices",
+    "cmmc-assessor/edge-case-c3pao-prep"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-04-20T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "CMMC 2.0 / NIST 800-171 gap analysis fixture: rules, golden gap table, optional judge rubrics; synthetic SSP narratives only.",
+  "domain": "compliance",
+  "evaluators_used": [
+    "rules",
+    "golden",
+    "judge"
+  ],
+  "fixtures": [
+    {
+      "path": "../../skills/cmmc-assessor.yaml",
+      "sha256": "f28cf5f107a5f97509dbed81c75dfbd09b5ec63df09f18eeab9a2e38eeba474c"
+    },
+    {
+      "path": "../../golden/cmmc-assessor/gap-table.md",
+      "sha256": "09590b871293b42df5565d3d331a96b0262473b089ebdacc7c07757d4968fec2"
+    }
+  ],
+  "judge_evaluator": true,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [
+    {
+      "path": "../../../mocks/agent-response.json",
+      "sha256": "cde8a0a01f590a0a543f5afc4693eab3667de4f32b7a4c38930e073c906ec6c2"
+    }
+  ],
+  "negative_cases": [
+    "cmmc-assessor/positive-gap-analysis",
+    "cmmc-assessor/positive-sprs-calculation"
+  ],
+  "notes": [
+    "judge evaluator enabled for certification-tier rubric scoring",
+    "Hashes refreshed from repo root; re-run `agentcarousel bundle pack fixtures/bundles/cmmc-assessor` after file changes",
+    "golden_threshold set to 0.75–0.80 for POA&M table comparisons",
+    "certification_track=candidate; advance to stable after N=5 carousel runs with <10% rubric variance"
+  ],
+  "open_items": [
+    "OI-005: Advance to stable after carousel runs"
+  ],
+  "owners": [
+    "@neems"
+  ],
+  "policy_version": "msp-policy-2026-04",
+  "risk_tier": "high",
+  "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
+  "skill_or_agent": "cmmc-assessor",
+  "source_skill_path": "agentcarousel/skills/cmmc-assessor/SKILL.md",
+  "updated_at": "2026-04-25T00:00:00Z"
+}
