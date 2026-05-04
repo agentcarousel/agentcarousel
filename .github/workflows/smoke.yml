@@ -1,6 +1,7 @@
 name: smoke
 
-# Prove released binaries against curated fixtures (no API keys).
+# Prove binaries against curated fixtures (no API keys).
+# Prefers a released tarball when GitHub Releases exist; otherwise builds from source.
 
 on:
   push:
@@ -8,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag (e.g. v0.2.0); leave empty for latest GitHub release"
+        description: "Release tag (e.g. v0.4.0); leave empty for latest GitHub release, or build-from-source if none"
         required: false
         type: string
   schedule:
@@ -33,26 +34,46 @@ jobs:
             triple: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     env:
-      REPO: agentcarousel/agentcarousel
+      REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve release tag
+      - name: Resolve release tag or build-from-source
         id: ver
         shell: bash
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ -n "${INPUT_VERSION}" ]; then
             TAG="${INPUT_VERSION}"
-          else
-            TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+            case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
+            echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+            echo "source=release" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
-          case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
-          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
-      - name: Download and extract binary
+          # Authenticated request: higher rate limits and stable behavior on GHA runners.
+          tmp="$(mktemp)"
+          code="$(curl -sS -w "%{http_code}" -o "${tmp}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${REPO}/releases/latest")"
+          if [ "${code}" = "200" ]; then
+            TAG="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[\"tag_name\"])" "${tmp}")"
+            rm -f "${tmp}"
+            case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
+            echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+            echo "source=release" >> "${GITHUB_OUTPUT}"
+          else
+            rm -f "${tmp}"
+            echo "No GitHub release found (HTTP ${code}); building agentcarousel from source." >&2
+            echo "source=build" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Download and extract release binary
+        if: steps.ver.outputs.source == 'release'
         shell: bash
         env:
           TAG: ${{ steps.ver.outputs.tag }}
@@ -66,6 +87,18 @@ jobs:
           tar -xzf "dist.tar.gz"
           chmod +x agentcarousel
           echo "${PWD}" >> "${GITHUB_PATH}"
+
+      - name: Install Rust (build fallback)
+        if: steps.ver.outputs.source == 'build'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build agentcarousel from source
+        if: steps.ver.outputs.source == 'build'
+        run: cargo build --release -p agentcarousel
+
+      - name: Use binary from cargo build
+        if: steps.ver.outputs.source == 'build'
+        run: echo "$(pwd)/target/release" >> "${GITHUB_PATH}"
 
       - name: Validate good fixture
         run: agentcarousel validate fixtures/skills/example-skill.yaml
