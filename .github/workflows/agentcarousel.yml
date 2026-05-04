@@ -1,0 +1,123 @@
+# PR and main-branch CI for the Rust workspace. Enable secret scanning and
+# dependency review in the repository Settings.
+name: agentcarousel
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  rust-ci:
+    name: Rust CI (PR gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Format check
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test
+
+  validate:
+    name: Validate fixtures (PR gate)
+    runs-on: ubuntu-latest
+    needs: rust-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Build agentcarousel (release)
+        run: cargo build --release -p agentcarousel
+      - name: Validate
+        run: ./target/release/agentcarousel validate fixtures/ --format json | tee validate-report.json
+      - name: Optional jq smoke on ATF summary
+        run: jq -e '.atf_summary.fixture_files_loaded > 0' validate-report.json
+      - name: Upload validate report
+        uses: actions/upload-artifact@v4
+        with:
+          name: validate-report
+          path: validate-report.json
+      - name: Bundle verify (contract)
+        run: |
+          ./target/release/agentcarousel bundle verify fixtures/bundles/cmmc-assessor
+          ./target/release/agentcarousel bundle verify fixtures/bundles/cmmc-assessor/bundle.manifest.json
+
+  offline-fixtures:
+    name: Offline test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: [rust-ci, validate]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: smoke-two
+            paths: >-
+              fixtures/skills/cmmc-assessor.yaml
+              fixtures/skills/terraform-sentinel-scaffold.yaml
+          - name: skills-smoke
+            paths: fixtures/skills
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Build agentcarousel (release)
+        run: cargo build --release -p agentcarousel
+      - name: Run offline smoke tests
+        run: |
+          ./target/release/agentcarousel test ${{ matrix.paths }} \
+            --filter-tags smoke \
+            --offline true \
+            --format json | tee "test-results-${{ matrix.name }}.json"
+      - name: Upload test results (JSON)
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.name }}
+          path: test-results-${{ matrix.name }}.json
+
+  eval-nightly:
+    name: Eval harness (nightly, certification track)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Build agentcarousel (release)
+        run: cargo build --release -p agentcarousel
+      - name: Eval all certification-tagged cases
+        env:
+          AGENTCAROUSEL_JUDGE_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
+        run: |
+          ./target/release/agentcarousel eval fixtures/ \
+            --filter '**/certification/**' \
+            --runs 5 \
+            --judge \
+            --format json \
+            > eval-results.json
+      - name: Upload eval artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval-results.json
+      - name: Regression check
+        run: |
+          PREV=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.[0].id // empty')
+          if [ -n "$PREV" ]; then
+            CURR=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.[0].id')
+            ./target/release/agentcarousel report diff "$PREV" "$CURR"
+          fi

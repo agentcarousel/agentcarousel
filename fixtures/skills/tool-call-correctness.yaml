@@ -1,0 +1,73 @@
+# agentcarousel fixture — tool-call-correctness
+# Generic template for agents that must call external tools.
+# Copy and adapt: replace tool names, args_match keys, and output assertions
+# with your agent's actual tool surface. Add corresponding entries to
+# mocks/tool-mocks.json for offline test coverage.
+
+schema_version: 1
+skill_or_agent: tool-call-correctness
+
+cases:
+
+  # ── Happy path: single tool, correct args ────────────────────────────────────
+  - id: tool-call-correctness/positive-single-tool
+    tags: [smoke, happy-path]
+    description: >
+      Agent calls the expected tool with the required argument and incorporates
+      the tool result into its response.
+    input:
+      messages:
+        - role: user
+          content: "Look up the price and stock level for product SKU-42."
+    expected:
+      tool_sequence:
+        - tool: product_lookup
+          order: strict
+          args_match:
+            sku: "SKU-42"
+      output:
+        - kind: contains
+          value: "SKU-42"
+
+  # ── Happy path: two-step tool sequence ───────────────────────────────────────
+  - id: tool-call-correctness/positive-sequence
+    tags: [happy-path]
+    description: >
+      Agent must call document_search first, then summarize the result.
+      Order is strict: summarize without a prior search is a failure.
+    input:
+      messages:
+        - role: user
+          content: "Search for documents about GDPR compliance and summarize the top result."
+    expected:
+      tool_sequence:
+        - tool: document_search
+          order: strict
+          args_match:
+            query: "GDPR compliance"
+        - tool: summarize
+          order: strict
+      output:
+        - kind: contains
+          value: "GDPR"
+
+  # ── Error handling: product not found ────────────────────────────────────────
+  - id: tool-call-correctness/error-not-found
+    tags: [error-handling]
+    description: >
+      When the tool returns a not-found result, the agent must still call the
+      correct tool with the right SKU and communicate the outcome to the user
+      rather than fabricating an answer.
+    input:
+      messages:
+        - role: user
+          content: "Look up product SKU-99."
+    expected:
+      tool_sequence:
+        - tool: product_lookup
+          order: strict
+          args_match:
+            sku: "SKU-99"
+      output:
+        - kind: contains
+          value: "SKU-99"

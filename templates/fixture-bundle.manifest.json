@@ -1,0 +1,55 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "_comment_fixture_tags_doc": "Fixture tag taxonomy and examples: docs/fixture-tag-examples.md",
+
+  "_comment_id": "Format: '<org>/<bundle-name>'. Must be unique in the MSP registry.",
+  "bundle_id": "<org>/<bundle-name>",
+
+  "_comment_version": "SemVer. Patch: comment-only changes. Minor: new cases added. Major: cases removed/renamed — RESETS carousel counter.",
+  "bundle_version": "1.0.0",
+
+  "description": "<One sentence describing what skills/agents this bundle tests and what quality dimensions it covers.>",
+
+  "_comment_track": "Hint for MSP. Authoritative value lives in the MSP registry. Options: none | candidate | stable | trusted",
+  "certification_track": "candidate",
+
+  "_comment_risk": "Determines N (carousel run count) and audit depth. Options: low | medium | high",
+  "risk_tier": "low",
+
+  "_comment_data": "Data handling classification. Options: synthetic-only | no-pii | pii-reviewed",
+  "data_handling": "synthetic-only",
+
+  "_comment_min_version": "Minimum agentcarousel CLI version required to execute this bundle.",
+  "min_agentcarousel_version": "0.1.0",
+
+  "_comment_schema_hash": "SHA-256 of the JSON Schema file used for validation. Computed by `agentcarousel bundle pack`.",
+  "schema_hash": "sha256:<computed-by-bundle-pack>",
+
+  "_comment_fixtures": "Each entry has a relative path and SHA-256. Computed by `agentcarousel bundle pack`.",
+  "fixtures": [
+    {
+      "path": "fixtures/<skill-or-agent-id>.yaml",
+      "sha256": "<computed-by-bundle-pack>"
+    }
+  ],
+
+  "_comment_mocks": "Each mock file used by fixtures in this bundle.",
+  "mocks": [
+    {
+      "path": "mocks/<tool>-stub.json",
+      "sha256": "<computed-by-bundle-pack>"
+    }
+  ],
+
+  "_comment_owners": "GitHub handles of fixture authors responsible for this bundle.",
+  "owners": ["@<github-handle>"],
+
+  "_comment_domain": "Domain tag used for audit assignment matching. Examples: text-processing, code-analysis, web-search, data-extraction, customer-support",
+  "domain": "<domain>",
+
+  "created_at": "<YYYY-MM-DDT00:00:00Z>",
+  "updated_at": "<YYYY-MM-DDT00:00:00Z>",
+
+  "_comment_policy": "MSP policy document version this bundle was written against. Obtain from https://agentcarousel.com/policy",
+  "policy_version": "msp-policy-<YYYY-MM>"
+}

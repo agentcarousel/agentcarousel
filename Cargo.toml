@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/agentcarousel",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.95"

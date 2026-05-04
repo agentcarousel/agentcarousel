@@ -1,0 +1,259 @@
+# agentcarousel fixture skeleton
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file, rename it to `fixtures/<domain>/<skill-or-agent-id>.yaml`,
+# and replace every placeholder marked with <ANGLE_BRACKETS>.
+#
+# Schema reference: https://agentcarousel.com/schemas/fixture/v1.json
+# Local schema:     fixtures/schemas/skill-definition.schema.json
+# Process guide:    docs/fixture-development-process.md
+# Versioning:       bundle_id / bundle_version in this file; see docs/fixture-format.md
+# Tag examples:     docs/fixture-tag-examples.md
+# ─────────────────────────────────────────────────────────────────────────────
+
+# [REQUIRED] Schema version — do not change; must be 1 for this skeleton version.
+schema_version: 1
+
+# [REQUIRED] The stable identifier of the skill or agent under test.
+# Convention: lowercase, hyphen-separated.  Used as the prefix for all case ids.
+# Example: "summarize-skill" | "web-search-agent" | "code-review-skill"
+skill_or_agent: <skill-or-agent-id>
+
+# ── Certification metadata ────────────────────────────────────────────────────
+# Optional for standard fixtures; required for certification-eligible bundles.
+# The MSP sets the authoritative value; local value is a declaration of intent.
+
+# bundle_id: <org>/<bundle-name>          # e.g. "acme/summarize-skill"
+# bundle_version: 1.0.0                  # SemVer; major bump resets carousel counter
+# certification_track: candidate          # none | candidate | stable | trusted
+# risk_tier: low                          # low | medium | high
+# data_handling: synthetic-only           # synthetic-only | no-pii | pii-reviewed
+
+# ── Defaults (applied to every case unless overridden) ───────────────────────
+defaults:
+  # Wall-clock timeout per case (seconds). Set to 1.5× expected real latency.
+  timeout_secs: 30
+
+  # At minimum include one domain tag and "nightly". Add "certification" for
+  # MSP carousel runs. Do not include "smoke" here; set it per case.
+  tags: [<domain-tag>, nightly]
+
+  # Evaluator to use when no case-level evaluator_config is present.
+  # Prefer: rules → golden → process → judge  (in order of cost and variance)
+  evaluator: rules
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CASES
+# ─────────────────────────────────────────────────────────────────────────────
+# Each case is an independent test scenario.  Naming convention:
+#   id: <skill-or-agent-id>/<short-description-of-scenario>
+#
+# Required per case: id, input.messages, expected
+# Strongly recommended: description, tags
+# ─────────────────────────────────────────────────────────────────────────────
+cases:
+
+  # ── Happy-path case ────────────────────────────────────────────────────
+  # The primary user journey. Include "smoke" so it runs on every PR.
+  # Write this case first; it drives your mock design.
+  - id: <skill-or-agent-id>/happy-path-<short-name>
+    description: >
+      <One or two sentences describing what this case tests and what constitutes
+      a pass.  Be specific: mention expected tool calls, output constraints, and
+      the user intent being satisfied.>
+    tags: [smoke, happy-path, <domain-tag>]
+
+    # Optional: override the default timeout for this case only.
+    # timeout_secs: 15
+
+    # Optional: fix the RNG seed for deterministic runs across eval iterations.
+    # seed: 42
+
+    input:
+      messages:
+        - role: user
+          content: |
+            <The user-facing prompt.  Use a realistic, representative input.
+            For skills: a direct task.  For agents: a goal that requires tool use.>
+
+        # Add more turns if the fixture tests multi-turn conversation:
+        # - role: assistant
+        #   content: |
+        #     <Prior assistant response, if testing a follow-up turn.>
+        # - role: user
+        #   content: |
+        #     <User follow-up.>
+
+      # Optional: structured context available to the skill/agent alongside messages.
+      # context:
+      #   document_id: "doc-001"
+      #   source_url: "https://example.com/article"
+
+      # Optional: non-secret environment variable overrides (no API keys here).
+      # env_overrides:
+      #   AGENTCAROUSEL_MAX_TOKENS: "256"
+
+    expected:
+      # List every tool call you expect.  For skills with no tool calls: tool_sequence: []
+      # order options: strict | subsequence | unordered
+      tool_sequence:
+        - tool: <tool-name>           # e.g. web_search | code_executor | read_file
+          order: strict
+          args_match:                 # Partial match — only listed keys are checked.
+            <arg-key>: <arg-value>    # e.g. query: "capital of Portugal"
+        # Add more expected tool calls:
+        # - tool: <second-tool>
+        #   order: subsequence        # Allows other calls between first and second.
+        #   args_match: {}            # {} = any args acceptable
+
+      output:
+        # Use the minimum set of assertions that prove the case passed.
+        # Over-fitting assertions to a specific phrasing makes fixtures brittle.
+        - kind: contains              # contains | not_contains | equals | regex | json_path | golden_diff
+          value: "<substring that must appear in output>"
+
+        - kind: not_contains
+          value: "<substring that must NOT appear — e.g. a hallucinated entity>"
+
+        # Example regex assertion:
+        # - kind: regex
+        #   value: '(?i)expected-term|alternative-term'
+
+        # Example JSON path assertion (for structured/tool outputs):
+        # - kind: json_path
+        #   field: "$.result.status"
+        #   value: "success"
+
+      rubric:
+        # Rubric items are scored by the eval harness.  Weights must sum to 1.0.
+        # Pair every rubric item with an auto_check where possible;
+        # leave auto_check absent only for items that genuinely require a judge.
+        - id: <rubric-item-id>             # e.g. factual-accuracy
+          description: >
+            <What a perfect score on this dimension looks like.  Be specific
+            enough that a human auditor can apply it consistently.>
+          weight: 0.5                      # Adjust so all weights sum to 1.0
+          auto_check:
+            kind: contains
+            value: "<automatable check>"
+
+        - id: <rubric-item-id-2>           # e.g. conciseness
+          description: >
+            <Description of this rubric dimension.>
+          weight: 0.3
+          auto_check:
+            kind: regex
+            value: '<regex pattern>'
+
+        - id: <rubric-item-id-3>           # e.g. reasoning-quality
+          description: >
+            <Rubric item that requires language understanding.  Document here what
+            a judge or human reviewer should look for.  Reserve for items that
+            genuinely cannot be expressed as contains/regex/json_path.>
+          weight: 0.2
+          # No auto_check — requires judge or human audit.
+
+      # Evaluator config at case level (overrides defaults.evaluator):
+      # evaluator_config:
+      #   evaluator: judge
+      #   judge_prompt: >
+      #     Score whether the response <specific criterion>.
+      #     Score 1.0 if clearly satisfies criterion, 0.5 if borderline, 0.0 if not.
+
+  # ── Failure-mode / error-handling case ───────────────────────────────────
+  # Author this alongside the happy-path case. It catches mock gaps and tests
+  # graceful degradation.
+  - id: <skill-or-agent-id>/failure-mode-<short-name>
+    description: >
+      <Describe the failure condition: empty input, missing context, tool error,
+      rate limit, etc.  State what a pass looks like: graceful error message,
+      no stack trace, appropriate fallback.>
+    tags: [error-handling, edge-case, <domain-tag>]
+    timeout_secs: 10             # Failure cases should resolve quickly.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            <Input that triggers the failure mode.  E.g. empty text, missing
+            required field, or a prompt designed to cause a tool error.>
+
+    expected:
+      tool_sequence: []          # Failure modes often skip tool calls entirely.
+
+      output:
+        - kind: contains
+          value: "<graceful error phrase>"  # e.g. "please provide" / "unable to"
+        - kind: not_contains
+          value: "panic"                    # No stack traces or internal errors
+        - kind: not_contains
+          value: "thread 'main'"            # No Rust panic output
+
+      rubric:
+        - id: graceful-error-response
+          description: >
+            Skill/agent returns a user-facing error message without exposing
+            internal state, stack traces, or technical identifiers.
+          weight: 1.0
+          auto_check:
+            kind: regex
+            value: '(?i)(sorry|unable|provide|empty|missing|invalid)'
+
+  # ── Edge-case template (duplicate as needed) ──────────────────────────────
+  # - id: <skill-or-agent-id>/edge-<scenario>
+  #   description: >
+  #     <Describe the unusual input or boundary condition being tested.>
+  #   tags: [edge-case, <domain-tag>]
+  #
+  #   input:
+  #     messages:
+  #       - role: user
+  #         content: |
+  #           <Edge-case input.>
+  #
+  #   expected:
+  #     tool_sequence: []
+  #     output:
+  #       - kind: contains
+  #         value: "<expected edge-case response>"
+  #     rubric:
+  #       - id: handles-edge-gracefully
+  #         description: >
+  #           <What correct handling of this edge case looks like.>
+  #         weight: 1.0
+  #         auto_check:
+  #           kind: contains
+  #           value: "<expected response>"
+
+  # ── Certification case template (add "certification" tag for MSP carousel) ─
+  # - id: <skill-or-agent-id>/certification-<scenario>
+  #   description: >
+  #     <Full description.  For certification cases, describe the rubric in enough
+  #     detail that a domain auditor can verify the scoring independently.>
+  #   tags: [certification, <domain-tag>]
+  #   seed: 12345           # Required for certification: deterministic across runs.
+  #
+  #   input:
+  #     messages:
+  #       - role: user
+  #         content: |
+  #           <Certification scenario input.>
+  #
+  #   expected:
+  #     tool_sequence:
+  #       - tool: <tool>
+  #         order: strict
+  #         args_match: {}
+  #     output:
+  #       - kind: contains
+  #         value: "<required term>"
+  #     rubric:
+  #       - id: <rubric-id>
+  #         description: >
+  #           <Precise rubric description for auditor review.>
+  #         weight: 1.0
+  #         auto_check:
+  #           kind: regex
+  #           value: '<pattern>'
+  #
+  #   evaluator_config:
+  #     evaluator: rules           # Or judge only if truly necessary.

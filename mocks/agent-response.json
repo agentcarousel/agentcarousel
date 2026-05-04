@@ -1,0 +1,119 @@
+[
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "cmmc-assessor/judge-spot-check" },
+    "response": {
+      "content": "AC: Partially Met — annual access reviews only; stale entitlement risk. IA: Partially Met — MFA for VPN but not workstations. SI: Not Met — antivirus present but no vulnerability scanning program. Highest risks: AC review cadence, IA workstation MFA gap, SI missing continuous vuln assessment."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "terraform-sentinel-scaffold/judge-spot-check" },
+    "response": {
+      "content": "# MANDATORY — enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"judge_spot\" {\n  name = \"ci\"\n}\n\nStarter stub; TFE plan governs truth."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "cmmc-assessor/positive-gap-analysis" },
+    "response": {
+      "content": "CMMC gap (CI mock). AC domain: Partially Met. IA domain: Met. CM IR AU SC SI RA CA MP PS PE MA AT — all fourteen NIST 800-171 families addressed with Met, Partially Met, Not Met, and OTS verdicts.\n\n110 practices assessed; SPRS -47 using DoD Assessment Methodology baseline.\n\nPOA&M table:\n| Practice ID | Finding | Action | Date |\n| 3.1.1 | gap | remediate | 2026-06-01 |\n\nRequire document evidence for MFA claims per AC.\n\nNo invented practice 3.14.99 beyond scope."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "cmmc-assessor/positive-sprs-calculation" },
+    "response": {
+      "content": "SPRS score is 65 after deductions from baseline 110 using DoD Assessment Methodology. Deduct points for each OTS practice. Highest priority: remediate 3.1.2 access control gap first, then 3.3.1 logging, then prioritization for remaining 5-point items."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "terraform-sentinel-scaffold/positive-aws-mfa" },
+    "response": {
+      "content": "# MANDATORY — enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"example\" {\n  name = \"ci\"\n}\n\nStarter stub only; TFE run governs truth after terraform plan."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "terraform-sentinel-scaffold/positive-azure-encryption" },
+    "response": {
+      "content": "# MANDATORY — require-storage-encryption.sentinel\n# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account\n\nresource \"azurerm_storage_account\" \"example\" {\n  # enable_https_traffic_only = true\n  # min_tls_version = \"TLS1_2\"\n}\n"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "crowdstrike-cve-lookup/deferred-placeholder" },
+    "response": {
+      "content": "Deferred: CrowdStrike Spotlight/CVE fixture is blocked pending recorded Falcon API responses; mock-only placeholder in CI."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "crowdstrike-discover-software-users/deferred-placeholder" },
+    "response": {
+      "content": "Deferred: CrowdStrike Discover fixture is blocked pending recorded API responses; mock-only placeholder in CI."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "sevco-reporting/deferred-placeholder" },
+    "response": {
+      "content": "Deferred: Sevco reporting fixture is blocked pending recorded API responses; mock-only placeholder in CI."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-qa/positive-context-answer" },
+    "response": { "content": "The Eiffel Tower stands 330 metres tall, as stated in the provided context." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-qa/positive-citation" },
+    "response": { "content": "According to DOC-001, the device must be powered off before removing the battery." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-qa/error-missing-context" },
+    "response": { "content": "I cannot answer this question because no context was provided about the city." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "tool-call-correctness/positive-single-tool" },
+    "response": { "content": "Product SKU-42 is priced at $29.99 with 45 units in stock." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "tool-call-correctness/positive-sequence" },
+    "response": { "content": "GDPR compliance requires organizations to obtain explicit consent before processing personal data." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "tool-call-correctness/error-not-found" },
+    "response": { "content": "Product SKU-99 was not found in the catalog. Please verify the SKU and try again." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "example-skill/positive" },
+    "response": { "content": "Summary: short note." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "example-skill/tool-call" },
+    "response": { "content": "Widget A has 12 units available." }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rust-docsrs-augmentation/happy-path-smoke" },
+    "response": {
+      "content": "Skill rust-docsrs-augmentation (see `.cursor/skills/rust-docsrs-augmentation/`):\n\n1. Add `//!` at the top of `src/lib.rs` with a one-line summary, audience (CLI vs library), and a small module table.\n2. Run `RUSTDOCFLAGS='-D warnings' cargo doc --no-deps -p your_crate` before publish to catch broken intra-doc links and invalid pseudo-HTML in `///` comments.\n3. After `cargo publish`, https://docs.rs rebuilds API docs for the new semver.\n4. Pitfalls: avoid angle-bracket placeholders like `path/<name>.yaml` in doc comments—use `path/{name}.yaml`. Prefer [`crate::Foo`] without a redundant explicit `(crate::Foo)` link target.\n\nNo panics required for documentation-only work."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rust-docsrs-augmentation-failfast/deliberate-output-mismatch" },
+    "response": {
+      "content": "Audit complete: documentation looks consistent with project style. No special verification token is emitted in mock mode."
+    }
+  }
+]
