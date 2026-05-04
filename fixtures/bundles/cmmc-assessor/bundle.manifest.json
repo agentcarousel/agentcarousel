@@ -37,7 +37,7 @@
   "fixtures": [
     {
       "path": "../../skills/cmmc-assessor.yaml",
-      "sha256": "f28cf5f107a5f97509dbed81c75dfbd09b5ec63df09f18eeab9a2e38eeba474c"
+      "sha256": "05ca923196d89a20ea4dc6022991799fdf611a8fdc146dcb1fd0623be9a1bd9e"
     },
     {
       "path": "../../golden/cmmc-assessor/gap-table.md",

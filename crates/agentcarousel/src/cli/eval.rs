@@ -12,7 +12,9 @@ use std::path::PathBuf;
 
 use super::config::{config_hash, ResolvedConfig};
 use super::exit_codes::ExitCode;
-use super::fixture_utils::{apply_case_filter, collect_fixture_paths, default_concurrency};
+use super::fixture_utils::{
+    apply_case_filter, apply_tag_filter, collect_fixture_paths, default_concurrency,
+};
 use super::GlobalOptions;
 
 const GENERATOR_GEMINI_KEY_ENV_CANDIDATES: [&str; 6] = [
@@ -87,6 +89,9 @@ pub struct EvalArgs {
     format: Option<String>,
     #[arg(short = 'F', long)]
     filter: Option<String>,
+    /// Comma-separated case tags to include (e.g. certification, smoke).
+    #[arg(long = "filter-tags", value_name = "TAG", value_delimiter = ',')]
+    filter_tags: Option<Vec<String>>,
     #[arg(short = 'C', long)]
     certification_context: Option<CliCertificationContext>,
     #[arg(short = 'i', long)]
@@ -128,7 +133,11 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
     let mut fixtures = Vec::new();
     for path in fixture_paths {
         match load_fixture(&path) {
-            Ok(fixture) => fixtures.push(apply_case_filter(fixture, args.filter.as_deref())),
+            Ok(fixture) => {
+                let fixture = apply_case_filter(fixture, args.filter.as_deref());
+                let fixture = apply_tag_filter(fixture, args.filter_tags.as_deref());
+                fixtures.push(fixture);
+            }
             Err(err) => {
                 eprintln!("error: failed to load fixture {}: {err}", path.display());
                 return ExitCode::ConfigError.as_i32();

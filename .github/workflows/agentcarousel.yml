@@ -39,7 +39,8 @@ jobs:
       - name: Build agentcarousel (release)
         run: cargo build --release -p agentcarousel
       - name: Validate
-        run: ./target/release/agentcarousel validate fixtures/ --format json | tee validate-report.json
+        run: |
+          ./target/release/agentcarousel validate fixtures/skills fixtures/bundles fixtures/examples/example-skill.yaml --format json | tee validate-report.json
       - name: Optional jq smoke on ATF summary
         run: jq -e '.atf_summary.fixture_files_loaded > 0' validate-report.json
       - name: Upload validate report
@@ -104,7 +105,8 @@ jobs:
           AGENTCAROUSEL_JUDGE_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
         run: |
           ./target/release/agentcarousel eval fixtures/ \
-            --filter '**/certification/**' \
+            --filter-tags certification \
+            --evaluator all \
             --runs 5 \
             --judge \
             --format json \
