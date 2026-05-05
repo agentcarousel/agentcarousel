@@ -1,6 +1,6 @@
 # agentcarousel
 
-**Testing for AI agents**
+**Testing for AI agents** <sup>Built with Rust</sup>
 
 `agentcarousel` is a CLI for people who want confidence in AI agent behavior before shipping. It starts simple (validate + test locally) and scales to live evaluation, evidence export, and trust workflows.
 
