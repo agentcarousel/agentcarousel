@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag (e.g. v0.4.0); leave empty for latest GitHub release, or build-from-source if none"
+        description: "Release tag (e.g. v0.4.1); leave empty for latest GitHub release, or build-from-source if none"
         required: false
         type: string
   schedule:
