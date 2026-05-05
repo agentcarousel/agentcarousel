@@ -2,7 +2,7 @@
 
 **Testing for AI agents** <sup>Built with Rust</sup>
 
-`agentcarousel` is a CLI for people who want confidence in AI agent behavior before shipping. It starts simple (validate + test locally) and scales to live evaluation, evidence export, and trust workflows.
+`agentcarousel` is a command-line tool for testing AI agents and skills the way you’d use unit tests for code. You define fixtures (YAML) with inputs, expected outputs, and rules; the CLI validates those files, runs repeatable tests (including offline runs with mocks so you don’t need live models), and can record runs, diff them, and export evidence for CI or audit-style workflows. In short: it helps you prove an agent behaves acceptably before you ship it or publish claims about it.
 
 ## Why people use this
 
