@@ -22,6 +22,8 @@ If you just want value fast, do these three commands.
 curl -fsSL http://install.agentcarousel.com | sh
 ```
 
+**Homebrew (macOS / Linux):** a maintainer-built formula lives in this repo at `packaging/homebrew/agentcarousel.rb`. After it lands in [homebrew-core](https://github.com/Homebrew/homebrew-core) or in a tap (for example `brew tap agentcarousel/tap`), install with `brew install agentcarousel`. The formula installs `agentcarousel` and the `agc` shortcut.
+
 Notes:
 
 - Installer supports Linux and macOS.
