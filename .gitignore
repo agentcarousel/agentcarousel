@@ -49,8 +49,9 @@ build/
 coverage/
 .nyc_output/
 
-# --- MkDocs ---
+# --- Local MkDocs (optional; keep out of git — use your own mkdocs.yml copy) ---
 site/
+mkdocs.yml
 
 # --- Python ---
 .venv/

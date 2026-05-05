@@ -16,9 +16,12 @@ cmd_pack() {
   local outdir="$4"
   local asset="agentcarousel-${tag}-${target}.tar.gz"
   local tmp
+  local outdir_abs
   tmp="$(mktemp -d)"
 
   mkdir -p "${outdir}"
+  # Tar runs under cd "${tmp}"; a relative outdir would resolve inside tmp and fail to open the archive.
+  outdir_abs="$(cd "${outdir}" && pwd)"
   if [[ ! -f "${bin_path}" ]]; then
     echo "publish-distribution: binary not found: ${bin_path}" >&2
     rm -rf "${tmp}"
@@ -27,11 +30,11 @@ cmd_pack() {
 
   if [[ "${bin_path}" == *.exe ]]; then
     cp "${bin_path}" "${tmp}/agentcarousel.exe"
-    (cd "${tmp}" && tar czf "${outdir}/${asset}" agentcarousel.exe)
+    (cd "${tmp}" && tar czf "${outdir_abs}/${asset}" agentcarousel.exe)
   else
     cp "${bin_path}" "${tmp}/agentcarousel"
     chmod +x "${tmp}/agentcarousel"
-    (cd "${tmp}" && tar czf "${outdir}/${asset}" agentcarousel)
+    (cd "${tmp}" && tar czf "${outdir_abs}/${asset}" agentcarousel)
   fi
   rm -rf "${tmp}"
 }
