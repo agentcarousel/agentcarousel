@@ -16,13 +16,24 @@
 
 If you just want value fast, do these three commands.
 
-### 1) Install
+### Install
 
 ```bash
 curl -fsSL http://install.agentcarousel.com | sh
 ```
 
-**Homebrew (macOS / Linux):** a maintainer-built formula lives in this repo at `packaging/homebrew/agentcarousel.rb`. After it lands in [homebrew-core](https://github.com/Homebrew/homebrew-core) or in a tap (for example `brew tap agentcarousel/tap`), install with `brew install agentcarousel`. The formula installs `agentcarousel` and the `agc` shortcut.
+#### Homebrew
+
+```bash
+brew tap agentcarousel/agentcarousel
+brew install agentcarousel
+```
+
+#### Cargo
+
+```bash
+cargo install agentcarousel
+```
 
 Notes:
 
@@ -182,7 +193,3 @@ Binaries provided by this package:
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
 
 For fixture contributions, we prefer opening an issue before implementation.
-
-## Releases and crates.io
-
-- Rust crate: [crates.io/crates/agentcarousel](https://crates.io/crates/agentcarousel)
