@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2 - May 2026
+
+- Human-readable `eval` / `test` terminal output: carousel header (version · skill · case count), offline/mock/live subtitle, padded pass/fail rows with timings, richer failure details and boxed footer (results, effectiveness, certificate, run id and `report show` hint). Run records optionally carry skill label and runner flags for consistent reporting.
+
 ## 0.4.1 - May 2026
 
 - Align crate version with CLI `--version`, run metadata (`agentcarousel_version`), and packaging metadata for patch release.
