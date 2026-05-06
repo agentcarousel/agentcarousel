@@ -150,6 +150,16 @@ pub struct Run {
     pub carousel_iteration: Option<u32>,
     pub certification_context: Option<CertificationContext>,
     pub policy_version: Option<String>,
+    /// Skill/agent id from fixture(s); drives human-readable terminal banner.
+    #[serde(default)]
+    pub skill_or_agent: Option<String>,
+    /// Runner flags echoed in the terminal subtitle (offline / mock-strict / mock vs live).
+    #[serde(default)]
+    pub runner_offline: bool,
+    #[serde(default)]
+    pub runner_mock_strict: bool,
+    #[serde(default)]
+    pub runner_mock_only: bool,
 }
 
 /// Outcome for a single [`Case`]: status, optional error string, [`ExecutionTrace`], [`Metrics`],

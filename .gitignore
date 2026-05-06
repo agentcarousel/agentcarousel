@@ -13,6 +13,15 @@ fixtures/intake/
 reports/carousel-runs/
 reports/*.md
 
+# --- Demo / session artifacts (not crate or CLI source) ---
+*.cast
+fixtures/support/
+mocks/support/
+demo-p;lan.md
+scripts/record-demo.sh
+scripts/agentcarousel-demo.toml
+mkdocs.docs.yml
+
 # --- Local run output (never commit) ---
 agentcarousel-evidence-*/
 reports/

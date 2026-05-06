@@ -71,6 +71,10 @@ fn minimal_run(id: &str, started_at: chrono::DateTime<Utc>) -> Run {
         carousel_iteration: None,
         certification_context: None,
         policy_version: None,
+        skill_or_agent: Some("example-skill".to_string()),
+        runner_offline: false,
+        runner_mock_strict: false,
+        runner_mock_only: true,
     }
 }
 

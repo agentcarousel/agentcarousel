@@ -58,6 +58,10 @@ fn run_with_latency(id: &str, latency_ms: u64) -> Run {
         carousel_iteration: None,
         certification_context: None,
         policy_version: None,
+        skill_or_agent: Some("example-skill".to_string()),
+        runner_offline: false,
+        runner_mock_strict: false,
+        runner_mock_only: true,
     }
 }
 

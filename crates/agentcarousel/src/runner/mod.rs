@@ -94,6 +94,7 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         .map(|id| agentcarousel_core::RunId(id.clone()))
         .unwrap_or_else(new_run_id);
     let mock_engine = MockEngine::load_dir(&config.mock_dir).unwrap_or_default();
+    let skill_or_agent = skill_display_label(&fixtures);
     let cases = flatten_cases(fixtures);
 
     let results = if config.fail_fast {
@@ -121,6 +122,10 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         carousel_iteration: None,
         certification_context: None,
         policy_version: None,
+        skill_or_agent,
+        runner_offline: config.offline,
+        runner_mock_strict: config.mock_strict,
+        runner_mock_only: config.generation_mode == GenerationMode::MockOnly,
     }
 }
 
@@ -136,6 +141,7 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         .map(|id| agentcarousel_core::RunId(id.clone()))
         .unwrap_or_else(new_run_id);
     let mock_engine = MockEngine::load_dir(&config.runner.mock_dir).unwrap_or_default();
+    let skill_or_agent = skill_display_label(&fixtures);
     let cases = flatten_cases(fixtures);
     let judge_cache = Arc::new(Mutex::new(HashMap::new()));
 
@@ -159,6 +165,21 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         carousel_iteration: config.carousel_iteration,
         certification_context: config.certification_context,
         policy_version: config.policy_version,
+        skill_or_agent,
+        runner_offline: config.runner.offline,
+        runner_mock_strict: config.runner.mock_strict,
+        runner_mock_only: config.runner.generation_mode == GenerationMode::MockOnly,
+    }
+}
+
+fn skill_display_label(fixtures: &[FixtureFile]) -> Option<String> {
+    let mut names: Vec<String> = fixtures.iter().map(|f| f.skill_or_agent.clone()).collect();
+    names.sort();
+    names.dedup();
+    match names.len() {
+        0 => None,
+        1 => Some(names[0].clone()),
+        _ => Some(names.join(", ")),
     }
 }
 
