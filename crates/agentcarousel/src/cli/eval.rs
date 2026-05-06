@@ -225,22 +225,12 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
     let show_progress = !args.no_progress
         && !globals.quiet
         && (args.progress || ((format != "json" && format != "junit") && stderr().is_terminal()));
-    if !globals.quiet && format != "json" && format != "junit" {
-        if args.judge && !judge_enabled {
-            eprintln!(
-                "{} --judge is set but the judge evaluator is not active (--evaluator is {:?}). \
+    if !globals.quiet && format != "json" && format != "junit" && args.judge && !judge_enabled {
+        eprintln!(
+            "{} --judge is set but the judge evaluator is not active (--evaluator is {:?}). \
 For fixtures like cmmc-assessor that set judge per case, use --evaluator all (and keep --judge).",
-                style("hint:").yellow().bold(),
-                args.evaluator
-            );
-        }
-        print_preflight(
-            &generation_mode,
-            &generator_model,
-            judge_enabled,
-            &judge_model,
-            args.runs,
-            concurrency,
+            style("hint:").yellow().bold(),
+            args.evaluator
         );
     }
     let runner = RunnerConfig {
@@ -314,9 +304,13 @@ For fixtures like cmmc-assessor that set judge per case, use --evaluator all (an
     if !globals.quiet && format_str != "json" && format_str != "junit" {
         print_postflight_hints(&run);
     }
-    // Keep machine-readable stdout clean for json/junit; still emit run id + next step.
-    let hint_to_stderr = globals.quiet || format_str == "json" || format_str == "junit";
-    print_eval_saved_run_hint(&run, hint_to_stderr);
+    // Full human terminal output already includes run id + next step in the footer.
+    if globals.quiet || format_str == "json" || format_str == "junit" {
+        print_eval_saved_run_hint(
+            &run,
+            globals.quiet || format_str == "json" || format_str == "junit",
+        );
+    }
 
     if has_eval_failures(&run, config.eval.effectiveness_threshold) {
         ExitCode::Failed.as_i32()
@@ -336,35 +330,6 @@ fn has_eval_failures(run: &agentcarousel_core::Run, threshold: f32) -> bool {
             .map(|scores| scores.effectiveness_score < threshold)
             .unwrap_or(true)
     })
-}
-
-fn print_preflight(
-    mode: &GenerationMode,
-    generator_model: &str,
-    judge_enabled: bool,
-    judge_model: &str,
-    runs: u32,
-    concurrency: usize,
-) {
-    println!("{} {}", style("Agentcarousel").bold(), style("eval").cyan());
-    println!(
-        "  mode: {}  runs: {}  concurrency: {}",
-        style(format!("{mode:?}")).yellow(),
-        runs,
-        concurrency
-    );
-    println!("  generator: {}", style(generator_model).green());
-    if judge_enabled {
-        println!("  judge: {}", style(judge_model).green());
-    } else {
-        println!("  judge: {}", style("disabled").yellow());
-    }
-    if matches!(mode, GenerationMode::MockOnly) {
-        println!(
-            "  {} try --execution-mode live --model gemini-1.5-pro or openrouter/free",
-            style("tip:").yellow(),
-        );
-    }
 }
 
 fn cli_invocation_name() -> String {
