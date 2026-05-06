@@ -76,6 +76,10 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
         carousel_iteration: None,
         certification_context: None,
         policy_version: None,
+        skill_or_agent: Some("example-skill".to_string()),
+        runner_offline: false,
+        runner_mock_strict: false,
+        runner_mock_only: true,
     }
 }
 
