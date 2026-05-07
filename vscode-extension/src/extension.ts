@@ -40,6 +40,20 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.showErrorMessage(`AgentCarousel: could not open ${filePath}: ${String(err)}`);
       }
     }),
+
+    vscode.commands.registerCommand('agentcarousel.configureGlob', async () => {
+      const current = vscode.workspace.getConfiguration('agentcarousel').get<string>('fixtureGlob') ?? 'fixtures/skills/**/*.yaml';
+      const value = await vscode.window.showInputBox({
+        title: 'AgentCarousel: Fixture Glob Pattern',
+        prompt: 'Glob pattern for YAML fixture files (relative to workspace root)',
+        value: current,
+        placeHolder: 'fixtures/skills/**/*.yaml',
+      });
+      if (value !== undefined) {
+        await vscode.workspace.getConfiguration('agentcarousel').update('fixtureGlob', value, vscode.ConfigurationTarget.Workspace);
+        provider.refresh();
+      }
+    }),
   );
 }
 
