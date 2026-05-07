@@ -1,5 +1,10 @@
-use agentcarousel_core::{CaseResult, CaseStatus, Run};
+use agentcarousel_core::{CaseResult, CaseStatus, EvalScores, RubricScore, Run};
 use console::style;
+use serde_json::Value;
+
+const HUMAN_ERROR_MAX: usize = 280;
+const JUDGE_SUMMARY_MAX: usize = 160;
+const RUBRIC_SNIPPET_MAX: usize = 100;
 
 /// Human-oriented case id: segment after the last `/`, or the full id.
 fn case_label(case_id: &str) -> &str {
@@ -63,6 +68,200 @@ fn cli_binary_name() -> String {
         .unwrap_or_else(|| "agentcarousel".to_string())
 }
 
+/// Collapse whitespace and cap length with an ellipsis (character-aware).
+fn truncate_human(s: &str, max_chars: usize) -> String {
+    let collapsed: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    format!(
+        "{}…",
+        trimmed
+            .chars()
+            .take(max_chars.saturating_sub(1))
+            .collect::<String>()
+    )
+}
+
+/// Pull a human-readable message from provider-style JSON (e.g. Gemini `error.message`).
+fn extract_json_message(v: &Value) -> Option<String> {
+    if let Some(err) = v.get("error") {
+        if let Some(m) = err.get("message").and_then(|x| x.as_str()) {
+            return Some(m.to_string());
+        }
+    }
+    if let Some(m) = v.get("message").and_then(|x| x.as_str()) {
+        return Some(m.to_string());
+    }
+    None
+}
+
+/// Shorten API / provider errors for the terminal: prefer nested JSON `message`, else trim + cap.
+fn humanize_error_line(err: &str) -> String {
+    let trimmed = err.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+        if let Some(msg) = extract_json_message(&v) {
+            return truncate_human(&msg, HUMAN_ERROR_MAX);
+        }
+    }
+
+    if let Some(start) = trimmed.find('{') {
+        let tail = trimmed[start..].trim();
+        if let Ok(v) = serde_json::from_str::<Value>(tail) {
+            if let Some(msg) = extract_json_message(&v) {
+                let prefix = trimmed[..start].trim();
+                let core = truncate_human(&msg, HUMAN_ERROR_MAX);
+                if prefix.is_empty() {
+                    return core;
+                }
+                return truncate_human(&format!("{prefix} {core}"), HUMAN_ERROR_MAX);
+            }
+        }
+    }
+
+    truncate_human(trimmed, HUMAN_ERROR_MAX)
+}
+
+fn print_eval_failure_rationale(scores: &EvalScores) {
+    match scores.evaluator.as_str() {
+        "judge" => print_judge_failure_summary(scores),
+        "rules" => {
+            for rs in &scores.rubric_scores {
+                if rs.rubric_id == "rules" {
+                    if let Some(rat) = rs.rationale.as_ref() {
+                        println!(
+                            "             › rules: {}",
+                            style(truncate_human(rat, HUMAN_ERROR_MAX)).dim()
+                        );
+                    }
+                    break;
+                }
+            }
+        }
+        "golden" | "process" => {
+            let mut failing: Vec<&RubricScore> = scores
+                .rubric_scores
+                .iter()
+                .filter(|r| r.score < 1.0 - f32::EPSILON)
+                .collect();
+            failing.sort_by(|a, b| {
+                a.score
+                    .partial_cmp(&b.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            for rs in failing.iter().take(3) {
+                let snippet = rs
+                    .rationale
+                    .as_deref()
+                    .map(|s| truncate_human(s, RUBRIC_SNIPPET_MAX))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "no rationale".to_string());
+                println!(
+                    "             › {} · {} ({:.2}): {}",
+                    scores.evaluator,
+                    rs.rubric_id,
+                    rs.score,
+                    style(snippet).dim()
+                );
+            }
+            if failing.is_empty() && !scores.passed {
+                println!(
+                    "             › {}: {}",
+                    scores.evaluator,
+                    style("below effectiveness threshold or aggregate failure").dim()
+                );
+            }
+        }
+        other => {
+            let mut low: Vec<&RubricScore> = scores
+                .rubric_scores
+                .iter()
+                .filter(|r| r.score < 1.0 - f32::EPSILON)
+                .collect();
+            low.sort_by(|a, b| {
+                a.score
+                    .partial_cmp(&b.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            for rs in low.iter().take(2) {
+                let snippet = rs
+                    .rationale
+                    .as_deref()
+                    .map(|s| truncate_human(s, RUBRIC_SNIPPET_MAX))
+                    .unwrap_or_default();
+                if snippet.is_empty() {
+                    continue;
+                }
+                println!(
+                    "             › {} · {} ({:.2}): {}",
+                    other,
+                    rs.rubric_id,
+                    rs.score,
+                    style(snippet).dim()
+                );
+            }
+        }
+    }
+}
+
+/// Overall judge narrative for the terminal, omitting empty / placeholder text.
+fn judge_overall_summary_line(judge_rationale: Option<&str>) -> Option<String> {
+    let jr = judge_rationale?.trim();
+    if jr.is_empty() {
+        return None;
+    }
+    let t = truncate_human(jr, JUDGE_SUMMARY_MAX);
+    if t.is_empty() || t == "judge completed without rationale" {
+        None
+    } else {
+        Some(t)
+    }
+}
+
+fn print_judge_failure_summary(scores: &EvalScores) {
+    if let Some(line) = judge_overall_summary_line(scores.judge_rationale.as_deref()) {
+        println!("             › judge: {}", style(line).dim());
+    }
+
+    let mut low: Vec<&RubricScore> = scores
+        .rubric_scores
+        .iter()
+        .filter(|r| r.score < 1.0 - f32::EPSILON)
+        .collect();
+    low.sort_by(|a, b| {
+        a.score
+            .partial_cmp(&b.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for rs in low.iter().take(2) {
+        let snippet = rs
+            .rationale
+            .as_deref()
+            .map(|s| truncate_human(s, RUBRIC_SNIPPET_MAX))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "no rationale".to_string());
+        println!(
+            "             › judge · {} ({:.2}): {}",
+            rs.rubric_id,
+            rs.score,
+            style(snippet).dim()
+        );
+    }
+
+    if low.is_empty() && !scores.passed {
+        println!(
+            "             › judge: {}",
+            style("scores did not meet pass threshold").dim()
+        );
+    }
+}
+
 fn print_case_failure_details(case: &CaseResult) {
     if let Some(out) = case.trace.final_output.as_ref() {
         if !out.is_empty() && matches!(case.status, CaseStatus::Failed | CaseStatus::Error) {
@@ -75,32 +274,25 @@ fn print_case_failure_details(case: &CaseResult) {
             println!("               agent replied: \"{}\"", style(esc).dim());
         }
     }
+
     if let Some(scores) = case.eval_scores.as_ref() {
-        for rs in &scores.rubric_scores {
-            if rs.rubric_id == "rules" {
-                if let Some(rat) = rs.rationale.as_ref() {
-                    println!("             › rules: {}", style(rat).dim());
-                }
-                break;
-            }
+        let show_eval = matches!(case.status, CaseStatus::Failed)
+            || (matches!(
+                case.status,
+                CaseStatus::Error | CaseStatus::TimedOut
+            ) && !scores.passed);
+        if show_eval {
+            print_eval_failure_rationale(scores);
         }
     }
+
     if let Some(err) = case.error.as_ref() {
         if !err.is_empty() {
-            if err.contains(';') && err.len() > 60 {
-                for part in err.split(';').map(str::trim).filter(|p| !p.is_empty()) {
-                    println!("             › {}", style(part).dim());
-                }
-            } else {
-                println!("             › {}", style(err).dim());
+            let human = humanize_error_line(err);
+            if !human.is_empty() {
+                println!("             › {}", style(human).dim());
             }
         }
-    }
-    if matches!(case.status, CaseStatus::Failed) {
-        println!(
-            "             {}",
-            style("› Agent quarantined. Certificate NOT issued.").dim()
-        );
     }
 }
 
@@ -198,7 +390,7 @@ pub fn print_terminal(run: &Run) {
     if failed > 0 {
         let fw = if failed == 1 { "failure" } else { "failures" };
         println!(
-            "  Results   {} / {} passed   {} {} (quarantined)",
+            "  Results   {} / {} passed   {} {}",
             passed, total, failed, fw
         );
     } else {
@@ -218,7 +410,7 @@ pub fn print_terminal(run: &Run) {
     } else {
         println!(
             "  {}",
-            style("Certificate: NOT ISSUED — address failing cases first").red()
+            style("Certificate: NOT ISSUED — agent quarantined until all cases pass cleanly").red()
         );
     }
 
@@ -273,5 +465,55 @@ fn format_provider_errors(errors: &agentcarousel_core::ProviderErrorMetrics) -> 
         None
     } else {
         Some(format!("provider errors: {}", parts.join(", ")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn humanize_extracts_gemini_error_message() {
+        let raw = r#"live generation failed: gemini generation failed (400 Bad Request): {
+  "error": {
+    "code": 400,
+    "message": "API key not valid. Please pass a valid API key.",
+    "status": "INVALID_ARGUMENT"
+  }
+}"#;
+        let h = humanize_error_line(raw);
+        assert!(h.contains("API key not valid"));
+        assert!(!h.contains("\"error\""));
+    }
+
+    #[test]
+    fn humanize_pure_json_error_object() {
+        let raw = r#"{"error":{"message":"Rate limited"}}"#;
+        assert_eq!(humanize_error_line(raw), "Rate limited");
+    }
+
+    #[test]
+    fn humanize_fallback_truncates_long_plain_text() {
+        let raw = "x".repeat(400);
+        let h = humanize_error_line(&raw);
+        assert!(h.ends_with('…'));
+        assert!(h.chars().count() <= HUMAN_ERROR_MAX + 1);
+    }
+
+    #[test]
+    fn truncate_human_collapses_whitespace() {
+        assert_eq!(truncate_human("  hello   world  ", 100), "hello world");
+    }
+
+    #[test]
+    fn judge_overall_summary_omits_placeholder() {
+        assert_eq!(
+            judge_overall_summary_line(Some("judge completed without rationale")),
+            None
+        );
+        assert_eq!(
+            judge_overall_summary_line(Some("Missing registry URL in stub.")),
+            Some("Missing registry URL in stub.".to_string())
+        );
     }
 }
