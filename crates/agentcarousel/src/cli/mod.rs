@@ -61,7 +61,7 @@ enum Command {
     Test(test::TestArgs),
     /// Run evaluation (mock or live; use `--judge` when the fixture needs it). Example: agentcarousel eval fixtures/skills/foo.yaml --execution-mode mock --runs 3.
     Eval(eval::EvalArgs),
-    /// Inspect persisted runs (list / show / diff). Example: agentcarousel report list && agentcarousel report show RUN_ID.
+    /// Inspect persisted runs (list / show / diff). Example: agentcarousel report list && agentcarousel report show RUN_ID (or a path to run.json / evidence dir).
     Report(report::ReportArgs),
     /// Create `fixtures/{name}.yaml` from a template. Example: agentcarousel init --skill my-new-skill.
     Init(InitArgs),

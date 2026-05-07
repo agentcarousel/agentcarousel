@@ -1,7 +1,10 @@
 use agentcarousel_reporters::{
     diff_runs, fetch_run, list_runs, print_diff, print_json, print_terminal, RunListing,
 };
+use agentcarousel_core::Run;
 use clap::{Parser, Subcommand};
+use std::fs;
+use std::path::Path;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
@@ -22,7 +25,8 @@ enum ReportCommand {
         #[arg(short = 'j', long)]
         json: bool,
     },
-    /// One run (terminal or --json).
+    /// One run (human-readable terminal, same formatting as eval/test, or `--json`).
+    /// Pass a run id from `report list`, or a path to `run.json` / a directory that contains it (e.g. an evidence folder).
     Show {
         run_id: String,
         #[arg(short = 'j', long)]
@@ -61,8 +65,30 @@ fn report_list(limit: usize, json: bool) -> i32 {
     }
 }
 
+/// Load a run from the history database, or from `run.json` (file path or parent directory).
+fn load_run_for_show(run_ref: &str) -> Result<Run, String> {
+    let path = Path::new(run_ref);
+    if path.exists() {
+        let json_path = if path.is_dir() {
+            path.join("run.json")
+        } else {
+            path.to_path_buf()
+        };
+        if !json_path.is_file() {
+            return Err(format!(
+                "expected {} to be a run.json file or a directory containing run.json",
+                run_ref
+            ));
+        }
+        let raw = fs::read_to_string(&json_path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&raw).map_err(|e| format!("{}: {e}", json_path.display()))
+    } else {
+        fetch_run(run_ref).map_err(|e| e.to_string())
+    }
+}
+
 fn report_show(run_id: &str, json: bool) -> i32 {
-    match fetch_run(run_id) {
+    match load_run_for_show(run_id) {
         Ok(run) => {
             if json {
                 print_json(&run);
