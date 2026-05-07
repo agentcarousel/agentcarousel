@@ -16,6 +16,10 @@
 
 It helps you prove an AI agent behaves acceptably before you deploy it.
 
+## Demo
+
+<img width="692" height="414" alt="demo" src="https://github.com/user-attachments/assets/c55df92c-fa4a-44b6-a381-23fe0329a5c4" />
+
 ## Contents
 
 - [AgentCarousel - Testing \& Evaluation Framework for AI Agents, Skills and LLMs](#agentcarousel---testing--evaluation-framework-for-ai-agents-skills-and-llms)
