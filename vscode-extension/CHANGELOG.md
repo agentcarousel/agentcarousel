@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.0] — 2026-05-07
+
+### Changed
+- Extension icon updated to the official AgentCarousel logo (128×128 PNG)
+
 ## [0.1.0] — 2026-05-06
 
 Initial release.
