@@ -25,9 +25,17 @@
     "cmmc",
     "yaml"
   ],
-  "categories": ["Testing", "Visualization", "Other"],
-  "engines": { "vscode": "^1.85.0" },
-  "activationEvents": ["workspaceContains:fixtures/**/*.yaml"],
+  "categories": [
+    "Testing",
+    "Visualization",
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [
+    "workspaceContains:fixtures/**/*.yaml"
+  ],
   "main": "./out/extension.js",
   "galleryBanner": {
     "color": "#0d1117",
@@ -114,6 +122,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
+    "@vscode/vsce": "^3.9.1",
     "js-yaml": "^4.1.0"
   }
 }
