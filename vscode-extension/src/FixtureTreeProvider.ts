@@ -19,6 +19,15 @@ export class FixtureTreeItem extends vscode.TreeItem {
   }
 }
 
+// ── Certification track icons ─────────────────────────────────────────────────
+// Ordered: trusted (highest) → none (no track)
+const TRACK_ICONS: Record<string, string> = {
+  trusted:   'verified-filled', // solid verified badge — production-certified
+  stable:    'verified',        // outline verified — validated
+  candidate: 'clock',           // pending / in evaluation
+  none:      'list-flat',       // no certification track
+};
+
 // ── Evaluator metadata ───────────────────────────────────────────────────────
 
 const EVALUATOR_ICONS: Record<EvaluatorKind, string> = {
@@ -101,7 +110,7 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
       `- Cases: ${f.cases.length}\n\n` +
       `*${f.filePath}*`,
     );
-    item.iconPath = new vscode.ThemeIcon('list-flat');
+    item.iconPath = new vscode.ThemeIcon(TRACK_ICONS[f.certification_track ?? 'none']);
     item.contextValue = 'file';
     item.command = {
       command: 'agentcarousel.openInEditor',
