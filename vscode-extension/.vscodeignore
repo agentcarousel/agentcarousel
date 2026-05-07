@@ -2,7 +2,10 @@
 .vscode-test/**
 src/**
 .gitignore
+.vscodeignore
 **/tsconfig.json
 **/*.map
 **/*.ts
+package-lock.json
 node_modules/.cache
+media/icon-source.png
