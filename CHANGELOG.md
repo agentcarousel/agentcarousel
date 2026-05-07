@@ -4,6 +4,7 @@
 
 - Terminal output for `eval` / `test` / `report show`: single certificate/quarantine line in the footer (no per-case quarantine); evaluator-aware failure details (judge overall rationale plus lowest rubric rows; golden/process rubric lines); humanized provider/API errors from embedded JSON.
 - `report show` inherits the same terminal formatting via shared `print_terminal`.
+- `report show <PATH>` accepts a path to `run.json` or an evidence directory containing `run.json`, so exported packs render with the same human-readable terminal output as history lookups.
 
 ## 0.4.2 - May 2026
 
