@@ -53,7 +53,7 @@ enum EvalExecutionMode {
     Live,
 }
 
-/// Run evaluation (mock or live; add --judge when fixtures use judge evaluators).
+/// Run evaluation (mock or live). For LLM judge scoring, use `--judge` (and API keys) when the run includes judge evaluators.
 #[derive(Debug, Parser)]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -63,14 +63,15 @@ pub struct EvalArgs {
     runs: u32,
     #[arg(short = 's', long, default_value_t = 0)]
     seed: u64,
-    /// Which evaluator runs: `rules`, `golden`, `process`, `judge`, or `all` (use each case's evaluator from the fixture).
+    /// `rules` | `golden` | `process` | `judge` | `all` (default `rules` uses config; `all` uses each case’s `evaluator_config` in YAML).
     ///
-    /// Mixed fixtures (e.g. rules + golden + judge per case) require `all` for `--judge` to take effect.
+    /// - **`judge`** — every run case is scored with the judge (ignores per-case evaluator choice).
+    /// - **`all`** — each case uses its fixture’s evaluator; **only `judge` cases call the judge API** (use with `--judge` and keys). Required for mixed rules/golden/judge fixtures.
     #[arg(short = 'e', long, default_value = "rules")]
     evaluator: String,
-    /// Call the LLM judge API for cases that use the judge evaluator (needs API keys; see error text if missing).
+    /// Enable the LLM judge for judge-scored cases (requires API keys; errors list env vars if missing).
     ///
-    /// No effect unless the active evaluator can select judge — typically `--evaluator all` or `--evaluator judge`.
+    /// Useless unless the active mode can select judge: **`--evaluator judge`** (all cases judged) or **`--evaluator all`** (only cases with `evaluator: judge` in YAML).
     #[arg(short = 'j', long)]
     judge: bool,
     #[arg(short = 'J', long)]
@@ -87,9 +88,10 @@ pub struct EvalArgs {
     timeout: Option<u64>,
     #[arg(short = 'f', long)]
     format: Option<String>,
+    /// Glob matched against full case ids (`skill/case-id`). Example: `my-skill/judge-*` to run only judge-named cases; combine with `--evaluator all --judge`.
     #[arg(short = 'F', long)]
     filter: Option<String>,
-    /// Comma-separated case tags to include (e.g. certification, smoke).
+    /// Comma-separated tags; keep only cases having any listed tag. Tag judge-only rows (e.g. `judge`) and pass `--filter-tags judge` to skip rules/golden cases.
     #[arg(long = "filter-tags", value_name = "TAG", value_delimiter = ',')]
     filter_tags: Option<Vec<String>>,
     #[arg(short = 'C', long)]

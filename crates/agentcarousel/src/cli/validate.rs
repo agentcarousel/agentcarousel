@@ -1,5 +1,6 @@
 use agentcarousel_fixtures::{load_fixture_value, validate_fixture_value, SchemaLocation};
 use clap::Parser;
+use console::style;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -24,7 +25,7 @@ pub struct ValidateArgs {
     /// Fail on warnings too (also if validate.strict in config).
     #[arg(short = 'x', long)]
     strict: bool,
-    /// human | json (default from config).
+    /// `human` or `json` (default from config). Human uses the same carousel-style banner and summary as eval/test.
     #[arg(short = 'f', long)]
     format: Option<String>,
 }
@@ -355,9 +356,9 @@ fn ensure_safe_relative(label: &str, value: &str) -> Result<(), String> {
 }
 
 fn output_reports(format: &str, reports: &[ValidationReport], atf_summary: &AtfSummary) {
-    let messages = collect_messages(reports);
     match format {
         "json" => {
+            let messages = collect_messages(reports);
             let body = ValidateJsonBody {
                 messages,
                 atf_summary,
@@ -366,16 +367,135 @@ fn output_reports(format: &str, reports: &[ValidationReport], atf_summary: &AtfS
                 serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{\"messages\":[]}".into());
             println!("{payload}");
         }
-        _ => print_human_validation_lines(&messages),
+        _ => print_validate_terminal(reports, atf_summary),
     }
 }
 
-fn print_human_validation_lines(messages: &[OutputMessage]) {
-    for message in messages {
+/// Carousel-style terminal output aligned with eval/test (`print_terminal`).
+fn print_validate_terminal(reports: &[ValidationReport], atf_summary: &AtfSummary) {
+    let n = reports.len();
+    let plural = if n == 1 { "fixture" } else { "fixtures" };
+    println!(
+        "🎠 AgentCarousel v{} · validate · {} {}",
+        env!("CARGO_PKG_VERSION"),
+        n,
+        plural
+    );
+    println!();
+    println!(
+        "{}",
+        style("Checking JSON Schema, kebab-case ids, case id prefixes, and safe paths").dim()
+    );
+    println!();
+
+    let mut total_errors = 0usize;
+    let mut total_warnings = 0usize;
+
+    for report in reports {
+        total_errors += report.errors.len();
+        total_warnings += report.warnings.len();
+
+        let path_label = report.path.as_str();
+        if report.errors.is_empty() && report.warnings.is_empty() {
+            println!("    ✅  PASS  {}", style(path_label).green());
+            continue;
+        }
+
+        if !report.errors.is_empty() {
+            println!("    ❌  FAIL  {}", style(path_label).red());
+            for err in &report.errors {
+                println!("             › {}", style(err.as_str()).dim());
+            }
+        } else {
+            println!(
+                "    {}  WARN  {}",
+                style("⚠").yellow(),
+                style(path_label).yellow()
+            );
+        }
+
+        for warn in &report.warnings {
+            println!(
+                "             › {} {}",
+                style("warn").yellow(),
+                style(warn.as_str()).dim()
+            );
+        }
+    }
+
+    println!();
+    println!("  ──────────────────────────────────────────────────────");
+    let err_word = if total_errors == 1 { "error" } else { "errors" };
+    let warn_word = if total_warnings == 1 {
+        "warning"
+    } else {
+        "warnings"
+    };
+    println!(
+        "  Results   {} {} · {} {}",
+        total_errors, err_word, total_warnings, warn_word
+    );
+
+    print_validate_atf_footer(atf_summary);
+
+    if total_errors == 0 {
+        if total_warnings == 0 {
+            println!(
+                "  {}",
+                style("Validation: OK — fixtures pass checks").green()
+            );
+        } else {
+            println!(
+                "  {}",
+                style("Validation: passed with warnings (use --strict to fail)").yellow()
+            );
+        }
+    } else {
+        println!("  {}", style("Validation: failed — fix errors above").red());
+    }
+    println!("  ──────────────────────────────────────────────────────");
+}
+
+fn print_validate_atf_footer(s: &AtfSummary) {
+    if s.fixture_files_loaded == 0 {
+        return;
+    }
+    println!(
+        "  Coverage  {} file(s) · {} case(s) · {} with smoke/negative tag",
+        s.fixture_files_loaded, s.total_cases, s.cases_with_negative_tag
+    );
+    if s.fixtures_declaring_bundle_id > 0 {
         println!(
-            "{}:{}:{}: [{}] {}",
-            message.file, message.line, message.col, message.level, message.message
+            "            {} fixture(s) declare bundle_id",
+            s.fixtures_declaring_bundle_id
         );
+    }
+    let mut tier_parts: Vec<String> = s
+        .risk_tier
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    if !tier_parts.is_empty() {
+        tier_parts.sort();
+        println!("            Risk tier: {}", tier_parts.join(", "));
+    }
+    let mut dh_parts: Vec<String> = s
+        .data_handling
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    if !dh_parts.is_empty() {
+        dh_parts.sort();
+        println!("            Data handling: {}", dh_parts.join(", "));
+    }
+    let mut ct_parts: Vec<String> = s
+        .certification_track
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    if !ct_parts.is_empty() {
+        ct_parts.sort();
+        println!("            Certification track: {}", ct_parts.join(", "));
     }
 }
 

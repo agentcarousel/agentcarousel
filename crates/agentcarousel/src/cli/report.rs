@@ -1,7 +1,7 @@
+use agentcarousel_core::Run;
 use agentcarousel_reporters::{
     diff_runs, fetch_run, list_runs, print_diff, print_json, print_terminal, RunListing,
 };
-use agentcarousel_core::Run;
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::Path;

@@ -277,10 +277,7 @@ fn print_case_failure_details(case: &CaseResult) {
 
     if let Some(scores) = case.eval_scores.as_ref() {
         let show_eval = matches!(case.status, CaseStatus::Failed)
-            || (matches!(
-                case.status,
-                CaseStatus::Error | CaseStatus::TimedOut
-            ) && !scores.passed);
+            || (matches!(case.status, CaseStatus::Error | CaseStatus::TimedOut) && !scores.passed);
         if show_eval {
             print_eval_failure_rationale(scores);
         }
