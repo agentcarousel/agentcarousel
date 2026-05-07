@@ -52,18 +52,6 @@
           "when": "view == agentcarousel-fixtures",
           "group": "navigation"
         }
-      ],
-      "view/item/context": [
-        {
-          "command": "agentcarousel.showCaseDetail",
-          "when": "view == agentcarousel-fixtures && viewItem == case",
-          "group": "inline"
-        },
-        {
-          "command": "agentcarousel.openInEditor",
-          "when": "view == agentcarousel-fixtures",
-          "group": "inline"
-        }
       ]
     },
     "configuration": {

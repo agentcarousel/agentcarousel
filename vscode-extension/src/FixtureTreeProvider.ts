@@ -159,7 +159,7 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
     inputItem.description = preview;
     inputItem.iconPath = new vscode.ThemeIcon('comment');
     inputItem.tooltip = firstUserMsg?.content ?? '';
-    inputItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.lineNumber ?? 0] };
+    inputItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.inputLine ?? c.lineNumber ?? 0] };
     items.push(inputItem);
 
     // Output checks
@@ -173,7 +173,7 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
       const checkItem = new FixtureTreeItem('attribute', `Output checks (${checks.length})`, vscode.TreeItemCollapsibleState.None, f, c);
       checkItem.description = summary;
       checkItem.iconPath = new vscode.ThemeIcon('pass-filled');
-      checkItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.lineNumber ?? 0] };
+      checkItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.outputLine ?? c.lineNumber ?? 0] };
       items.push(checkItem);
     }
 
@@ -184,7 +184,7 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
       const rubricItem = new FixtureTreeItem('attribute', `Rubric (${rubric.length} items)`, vscode.TreeItemCollapsibleState.None, f, c);
       rubricItem.description = `weights sum: ${totalWeight.toFixed(2)}`;
       rubricItem.iconPath = new vscode.ThemeIcon('checklist');
-      rubricItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.lineNumber ?? 0] };
+      rubricItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.rubricLine ?? c.lineNumber ?? 0] };
       items.push(rubricItem);
     }
 
@@ -194,7 +194,7 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
     const evalItem = new FixtureTreeItem('attribute', `Evaluator: ${evaluatorKind}`, vscode.TreeItemCollapsibleState.None, f, c);
     evalItem.description = evalDetail;
     evalItem.iconPath = new vscode.ThemeIcon('beaker');
-    evalItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.lineNumber ?? 0] };
+    evalItem.command = { command: 'agentcarousel.openInEditor', title: 'Open', arguments: [f.filePath, c.evaluatorConfigLine ?? c.lineNumber ?? 0] };
     items.push(evalItem);
 
     return items;
