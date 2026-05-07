@@ -18,15 +18,15 @@ export class CaseDetailPanel {
     this.panel = panel;
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((msg) => {
-      if (msg.command === 'openInEditor') {
-        vscode.commands.executeCommand('agentcarousel.openInEditor', this.fixture.filePath, this.fixtureCase.lineNumber ?? 0);
-      }
       if (msg.command === 'openGoldenFile') {
         const cfg = this.fixtureCase.evaluator_config;
         if (cfg?.evaluator === 'golden') {
           const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(this.fixture.filePath);
           vscode.commands.executeCommand('agentcarousel.openInEditor', path.join(wsRoot, cfg.golden_path), 0);
         }
+      }
+      if (msg.command === 'openRegistry' && msg.url) {
+        vscode.env.openExternal(vscode.Uri.parse(msg.url));
       }
     }, null, this.disposables);
     this.render();
@@ -90,10 +90,19 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
     ? `<span class="tag tag-cert">certification</span>`
     : '';
 
+  // Registry link: extract agent name from bundle_id (e.g. "agentcarousel/cmmc-assessor" → "cmmc-assessor")
+  const agentName = f.bundle_id
+    ? f.bundle_id.includes('/') ? f.bundle_id.slice(f.bundle_id.lastIndexOf('/') + 1) : f.bundle_id
+    : f.skill_or_agent;
+  const registryUrl = f.bundle_version
+    ? `https://agentcarousel.com/agents/${encodeURIComponent(agentName)}/${encodeURIComponent(f.bundle_version)}`
+    : null;
+
   const metaItems = [
     c.seed != null ? `<span class="meta-item">seed <code>${c.seed}</code></span>` : '',
     c.timeout_secs != null ? `<span class="meta-item">timeout <code>${c.timeout_secs}s</code></span>` : '',
     `<span class="meta-item">evaluator <span class="kind-badge kind-${esc(evaluatorKind)}">${esc(evaluatorKind)}</span></span>`,
+    f.bundle_version ? `<span class="meta-item">bundle <code>${esc(f.bundle_id ?? agentName)}@${esc(f.bundle_version)}</code></span>` : '',
   ].filter(Boolean).join('');
 
   const messagesHtml = c.input.messages.map((m) =>
@@ -106,7 +115,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   const checks = c.expected.output ?? [];
   const checksHtml = checks.length > 0
     ? `<section>
-        <h2><span class="section-icon">$(pass)</span>Output Checks <span class="count">${checks.length}</span></h2>
+        <h2>Output Checks <span class="count">${checks.length}</span></h2>
         <table class="checks-table">
           <thead><tr><th>Kind</th><th>Value</th></tr></thead>
           <tbody>
@@ -125,7 +134,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   const totalWeight = rubric.reduce((s, r) => s + (r.weight ?? 0), 0);
   const rubricHtml = rubric.length > 0
     ? `<section>
-        <h2><span class="section-icon">$(checklist)</span>Rubric <span class="count">${rubric.length} items · ${Math.round(totalWeight * 100)}% weight</span></h2>
+        <h2>Rubric <span class="count">${rubric.length} items · ${Math.round(totalWeight * 100)}% weight</span></h2>
         <div class="rubric-grid">
           ${rubric.map((r) => buildRubricCard(r)).join('')}
         </div>
@@ -137,7 +146,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   const toolSequence = c.expected.tool_sequence ?? [];
   const toolHtml = toolSequence.length > 0
     ? `<section>
-        <h2><span class="section-icon">$(tools)</span>Expected Tool Sequence <span class="count">${toolSequence.length} call${toolSequence.length !== 1 ? 's' : ''}</span></h2>
+        <h2>Expected Tool Sequence <span class="count">${toolSequence.length} call${toolSequence.length !== 1 ? 's' : ''}</span></h2>
         <pre class="tool-seq">${esc(JSON.stringify(toolSequence, null, 2))}</pre>
       </section>`
     : '';
@@ -162,7 +171,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   <header>
     <div class="header-row">
       <h1 class="case-id">${esc(c.id)}</h1>
-      <button class="open-btn" onclick="openInEditor()">Open in Editor ↗</button>
+      ${registryUrl ? `<a class="registry-link" href="#" onclick="openRegistry('${esc(registryUrl)}'); return false;">View on Registry ↗</a>` : ''}
     </div>
     ${tags || certTag ? `<div class="tags">${certTag}${tags}</div>` : ''}
     ${c.description ? `<p class="description">${esc(c.description.trim())}</p>` : ''}
@@ -170,7 +179,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   </header>
 
   <section>
-    <h2><span class="section-icon">$(comment)</span>Input (Prompt) <span class="count">${c.input.messages.length} message${c.input.messages.length !== 1 ? 's' : ''}</span></h2>
+    <h2>Input (Prompt) <span class="count">${c.input.messages.length} message${c.input.messages.length !== 1 ? 's' : ''}</span></h2>
     <div class="messages">${messagesHtml}</div>
   </section>
 
@@ -187,8 +196,8 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    function openInEditor() { vscode.postMessage({ command: 'openInEditor' }); }
     function openGoldenFile() { vscode.postMessage({ command: 'openGoldenFile' }); }
+    function openRegistry(url) { vscode.postMessage({ command: 'openRegistry', url }); }
   </script>
 </body>
 </html>`;
@@ -240,7 +249,7 @@ function buildEvaluatorSection(c: FixtureCase, kind: string): string {
     detail = `<div class="eval-row eval-hint">Assertion-based evaluation — no LLM judge or golden file required.</div>`;
   }
   return `<section>
-    <h2><span class="section-icon">$(beaker)</span>Evaluator</h2>
+    <h2>Evaluator</h2>
     <div class="eval-card">
       <div class="eval-kind-row">
         <span class="kind-badge kind-${esc(kind)}">${esc(kind)}</span>
@@ -328,19 +337,15 @@ const CSS = `
     line-height: 1.3;
     word-break: break-all;
   }
-  .open-btn {
+  .registry-link {
     flex-shrink: 0;
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border: none;
-    padding: 5px 14px;
-    border-radius: var(--ac-radius);
-    cursor: pointer;
+    color: var(--vscode-textLink-foreground);
     font-size: 0.85em;
-    font-family: inherit;
     white-space: nowrap;
+    text-decoration: none;
+    opacity: 0.85;
   }
-  .open-btn:hover { background: var(--vscode-button-hoverBackground); }
+  .registry-link:hover { opacity: 1; text-decoration: underline; }
 
   .tags { margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px; }
   .tag {
@@ -376,9 +381,6 @@ const CSS = `
   /* ── Sections ────────────────────────────────────────────────────── */
   section { margin-bottom: 28px; }
   h2 {
-    display: flex;
-    align-items: center;
-    gap: 6px;
     font-size: 0.8em;
     font-weight: 700;
     text-transform: uppercase;
