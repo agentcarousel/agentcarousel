@@ -155,7 +155,7 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
     const preview = firstUserMsg
       ? firstUserMsg.content.trim().slice(0, 72).replace(/\n/g, ' ') + (firstUserMsg.content.length > 72 ? '…' : '')
       : '(no user message)';
-    const inputItem = new FixtureTreeItem('attribute', 'Input', vscode.TreeItemCollapsibleState.None, f, c);
+    const inputItem = new FixtureTreeItem('attribute', 'Input (Prompt)', vscode.TreeItemCollapsibleState.None, f, c);
     inputItem.description = preview;
     inputItem.iconPath = new vscode.ThemeIcon('comment');
     inputItem.tooltip = firstUserMsg?.content ?? '';
