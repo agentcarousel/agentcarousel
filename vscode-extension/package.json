@@ -3,7 +3,7 @@
   "displayName": "AgentCarousel Fixtures",
   "description": "Quality Assurance and Trust for Autonomous AI — navigate, inspect, and understand your AgentCarousel fixture files with a rich, human-readable interface right inside your editor.",
   "version": "0.1.0",
-  "publisher": "neems",
+  "publisher": "agentcarousel",
   "license": "MIT",
   "homepage": "https://agentcarousel.com",
   "repository": {

@@ -55,11 +55,11 @@ pub struct GlobalOptions {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Validate YAML/TOML fixtures (schema + rules; no execution). Example: agentcarousel validate fixtures/skills/foo.yaml. With no paths, scans `.` for fixtures (see `.agentcarousel-ignore`).
+    /// Validate YAML/TOML fixtures (schema + rules; no execution). Human output matches eval/test styling (banner, per-file PASS/WARN/FAIL, footer). With no paths, scans `.` (see `.agentcarousel-ignore`).
     Validate(validate::ValidateArgs),
     /// Run fixtures with mock generation only. Example: agentcarousel test fixtures/skills/foo.yaml --offline true --filter-tags smoke.
     Test(test::TestArgs),
-    /// Run evaluation (mock or live; use `--judge` when the fixture needs it). Example: agentcarousel eval fixtures/skills/foo.yaml --execution-mode mock --runs 3.
+    /// Run evaluation (mock or live). Judge-backed cases: `--evaluator all --judge` for mixed fixtures, or `--evaluator judge` if every case should use the judge; narrow with `--filter` / `--filter-tags`.
     Eval(eval::EvalArgs),
     /// Inspect persisted runs (list / show / diff). Example: agentcarousel report list && agentcarousel report show RUN_ID (or a path to run.json / evidence dir).
     Report(report::ReportArgs),
