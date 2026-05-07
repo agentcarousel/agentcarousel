@@ -38,7 +38,7 @@ export class CaseDetailPanel {
     const panel = vscode.window.createWebviewPanel(
       CaseDetailPanel.viewType,
       fixtureCase.id.includes('/') ? fixtureCase.id.slice(fixtureCase.id.lastIndexOf('/') + 1) : fixtureCase.id,
-      vscode.ViewColumn.Beside,
+      vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true },
     );
     const instance = new CaseDetailPanel(panel, fixtureCase, fixture, context);
