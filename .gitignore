@@ -5,10 +5,16 @@
 .dirac-symbol-index/
 .idea/
 
+# --- AI agent / assistant local state ---
+.claude/
+CLAUDE.md
+AGENTS.md
+
 # --- Internal process / planning (never ship) ---
 authorizing-packages/
 docs/designs/
 docs/launch/
+docs/api/
 fixtures/intake/
 reports/carousel-runs/
 reports/*.md
@@ -34,6 +40,10 @@ release-assets/
 # --- Rust ---
 target/
 **/target/
+*.profraw
+perf.data
+perf.data.old
+flamegraph.svg
 
 # --- Node / JS ---
 node_modules/
@@ -48,10 +58,14 @@ out/
 build/
 coverage/
 .nyc_output/
+.turbo/
+.vercel/
+.vite/
 
 # --- Local MkDocs (optional; keep out of git — use your own mkdocs.yml copy) ---
 site/
 mkdocs.yml
+mkdocs.docs.yml
 
 # --- Python ---
 .venv/
@@ -71,6 +85,7 @@ vendor/
 
 # --- OS/editor ---
 .DS_Store
+**/.DS_Store
 Thumbs.db
 *.swp
 *~

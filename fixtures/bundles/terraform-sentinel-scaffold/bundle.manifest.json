@@ -74,7 +74,7 @@
     "OI-005: Advance to stable after carousel runs"
   ],
   "owners": [
-    "@neems"
+    "@agentcarousel"
   ],
   "policy_version": "msp-policy-2026-04",
   "process_harness": "mocks/deslop-harness/count-blocks.sh",
