@@ -2,8 +2,9 @@
   "name": "agentcarousel-fixture-navigator",
   "displayName": "AgentCarousel Fixtures",
   "description": "Quality Assurance and Trust for Autonomous AI — navigate, inspect, and understand your AgentCarousel fixture files with a rich, human-readable interface right inside your editor.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "agentcarousel",
+  "icon": "media/icon.png",
   "license": "MIT",
   "homepage": "https://agentcarousel.com",
   "repository": {
@@ -25,9 +26,17 @@
     "cmmc",
     "yaml"
   ],
-  "categories": ["Testing", "Visualization", "Other"],
-  "engines": { "vscode": "^1.85.0" },
-  "activationEvents": ["workspaceContains:fixtures/**/*.yaml"],
+  "categories": [
+    "Testing",
+    "Visualization",
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [
+    "workspaceContains:fixtures/**/*.yaml"
+  ],
   "main": "./out/extension.js",
   "galleryBanner": {
     "color": "#0d1117",
@@ -111,6 +120,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.3.0"
   },
   "dependencies": {
