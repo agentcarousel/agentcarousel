@@ -1,0 +1,94 @@
+{
+  "name": "agentcarousel-fixture-navigator",
+  "displayName": "AgentCarousel Fixtures",
+  "description": "Navigate agentcarousel YAML fixture files with a human-readable tree view and case detail panels.",
+  "version": "0.1.0",
+  "publisher": "neems",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": ["workspaceContains:fixtures/**/*.yaml"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentcarousel",
+          "title": "AgentCarousel",
+          "icon": "media/carousel.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentcarousel": [
+        {
+          "id": "agentcarousel-fixtures",
+          "name": "Fixtures",
+          "icon": "media/carousel.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agentcarousel.refreshFixtures",
+        "title": "Refresh Fixtures",
+        "icon": "$(refresh)",
+        "category": "AgentCarousel"
+      },
+      {
+        "command": "agentcarousel.showCaseDetail",
+        "title": "Show Case Detail",
+        "category": "AgentCarousel"
+      },
+      {
+        "command": "agentcarousel.openInEditor",
+        "title": "Open in Editor",
+        "category": "AgentCarousel"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentcarousel.refreshFixtures",
+          "when": "view == agentcarousel-fixtures",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "agentcarousel.showCaseDetail",
+          "when": "view == agentcarousel-fixtures && viewItem == case",
+          "group": "inline"
+        },
+        {
+          "command": "agentcarousel.openInEditor",
+          "when": "view == agentcarousel-fixtures",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AgentCarousel",
+      "properties": {
+        "agentcarousel.fixtureGlob": {
+          "type": "string",
+          "default": "fixtures/skills/**/*.yaml",
+          "description": "Glob pattern for fixture YAML files (relative to workspace root)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
