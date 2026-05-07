@@ -2,13 +2,39 @@ import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import { FixtureFile, FixtureCase } from './types';
 
-function findCaseLineNumbers(raw: string): Map<string, number> {
-  const map = new Map<string, number>();
+interface CaseLines {
+  start: number;
+  input?: number;
+  output?: number;
+  rubric?: number;
+  evaluatorConfig?: number;
+}
+
+function scanCaseLines(raw: string): Map<string, CaseLines> {
+  const map = new Map<string, CaseLines>();
   const lines = raw.split('\n');
+  let currentId: string | null = null;
+
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^\s+-\s+id:\s+["']?(.+?)["']?\s*$/);
-    if (m) map.set(m[1].trim(), i);
+    const line = lines[i];
+
+    // Case start: "  - id: <value>" (2-space indent before dash, at top of cases list)
+    const caseMatch = line.match(/^\s+-\s+id:\s+["']?(.+?)["']?\s*$/);
+    if (caseMatch) {
+      currentId = caseMatch[1].trim();
+      map.set(currentId, { start: i });
+      continue;
+    }
+
+    if (!currentId) continue;
+    const entry = map.get(currentId)!;
+
+    if (/^    input:\s*$/.test(line) && entry.input == null)            { entry.input = i; }
+    else if (/^      output:\s*$/.test(line) && entry.output == null)   { entry.output = i; }
+    else if (/^      rubric:\s*$/.test(line) && entry.rubric == null)   { entry.rubric = i; }
+    else if (/^    evaluator_config:\s*$/.test(line) && entry.evaluatorConfig == null) { entry.evaluatorConfig = i; }
   }
+
   return map;
 }
 
@@ -43,14 +69,16 @@ export function parseFixtureFile(filePath: string): FixtureFile | null {
   if (typeof d['skill_or_agent'] !== 'string') return null;
   if (!Array.isArray(d['cases'])) return null;
 
-  const lineNumbers = findCaseLineNumbers(raw);
+  const caseLineMap = scanCaseLines(raw);
   const defaults = (d['defaults'] as FixtureFile['defaults']) ?? undefined;
 
   const cases: FixtureCase[] = (d['cases'] as unknown[])
     .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
     .map((c) => {
-      const raw: FixtureCase = {
-        id: String(c['id'] ?? ''),
+      const id = String(c['id'] ?? '');
+      const lines = caseLineMap.get(id);
+      const fc: FixtureCase = {
+        id,
         description: c['description'] != null ? String(c['description']) : undefined,
         tags: Array.isArray(c['tags']) ? (c['tags'] as string[]) : undefined,
         timeout_secs: typeof c['timeout_secs'] === 'number' ? c['timeout_secs'] : undefined,
@@ -58,9 +86,13 @@ export function parseFixtureFile(filePath: string): FixtureFile | null {
         input: (c['input'] as FixtureCase['input']) ?? { messages: [] },
         expected: (c['expected'] as FixtureCase['expected']) ?? {},
         evaluator_config: c['evaluator_config'] as FixtureCase['evaluator_config'],
-        lineNumber: lineNumbers.get(String(c['id'] ?? '')),
+        lineNumber:          lines?.start,
+        inputLine:           lines?.input,
+        outputLine:          lines?.output,
+        rubricLine:          lines?.rubric,
+        evaluatorConfigLine: lines?.evaluatorConfig,
       };
-      return mergeDefaults(raw, defaults);
+      return mergeDefaults(fc, defaults);
     });
 
   return {

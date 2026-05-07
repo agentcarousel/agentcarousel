@@ -47,8 +47,12 @@ export interface FixtureCase {
   input: CaseInput;
   expected: CaseExpected;
   evaluator_config?: EvaluatorConfig;
-  /** Line number (0-based) in the source YAML file where this case's `- id:` appears. */
+  /** Line numbers (0-based) for navigating to specific fields in the source YAML. */
   lineNumber?: number;
+  inputLine?: number;
+  outputLine?: number;
+  rubricLine?: number;
+  evaluatorConfigLine?: number;
 }
 
 export interface FixtureFile {
