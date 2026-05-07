@@ -25,9 +25,7 @@ export class CaseDetailPanel {
           vscode.commands.executeCommand('agentcarousel.openInEditor', path.join(wsRoot, cfg.golden_path), 0);
         }
       }
-      if (msg.command === 'openRegistry' && msg.url) {
-        vscode.env.openExternal(vscode.Uri.parse(msg.url));
-      }
+
     }, null, this.disposables);
     this.render();
   }
@@ -171,7 +169,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   <header>
     <div class="header-row">
       <h1 class="case-id">${esc(c.id)}</h1>
-      ${registryUrl ? `<a class="registry-link" href="#" onclick="openRegistry('${esc(registryUrl)}'); return false;">View on Registry ↗</a>` : ''}
+      ${registryUrl ? `<a class="registry-link" href="${registryUrl}">View on Registry ↗</a>` : ''}
     </div>
     ${tags || certTag ? `<div class="tags">${certTag}${tags}</div>` : ''}
     ${c.description ? `<p class="description">${esc(c.description.trim())}</p>` : ''}
@@ -191,13 +189,12 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
   <footer>
     <span class="footer-logo">◎</span>
     <span>AgentCarousel — Quality Assurance and Trust for Autonomous AI</span>
-    <a class="footer-link" href="https://agentcarousel.com" onclick="return false;">agentcarousel.com</a>
+    <a class="footer-link" href="https://agentcarousel.com">agentcarousel.com</a>
   </footer>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     function openGoldenFile() { vscode.postMessage({ command: 'openGoldenFile' }); }
-    function openRegistry(url) { vscode.postMessage({ command: 'openRegistry', url }); }
   </script>
 </body>
 </html>`;
