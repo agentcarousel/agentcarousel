@@ -1,22 +1,48 @@
-# agentcarousel
+# AgentCarousel - Testing & Evaluation Framework for AI Agents, Skills and LLMs
 
-**Testing for AI agents** <sup>Built with Rust</sup>
+[![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
+[![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/agentcarousel/agentcarousel/actions/workflows/ci.yml/badge.svg)](https://github.com/agentcarousel/agentcarousel/actions)
+[![Docs](https://img.shields.io/badge/docs-agentcarousel.com-1f6feb)](https://docs.agentcarousel.com)
 
-`agentcarousel` is a command-line tool for testing AI agents and skills the way you’d use unit tests for code. You define fixtures (YAML) with inputs, expected outputs, and rules; the CLI validates those files, runs repeatable tests (including offline runs with mocks so you don’t need live models), and can record runs, diff them, and export evidence for CI or audit-style workflows. In short: it helps you prove an agent behaves acceptably before you ship it or publish claims about it.
+`agentcarousel` is CLI for testing, evaluating, and certifying AI agents and skills -  like `pytest` for AI behavior. You define tests, or **fixtures**, in YAML and eval agents offline, online (LLM-as-a-judge) and with human experts.
 
-## Why people use this
+<sup>Built in Rust<sup>
 
-- Verify agent quality quickly with schema + rule checks.
-- Run deterministic offline tests in CI.
-- Store run history and compare results over time.
-- Export evidence bundles for audits and share benchmarks.
-- Publish bundles/runs to a registry and verify trust state.
+> AgentCarousel proves an AI agent behaves acceptably **before deployment** and certifies it with evidence bundles.
 
-## Start Here
+**Use it for:** LLM-as-a-judge evals · agent regression testing · prompt testing · compliance artifacts · trusted and verified agent registry
 
-If you just want value fast, do these three commands.
+It helps you prove an AI agent behaves acceptably before you deploy it.
 
-### Install
+## Contents
+
+- [AgentCarousel - Testing \& Evaluation Framework for AI Agents, Skills and LLMs](#agentcarousel---testing--evaluation-framework-for-ai-agents-skills-and-llms)
+  - [Contents](#contents)
+  - [Who AgentCarousel is for](#who-agentcarousel-is-for)
+  - [Install](#install)
+      - [Homebrew](#homebrew)
+      - [Cargo](#cargo)
+    - [Validate fixtures](#validate-fixtures)
+    - [Run offline tests](#run-offline-tests)
+  - [Common Commands](#common-commands)
+  - [Configuration](#configuration)
+    - [Live Eval with LLM-as-a-judge](#live-eval-with-llm-as-a-judge)
+    - [Bundle workflows](#bundle-workflows)
+    - [Publish to registry](#publish-to-registry)
+    - [Trust checks](#trust-checks)
+  - [Build From Source](#build-from-source)
+  - [Contributions](#contributions)
+
+## Who AgentCarousel is for
+
+- **AI/ML engineers** shipping agents to production — catch regressions before users do.
+- **Platform & MLOps teams** running LLM evaluation (in CI) — deterministic, offline, fast.
+- **Security & compliance leads** preparing **CMMC, SOC 2, or AI governance** audits — exportable evidence bundles with content hashes and optional signed attestations.
+- **Skill / agent authors** publishing to the [AgentCarousel Registry](https://agentcarousel.com/registry) — trust-checked bundles end users can verify.
+
+## Install
 
 ```bash
 curl -fsSL http://install.agentcarousel.com | sh
@@ -25,8 +51,7 @@ curl -fsSL http://install.agentcarousel.com | sh
 #### Homebrew
 
 ```bash
-brew tap agentcarousel/agentcarousel
-brew install agentcarousel
+brew tap agentcarousel/agentcarousel && brew install agentcarousel
 ```
 
 #### Cargo
@@ -41,7 +66,7 @@ Notes:
 - On Windows, download the `.zip` release asset from GitHub.
 - The installer offers an `agc` alias for convenience.
 
-### 2) Validate fixtures
+### Validate fixtures
 
 A fixture is a YAML file that defines test cases (and optional mocks) for an agent or skill so the CLI can validate, run offline tests, or evaluate behavior.
 
@@ -51,13 +76,11 @@ agentcarousel validate
 
 With no paths, `validate` scans the current directory for fixture files.
 
-### 3) Run offline tests
+### Run offline tests
 
 ```bash
 agentcarousel test --offline true
 ```
-
-This is the safest default for CI and public fixture repos.
 
 ## Common Commands
 
@@ -83,9 +106,9 @@ agentcarousel report diff <RUN_ID_A> <RUN_ID_B>
 # Scaffold a new fixture
 agentcarousel init --skill my-new-skill
 
-# Export evidence for one run (or newest N runs)
+# Export evidence for one run (or --last N runs)
 agentcarousel export <RUN_ID>
-agentcarousel export --last 5 --out-dir ./evidence
+agentcarousel export --last 1 --out-dir ./evidence
 ```
 
 ## Configuration
@@ -107,18 +130,24 @@ Override history path with:
 export AGENTCAROUSEL_HISTORY_DB=/path/to/history.db
 ```
 
-### Live evaluation with judge models
+### Live Eval with LLM-as-a-judge
 
 Supported providers for live generation and judging include Gemini, OpenAI, Anthropic, and OpenRouter.
 
 ```bash
-export GEMINI_API_KEY=your_key_here
-agentcarousel eval --execution-mode live \
+export GEMINI_API_KEY=gemini_key
+export OPENROUTER_API_KEY=or_key
+export ANTHROPIC_API_KEY=claude_api_key
+export OPENAI_API_KEY=openai_key
+agentcarousel eval --execution-mode live --judge \
   --model gemini-2.5-flash \
-  --judge --judge-model gemini-2.5-flash
+  --judge --judge-model claude-haiku-4-5-20251001 \
+  --evaluator all \
+  --runs 1 \
+  --verbose
 ```
 
-More recipes and troubleshooting: see [`docs/fixture-development-process.md`](docs/fixture-development-process.md) and the [Configuration](#configuration) section above for live eval env vars.
+More recipes and troubleshooting: see [`docs/fixture-development-process.md`](docs/fixture-development-process.md)
 
 ### Bundle workflows
 
@@ -131,37 +160,39 @@ agentcarousel bundle pack fixtures/bundles/my-bundle --out my-bundle.tar.gz
 # Verify bundle integrity and structure
 agentcarousel bundle verify my-bundle.tar.gz
 
-# Pull bundle manifest + artifacts from a registry (API details at agentcarousel.com when published)
-agentcarousel bundle pull cmmc-assessor-1.0.0 --url "$REGISTRY_API_BASE_URL" -o ./pulled/cmmc-assessor
+# Pull bundle manifest + artifacts from the registry
+agentcarousel bundle pull cmmc-assessor-1.0.0 --url "https://api.agentcarousel.com"
 ```
 
 ### Publish to registry
 
 ```bash
 # Publish bundle + evidence in one flow
-agentcarousel publish fixtures/bundles/terraform-sentinel-scaffold \
+agentcarousel publish fixtures/bundles/cmmc-assessor \
   --url "https://api.agentcarousel.com"
 
 # Publish multiple matching local runs (newest first)
-agentcarousel publish fixtures/bundles/terraform-sentinel-scaffold \
+agentcarousel publish fixtures/bundles/cmmc-assessor \
   --url "https://api.agentcarousel.com" \
   --all-runs --limit 5
 ```
 
 ### Trust checks
 
-The [registry](https://agentcarousel.com/agents) has the published assurance state for a bundle (queryable via `trust-check`), optionally backed by a signed attestation (e.g. `minisign`) that you verify.
+The [registry](https://agentcarousel.com/registry) has the published assurance state for a bundle (queryable via `trust-check`), optionally backed by a signed attestation (e.g. `minisign`) that you verify.
+
+> **Roadmap:** Public registry submissions are coming. For now, [open an issue](https://github.com/agentcarousel/agentcarousel/issues/new)
 
 ```bash
 # Registry trust-state check
-agentcarousel trust-check terraform-sentinel-scaffold@1.0.0 \
+agentcarousel trust-check cmmc-assessor@1.0.0 \
   --url "https://api.agentcarousel.com"
 
 # Optional offline attestation verification
-agentcarousel trust-check terraform-sentinel-scaffold@1.0.0 \
+agentcarousel trust-check cmmc-assessor@1.0.0 \
   --url "https://api.agentcarousel.com" \
-  --attestation ./attestation-terraform-sentinel-scaffold-1.0.0.json \
-  --minisign-pubkey ./agentcarousel-minisign.pub
+  --attestation ./attestation-cmmc-assessor-1.0.0.json \
+  --minisign-pubkey ./your-minisign.pub
 ```
 
 ## Build From Source
@@ -186,7 +217,7 @@ Binaries provided by this package:
 - `agentcarousel`
 - `agc`
 
-## OSS and Contributions
+## Contributions
 
 - Start here: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - Security policy: [`SECURITY.md`](SECURITY.md)
