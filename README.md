@@ -3,7 +3,6 @@
 [![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
 [![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![CI](https://github.com/agentcarousel/agentcarousel/actions/workflows/ci.yml/badge.svg)](https://github.com/agentcarousel/agentcarousel/actions)
 [![Docs](https://img.shields.io/badge/docs-agentcarousel.com-1f6feb)](https://docs.agentcarousel.com)
 
 `agentcarousel` is CLI for testing, evaluating, and certifying AI agents and skills -  like `pytest` for AI behavior. You define tests, or **fixtures**, in YAML and eval agents offline, online (LLM-as-a-judge) and with human experts.
