@@ -21,6 +21,13 @@ export class CaseDetailPanel {
       if (msg.command === 'openInEditor') {
         vscode.commands.executeCommand('agentcarousel.openInEditor', this.fixture.filePath, this.fixtureCase.lineNumber ?? 0);
       }
+      if (msg.command === 'openGoldenFile') {
+        const cfg = this.fixtureCase.evaluator_config;
+        if (cfg?.evaluator === 'golden') {
+          const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(this.fixture.filePath);
+          vscode.commands.executeCommand('agentcarousel.openInEditor', path.join(wsRoot, cfg.golden_path), 0);
+        }
+      }
     }, null, this.disposables);
     this.render();
   }
@@ -133,6 +140,9 @@ export class CaseDetailPanel {
     function openInEditor() {
       vscode.postMessage({ command: 'openInEditor' });
     }
+    function openGoldenFile() {
+      vscode.postMessage({ command: 'openGoldenFile' });
+    }
   </script>
 </body>
 </html>`;
@@ -166,8 +176,8 @@ function buildEvaluatorSection(c: FixtureCase, kind: string): string {
   const cfg = c.evaluator_config;
   let detail = '';
   if (cfg?.evaluator === 'golden') {
-    detail = `<p><strong>Golden file:</strong> <code>${esc(cfg.golden_path)}</code></p>
-              <p><strong>Threshold:</strong> <code>${cfg.golden_threshold}</code></p>`;
+    detail = `<p><strong>Golden file:</strong> <button class="golden-link" onclick="openGoldenFile()">${esc(cfg.golden_path)}</button></p>
+              <p><strong>Threshold:</strong> <code>${cfg.golden_threshold}</code> — minimum similarity score for the case to pass (0.0 = anything passes, 1.0 = exact match required)</p>`;
   } else if (cfg?.evaluator === 'judge') {
     detail = `<p><strong>Judge prompt:</strong></p><pre class="judge-prompt">${esc(cfg.judge_prompt.trim())}</pre>`;
   } else if (cfg?.evaluator === 'process') {
@@ -359,4 +369,16 @@ const CSS = `
     border-radius: 2px;
     font-family: var(--vscode-editor-font-family);
   }
+  .golden-link {
+    background: none;
+    border: none;
+    color: var(--vscode-textLink-foreground);
+    font-family: var(--vscode-editor-font-family);
+    font-size: inherit;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .golden-link:hover { color: var(--vscode-textLink-activeForeground); }
 `;
