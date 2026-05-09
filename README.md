@@ -16,13 +16,13 @@
 - **Live evals when you want them.** Plug in OpenAI, Anthropic, Gemini, or OpenRouter as generator and judge. Diff runs. Catch regressions.
 - **Compliance-aware fixtures.** Risk tier, data handling, certification track — the metadata your governance program already tracks, baked into the test format.
 
-Designed for teams shipping agents into regulated workflows — CMMC assessment, compliance review, security tooling, customer support. Browse the [public trust registry](https://agentcarousel.com/agents) for examples.
+Designed for teams shipping agents into regulated workflows — CMMC assessment, compliance review, security tooling, customer support. Browse the [public trust registry](https://agentcarousel.com/registry) for examples.
 
 ## Install
 
 ```bash
 # Install (Linux — Windows: download .zip from Releases)
-curl -fsSL http://install.agentcarousel.com | sh
+curl -fsSL https://install.agentcarousel.com | sh
 
 # Homebrew (macOS)
 brew tap agentcarousel/agentcarousel && brew install agentcarousel
