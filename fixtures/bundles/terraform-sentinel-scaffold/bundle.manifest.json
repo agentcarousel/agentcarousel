@@ -52,7 +52,7 @@
   "mocks": [
     {
       "path": "../../../mocks/agent-response.json",
-      "sha256": "cde8a0a01f590a0a543f5afc4693eab3667de4f32b7a4c38930e073c906ec6c2"
+      "sha256": "17e4e409788f67ed28d697f10427e3e486177a94721eb13ceee9428bf4cd4a24"
     },
     {
       "path": "../../../mocks/deslop-harness/count-blocks.sh",

@@ -1,3 +1,4 @@
+use crate::hex_util::hex_lower;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::env;
@@ -216,7 +217,7 @@ pub fn config_hash(config: &ResolvedConfig) -> String {
     let payload = serde_json::to_vec(config).unwrap_or_else(|_| b"{}".to_vec());
     let mut hasher = Sha256::new();
     hasher.update(payload);
-    format!("{:x}", hasher.finalize())
+    hex_lower(hasher.finalize().as_ref())
 }
 
 pub fn resolve_schema_path(config: &ResolvedConfig) -> PathBuf {
