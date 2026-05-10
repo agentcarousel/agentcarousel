@@ -8,6 +8,8 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use tar::Builder;
 
+use crate::hex_util::hex_lower;
+
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
 use super::registry_client::{resolve_registry_url, RegistryClient};
@@ -331,5 +333,5 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     let contents = fs::read(path).map_err(|err| err.to_string())?;
     let mut hasher = Sha256::new();
     hasher.update(contents);
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex_lower(hasher.finalize().as_ref()))
 }

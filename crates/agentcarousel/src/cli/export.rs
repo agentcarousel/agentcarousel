@@ -1,3 +1,4 @@
+use crate::hex_util::hex_lower;
 use agentcarousel_reporters::{fetch_run, list_runs};
 use chrono::Utc;
 use clap::Parser;
@@ -203,14 +204,14 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String>
 fn fixture_schema_sha256() -> String {
     let mut hasher = Sha256::new();
     hasher.update(SKILL_DEFINITION_SCHEMA.as_bytes());
-    format!("sha256:{:x}", hasher.finalize())
+    format!("sha256:{}", hex_lower(hasher.finalize().as_ref()))
 }
 
 fn sha256_file_hex(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| err.to_string())?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
-    Ok(format!("sha256:{:x}", hasher.finalize()))
+    Ok(format!("sha256:{}", hex_lower(hasher.finalize().as_ref())))
 }
 
 /// Integrity manifest over evidence files (excludes `MANIFEST.json` itself).

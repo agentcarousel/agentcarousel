@@ -5,6 +5,8 @@
 .dirac-symbol-index/
 .idea/
 
+gtm/
+
 # --- AI agent / assistant local state ---
 .claude/
 CLAUDE.md
@@ -118,3 +120,6 @@ temp/
 # minisign
 *.pub
 *.key
+
+# Temp Ignore
+docs/rba/
