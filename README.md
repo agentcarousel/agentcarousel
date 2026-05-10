@@ -11,12 +11,10 @@
 
 ## Why agentcarousel
 
-- **Deterministic by default.** Offline runs with mocks mean same inputs → same outputs, every time.
-- **Built for evidence.** Every run produces a signed artifact (`.tar.gz` + `minisign` attestation) you can hand to an auditor, a reviewer, or your customer's security team.
-- **Live evals when you want them.** Plug in OpenAI, Anthropic, Gemini, or OpenRouter as generator and judge. Diff runs. Catch regressions.
-- **Compliance-aware fixtures.** Risk tier, data handling, certification track — the metadata your governance program already tracks, baked into the test format.
-
-Designed for teams shipping agents into regulated workflows — CMMC assessment, compliance review, security tooling, customer support. Browse the [public trust registry](https://agentcarousel.com/registry) for examples.
+- **Deterministic by default** - Offline runs with mocks mean same inputs → same outputs, every time.
+- **Built for evidence** - Every run produces a signed artifact (`.tar.gz` + `minisign` attestation) you can hand to an auditor, a reviewer, or your customer's security team.
+- **Live evals when you want them** - plug in OpenAI, Anthropic, Gemini, or OpenRouter as generator and judge. Diff runs. Catch regressions.
+- **Compliance-aware fixtures** - Risk tier, data handling, certification track — the metadata your governance program already tracks, baked into the test format.
 
 ## Install
 
