@@ -9,8 +9,8 @@ license = "Apache-2.0"
 repository = "https://github.com/agentcarousel/agentcarousel"
 documentation = "https://docs.rs/agentcarousel"
 homepage = "https://agentcarousel.com"
-keywords = ["fixtures", "agents", "skills", "testing", "cli"]
-categories = ["command-line-utilities", "development-tools"]
+keywords = ["fixtures", "agents", "skills", "testing", "cli", "eval"]
+categories = ["command-line-utilities", "development-tools", "unit-testing"]
 
 [lib]
 path = "src/lib.rs"
@@ -26,25 +26,25 @@ path = "src/bin/agc.rs"
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
-console = "0.15"
+console = "0.16.3"
 flate2 = "1"
 globset = "0.4"
-indicatif = "0.17"
+indicatif = "0.18.4"
 jsonschema = { version = "0.46", default-features = false, features = ["resolve-file"] }
-openrouter-rs = "0.8.0"
-quick-xml = { version = "0.31", features = ["serialize"] }
+openrouter-rs = "0.9.0"
+quick-xml = { version = "0.39.4", features = ["serialize"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
-rusqlite = "0.31"
+rusqlite = "0.39"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-sha2 = "0.10"
-similar = "2"
+sha2 = "0.11"
+similar = "3"
 tar = "0.4"
-thiserror = "1"
+thiserror = "2.0.18"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
-toml = "0.8"
+toml = "1.1.2"
 ulid = "1"
 walkdir = "2"
 
@@ -52,10 +52,10 @@ walkdir = "2"
 # (cross-compile to aarch64-gnu has no arm64 libsqlite; musl already needed bundled).
 # macOS uses the default (system SQLite).
 [target.'cfg(target_os = "linux")'.dependencies]
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
 
 [dev-dependencies]
 assert_cmd = "2"

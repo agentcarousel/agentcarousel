@@ -51,5 +51,17 @@
   "updated_at": "<YYYY-MM-DDT00:00:00Z>",
 
   "_comment_policy": "MSP policy document version this bundle was written against. Obtain from https://agentcarousel.com/policy",
-  "policy_version": "msp-policy-<YYYY-MM>"
+  "policy_version": "msp-policy-<YYYY-MM>",
+
+  "_comment_aibom_refs": "Optional. Array of AIBOM component purls or URIs that this bundle's results attest to. Links RBA evidence back to an AIBOM inventory document. Format: purl (pkg:...) or URI (https://...).",
+  "aibom_refs": [],
+
+  "_comment_validity_scope": "Optional. Declares how long this attestation is considered valid. type: until_model_update | until_aibom_change | until_date | single_shot. expires_at (ISO-8601) required only when type=until_date.",
+  "validity_scope": {
+    "type": "single_shot",
+    "expires_at": null
+  },
+
+  "_comment_rba_determination_threshold": "Optional. Pass rate (0.0–1.0) required for an overall RBA pass determination. If omitted, the MSP default (0.75) applies. Bundles covering high-impact AI under M-25-21 §5 SHOULD set this explicitly.",
+  "rba_determination_threshold": 0.75
 }
