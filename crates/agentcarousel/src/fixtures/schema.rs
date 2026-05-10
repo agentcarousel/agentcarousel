@@ -27,15 +27,13 @@ pub fn validate_fixture_value(
     };
 
     let schema = load_schema(&schema_path)?;
-    let compiled = jsonschema::JSONSchema::compile(&schema)
+    let compiled = jsonschema::validator_for(&schema)
         .map_err(|err| SchemaValidationIssue::SchemaError(err.to_string()))?;
 
-    let mut issues = Vec::new();
-    if let Err(errors) = compiled.validate(value) {
-        for error in errors {
-            issues.push(SchemaValidationIssue::ValidationError(error.to_string()));
-        }
-    }
+    let issues = compiled
+        .iter_errors(value)
+        .map(|err| SchemaValidationIssue::ValidationError(err.to_string()))
+        .collect();
 
     Ok(issues)
 }
