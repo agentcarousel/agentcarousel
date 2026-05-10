@@ -49,7 +49,7 @@
   "mocks": [
     {
       "path": "../../../mocks/agent-response.json",
-      "sha256": "cde8a0a01f590a0a543f5afc4693eab3667de4f32b7a4c38930e073c906ec6c2"
+      "sha256": "5c743cf0ae325fddbf38c9873a9f44a8741c6b9ebc5a2412f6b529b3eeb3bacd"
     }
   ],
   "negative_cases": [
@@ -73,5 +73,9 @@
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "cmmc-assessor",
   "source_skill_path": "agentcarousel/skills/cmmc-assessor/SKILL.md",
-  "updated_at": "2026-04-25T00:00:00Z"
+  "updated_at": "2026-05-09T00:00:00Z",
+  "validity_scope": {
+    "type": "until_model_update",
+    "expires_at": null
+  }
 }
