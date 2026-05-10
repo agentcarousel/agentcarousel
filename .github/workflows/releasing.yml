@@ -167,7 +167,9 @@ jobs:
     name: Publish to crates.io
     needs: [gate, publish]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.dry_run != true)
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
     steps:
       - uses: actions/checkout@v4
 
@@ -183,7 +185,9 @@ jobs:
     name: Update Homebrew Tap
     needs: [gate, publish]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.dry_run != true)
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
     steps:
       - uses: actions/checkout@v4
 
@@ -208,6 +212,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to formula."
           else
-            git commit -m "Update agentcarousel to ${GITHUB_REF_NAME}"
+            git commit -m "Update agentcarousel to ${{ needs.gate.outputs.release_tag }}"
             git push
           fi
