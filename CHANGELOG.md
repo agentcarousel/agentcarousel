@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.7 - May 2026
+
+- CI/CD Hardening: Fixed skip logic for automated publish jobs to correctly support manual `workflow_dispatch` releases.
+- Corrected tag resolution in Homebrew formula updates to ensure consistent versioning across automated runs.
+
 ## 0.4.6 - May 2026
 
 - Automated Homebrew Tap updates via GitHub Actions: formula version and SHA256 are now updated automatically on every tag release.
