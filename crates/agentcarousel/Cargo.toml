@@ -48,7 +48,13 @@ toml = "0.8"
 ulid = "1"
 walkdir = "2"
 
-[target.'cfg(target_env = "musl")'.dependencies]
+# Bundled SQLite on Linux and Windows so CI/release binaries link without host libsqlite
+# (cross-compile to aarch64-gnu has no arm64 libsqlite; musl already needed bundled).
+# macOS uses the default (system SQLite).
+[target.'cfg(target_os = "linux")'.dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 [dev-dependencies]
