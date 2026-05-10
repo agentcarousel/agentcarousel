@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.6 - May 2026
+
+- Automated Homebrew Tap updates via GitHub Actions: formula version and SHA256 are now updated automatically on every tag release.
+- Automated crates.io publishing using `publish-crates` action in the release workflow.
+
+## 0.4.5 - May 2026
+
+- Chore: remove outdated category and unused keywords from `Cargo.toml`.
+- Internal branch cleanup and repository maintenance.
+- Release binary size reduction.
+
 ## 0.4.4 - May 2026
 
 - Human-readable **`validate`** terminal output: carousel banner, per-file PASS/WARN/FAIL rows, results line, heuristic coverage summary (risk tier / data handling / certification track counts), and validation status footer (aligned with eval/test reporting).
