@@ -9,8 +9,8 @@ license = "Apache-2.0"
 repository = "https://github.com/agentcarousel/agentcarousel"
 documentation = "https://docs.rs/agentcarousel"
 homepage = "https://agentcarousel.com"
-keywords = ["fixtures", "agents", "skills", "testing", "cli", "eval"]
-categories = ["command-line-utilities", "development-tools", "unit-testing"]
+keywords = ["agents", "skills", "testing", "cli", "eval"]
+categories = ["command-line-utilities", "development-tools"]
 
 [lib]
 path = "src/lib.rs"
