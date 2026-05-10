@@ -768,6 +768,11 @@ fn build_summary(results: &[CaseResult]) -> RunSummary {
     let mut effectiveness_count = 0u32;
     let mut provider_errors = ProviderErrorMetrics::default();
 
+    let mut tokens_in_sum = 0u64;
+    let mut tokens_out_sum = 0u64;
+    let mut has_tokens = false;
+    let mut judged_case_count = 0u32;
+
     for result in results {
         latency_sum += result.metrics.total_latency_ms;
         provider_errors.status_429 += result.metrics.provider_errors.status_429;
@@ -777,6 +782,12 @@ fn build_summary(results: &[CaseResult]) -> RunSummary {
         if let Some(scores) = result.eval_scores.as_ref() {
             effectiveness_sum += scores.effectiveness_score;
             effectiveness_count += 1;
+            judged_case_count += 1;
+        }
+        if result.metrics.tokens_in.is_some() || result.metrics.tokens_out.is_some() {
+            has_tokens = true;
+            tokens_in_sum += result.metrics.tokens_in.unwrap_or(0);
+            tokens_out_sum += result.metrics.tokens_out.unwrap_or(0);
         }
         match result.status {
             agentcarousel_core::CaseStatus::Passed => passed += 1,
@@ -810,6 +821,17 @@ fn build_summary(results: &[CaseResult]) -> RunSummary {
         OverallStatus::Fail
     };
 
+    let (tokens_in, tokens_out, mean_tokens_per_judged_case) = if has_tokens {
+        let mean = if judged_case_count > 0 {
+            Some((tokens_in_sum + tokens_out_sum) / judged_case_count as u64)
+        } else {
+            None
+        };
+        (Some(tokens_in_sum), Some(tokens_out_sum), mean)
+    } else {
+        (None, None, None)
+    };
+
     RunSummary {
         total,
         passed,
@@ -823,5 +845,8 @@ fn build_summary(results: &[CaseResult]) -> RunSummary {
         mean_effectiveness_score,
         provider_errors,
         overall_status,
+        tokens_in,
+        tokens_out,
+        mean_tokens_per_judged_case,
     }
 }

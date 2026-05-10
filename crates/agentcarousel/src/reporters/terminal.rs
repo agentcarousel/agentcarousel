@@ -398,6 +398,20 @@ pub fn print_terminal(run: &Run) {
         println!("  Effectiveness score: {:.2} / 1.00", mean);
     }
 
+    if s.tokens_in.is_some() || s.tokens_out.is_some() {
+        println!();
+        println!("  Token Consumption");
+        if let Some(ti) = s.tokens_in {
+            println!("    › total in:  {}", ti);
+        }
+        if let Some(to) = s.tokens_out {
+            println!("    › total out: {}", to);
+        }
+        if let Some(m) = s.mean_tokens_per_judged_case {
+            println!("    › avg tokens/judged case: {}", m);
+        }
+    }
+
     let issues = failed + s.errored + s.timed_out + s.flaky;
     if issues == 0 {
         println!(
@@ -441,6 +455,20 @@ pub fn print_terminal_summary(run: &Run) {
     }
     if let Some(error_line) = format_provider_errors(&run.summary.provider_errors) {
         println!("{}", style(error_line).yellow());
+    }
+    
+    if run.summary.tokens_in.is_some() || run.summary.tokens_out.is_some() {
+        let mut parts = Vec::new();
+        if let Some(ti) = run.summary.tokens_in {
+            parts.push(format!("in={}", ti));
+        }
+        if let Some(to) = run.summary.tokens_out {
+            parts.push(format!("out={}", to));
+        }
+        if let Some(m) = run.summary.mean_tokens_per_judged_case {
+            parts.push(format!("avg_per_judged={}", m));
+        }
+        println!("{}", style(format!("tokens: {}", parts.join(", "))).dim());
     }
 }
 
