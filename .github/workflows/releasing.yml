@@ -162,3 +162,36 @@ jobs:
           gh release create "${RELEASE_TAG}" release-assets/* \
             --title "${RELEASE_TAG}" \
             --notes "Binary release for ${RELEASE_TAG}. See install.sh or README for installation."
+
+  update-tap:
+    name: Update Homebrew Tap
+    needs: publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Tap Repository
+        uses: actions/checkout@v4
+        with:
+          repository: agentcarousel/homebrew-agentcarousel
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          bash scripts/update-homebrew.sh "${TAG}" "homebrew-tap/Formula/agentcarousel.rb"
+
+      - name: Commit and Push
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/agentcarousel.rb
+          if git diff --staged --quiet; then
+            echo "No changes to formula."
+          else
+            git commit -m "Update agentcarousel to ${GITHUB_REF_NAME}"
+            git push
+          fi
