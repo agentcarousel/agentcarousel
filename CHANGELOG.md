@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.9 - May 2026
+
+- Feature: `evaluator_config.effectiveness_threshold` per-case field — cases can now override the global `--effectiveness-threshold` flag with a case-specific pass threshold.
+
 ## 0.4.8 - May 2026
 
 - Feature: Added live evaluation token consumption metrics to the terminal output.

@@ -158,6 +158,7 @@ cases:
       #   judge_prompt: >
       #     Score whether the response <specific criterion>.
       #     Score 1.0 if clearly satisfies criterion, 0.5 if borderline, 0.0 if not.
+      #   # effectiveness_threshold: 0.8  # Per-case override; takes precedence over --effectiveness-threshold flag.
 
   # ── Failure-mode / error-handling case ───────────────────────────────────
   # Author this alongside the happy-path case. It catches mock gaps and tests
