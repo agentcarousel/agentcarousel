@@ -64,35 +64,7 @@ agentcarousel eval --execution-mode live --judge \
 
 ## Configuration (`agentcarousel.toml`)
 
-To get started, copy the provided `agentcarousel.example.toml` file to `agentcarousel.toml` and customize the settings as needed.
-
-```toml
-[runner]
-concurrency = 2          # Number of parallel test cases to 
-timeout_secs = 30        # Timeout per test case in seconds
-offline = true           # Run strictly without network requests
-mock_dir = "mocks"       # Directory for HTTP mock definitions
-
-[validate]
-schema_dir = "schemas"   # Path to custom JSON schemas
-strict = true            # Enable strict schema checking
-
-[eval]
-default_evaluator = "golden"  # Default evaluator
-effectiveness_threshold = 0.7 # Minimum weighted score for a case to pass
-
-[generator]
-model = "claude-haiku-4-5-20251001" # Default model for live generation
-max_tokens = 4096                   # Max tokens for the generator response
-
-[judge]
-model = "gemini-2.5-flash"          # Default model for LLM-as-a-judge
-max_tokens = 2048                   # Max tokens for the judge response
-
-[report]
-history_db = ".agentcarousel.db"    # SQLite database for local history
-regression_threshold = 0.05         # Min pass rate decrease to trigger a regression
-```
+Copy `agentcarousel.example.toml` to `agentcarousel.toml` and customize as needed.
 
 ## Bundle workflows
 
