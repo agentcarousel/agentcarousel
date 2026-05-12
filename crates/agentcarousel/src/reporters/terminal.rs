@@ -399,14 +399,14 @@ pub fn print_terminal(run: &Run) {
     }
 
     if s.tokens_in.is_some() || s.tokens_out.is_some() {
+        let ti = s.tokens_in.unwrap_or(0);
+        let to = s.tokens_out.unwrap_or(0);
+        let total = ti + to;
         println!();
-        println!("  Token Consumption");
-        if let Some(ti) = s.tokens_in {
-            println!("    › total in:  {}", ti);
-        }
-        if let Some(to) = s.tokens_out {
-            println!("    › total out: {}", to);
-        }
+        println!("  {}", style("Token Consumption 🪙").bold());
+        println!("    › total: {}", style(total).cyan());
+        println!("      ├─ in:  {}", ti);
+        println!("      └─ out: {}", to);
         if let Some(m) = s.mean_tokens_per_judged_case {
             println!("    › avg tokens/judged case: {}", m);
         }
@@ -456,19 +456,20 @@ pub fn print_terminal_summary(run: &Run) {
     if let Some(error_line) = format_provider_errors(&run.summary.provider_errors) {
         println!("{}", style(error_line).yellow());
     }
-    
+
     if run.summary.tokens_in.is_some() || run.summary.tokens_out.is_some() {
-        let mut parts = Vec::new();
-        if let Some(ti) = run.summary.tokens_in {
-            parts.push(format!("in={}", ti));
-        }
-        if let Some(to) = run.summary.tokens_out {
-            parts.push(format!("out={}", to));
-        }
+        let ti = run.summary.tokens_in.unwrap_or(0);
+        let to = run.summary.tokens_out.unwrap_or(0);
+        let total = ti + to;
+        let mut parts = vec![
+            format!("total={}", total),
+            format!("in={}", ti),
+            format!("out={}", to),
+        ];
         if let Some(m) = run.summary.mean_tokens_per_judged_case {
             parts.push(format!("avg_per_judged={}", m));
         }
-        println!("{}", style(format!("tokens: {}", parts.join(", "))).dim());
+        println!("{}", style(format!("🪙  tokens: {}", parts.join(", "))).dim());
     }
 }
 
