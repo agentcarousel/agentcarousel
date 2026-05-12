@@ -361,11 +361,16 @@ async fn run_case_eval(
             match evaluate_case_result(&case, &result, config, run_id, &judge_cache).await {
                 Ok(scores) => {
                     result.eval_scores = Some(scores.clone());
-                    if scores.effectiveness_score < config.effectiveness_threshold {
+                    let threshold = case
+                        .evaluator_config
+                        .as_ref()
+                        .and_then(|c| c.effectiveness_threshold)
+                        .unwrap_or(config.effectiveness_threshold);
+                    if scores.effectiveness_score < threshold {
                         result.status = CaseStatus::Failed;
                         result.error = Some(format!(
                             "effectiveness {:.2} below threshold {:.2}",
-                            scores.effectiveness_score, config.effectiveness_threshold
+                            scores.effectiveness_score, threshold
                         ));
                     }
                 }
@@ -380,11 +385,16 @@ async fn run_case_eval(
         per_run_results.push(result);
     }
 
+    let threshold = case
+        .evaluator_config
+        .as_ref()
+        .and_then(|c| c.effectiveness_threshold)
+        .unwrap_or(config.effectiveness_threshold);
     aggregate_case_results(
         &case,
         &per_run_results,
         runs,
-        config.effectiveness_threshold,
+        threshold,
     )
 }
 
@@ -749,6 +759,7 @@ fn apply_defaults(case: &mut Case, defaults: &Option<agentcarousel_core::CaseDef
                     golden_threshold: None,
                     process_cmd: None,
                     judge_prompt: None,
+                    effectiveness_threshold: None,
                 });
             }
         }
