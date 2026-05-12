@@ -398,6 +398,20 @@ pub fn print_terminal(run: &Run) {
         println!("  Effectiveness score: {:.2} / 1.00", mean);
     }
 
+    if s.tokens_in.is_some() || s.tokens_out.is_some() {
+        let ti = s.tokens_in.unwrap_or(0);
+        let to = s.tokens_out.unwrap_or(0);
+        let total = ti + to;
+        println!();
+        println!("  {}", style("Token Consumption 🪙").bold());
+        println!("    › total: {}", style(total).cyan());
+        println!("      ├─ in:  {}", ti);
+        println!("      └─ out: {}", to);
+        if let Some(m) = s.mean_tokens_per_judged_case {
+            println!("    › avg tokens/judged case: {}", m);
+        }
+    }
+
     let issues = failed + s.errored + s.timed_out + s.flaky;
     if issues == 0 {
         println!(
@@ -413,7 +427,7 @@ pub fn print_terminal(run: &Run) {
 
     let bin = cli_binary_name();
     let id = run.id.0.as_str();
-    println!("  Run id: {}", id);
+    println!("  run id: {}", id);
     println!("  Next:   {} report show {}", bin, id);
     println!("  ──────────────────────────────────────────────────────");
 }
@@ -441,6 +455,24 @@ pub fn print_terminal_summary(run: &Run) {
     }
     if let Some(error_line) = format_provider_errors(&run.summary.provider_errors) {
         println!("{}", style(error_line).yellow());
+    }
+
+    if run.summary.tokens_in.is_some() || run.summary.tokens_out.is_some() {
+        let ti = run.summary.tokens_in.unwrap_or(0);
+        let to = run.summary.tokens_out.unwrap_or(0);
+        let total = ti + to;
+        let mut parts = vec![
+            format!("total={}", total),
+            format!("in={}", ti),
+            format!("out={}", to),
+        ];
+        if let Some(m) = run.summary.mean_tokens_per_judged_case {
+            parts.push(format!("avg_per_judged={}", m));
+        }
+        println!(
+            "{}",
+            style(format!("🪙  tokens: {}", parts.join(", "))).dim()
+        );
     }
 }
 

@@ -273,6 +273,9 @@ pub struct RunSummary {
     pub mean_effectiveness_score: Option<f32>,
     pub provider_errors: ProviderErrorMetrics,
     pub overall_status: OverallStatus,
+    pub tokens_in: Option<u64>,
+    pub tokens_out: Option<u64>,
+    pub mean_tokens_per_judged_case: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

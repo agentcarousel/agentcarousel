@@ -102,7 +102,18 @@ async fn run_case_inner(
     if status == CaseStatus::Passed {
         let case_id = case.id.0.clone();
         let args = json!({ "case_id": case_id });
-        if let Some(response) = mock_engine.match_response("agent_response", &args) {
+
+        let use_mock = match config.generation_mode {
+            GenerationMode::MockOnly => true,
+            GenerationMode::Live => false,
+        };
+
+        if use_mock
+            && mock_engine
+                .match_response("agent_response", &args)
+                .is_some()
+        {
+            let response = mock_engine.match_response("agent_response", &args).unwrap();
             trace.final_output = Some(extract_output(response));
         } else {
             match config.generation_mode {

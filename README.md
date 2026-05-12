@@ -62,6 +62,10 @@ agentcarousel eval --execution-mode live --judge \
   --runs 1 \
 ```
 
+## Configuration (`agentcarousel.toml`)
+
+Copy `agentcarousel.example.toml` to `agentcarousel.toml` and customize as needed.
+
 ## Bundle workflows
 
 ```bash
@@ -100,25 +104,6 @@ agentcarousel trust-check cmmc-assessor@1.0.0 \
   --url "https://api.agentcarousel.com" \
   --attestation ./attestation-cmmc-assessor-1.0.0.json \
   --minisign-pubkey ./your-minisign.pub
-```
-
-## Configuration
-
-Config file lookup order:
-
-1. `--config <path>` (explicit)
-2. `./agentcarousel.toml` (project)
-3. `~/.config/agentcarousel/config.toml` (user)
-
-Database defaults:
-
-- macOS: `~/Library/Application Support/agentcarousel/history.db`
-- Linux: `~/.local/share/agentcarousel/history.db`
-
-Override history path with:
-
-```bash
-export AGENTCAROUSEL_HISTORY_DB=/path/to/history.db
 ```
 
 ## Contributions
