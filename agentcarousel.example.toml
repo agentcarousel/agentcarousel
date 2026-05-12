@@ -1,11 +1,11 @@
 [runner]
-concurrency = 2          # Number of parallel test cases to execute
+concurrency = 1          # Number of parallel test cases to execute
 timeout_secs = 30        # Timeout per test case in seconds
-offline = false          # Run strictly without network requests
+offline = true           # Run strictly without network requests
 mock_dir = "mocks"       # Directory for HTTP mock definitions
 
 [validate]
-schema_dir = "fixtures/schemas"   # Path to custom JSON schemas
+schema_dir = "schemas"   # Path to custom JSON schemas
 strict = true            # Enable strict schema checking
 
 [eval]
