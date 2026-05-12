@@ -64,14 +64,13 @@ agentcarousel eval --execution-mode live --judge \
 
 ## Configuration (`agentcarousel.toml`)
 
-`agentcarousel` can be configured globally using an `agentcarousel.toml` file in your workspace root. 
-To get started, copy the provided `agentcarousel.example.toml` file to `agentcarousel.toml` and customize the settings as needed. `agentcarousel.toml` is ignored by git to keep your local preferences (like model selections or timeouts) private.
+To get started, copy the provided `agentcarousel.example.toml` file to `agentcarousel.toml` and customize the settings as needed.
 
 ```toml
 [runner]
-concurrency = 4          # Number of parallel test cases to execute
+concurrency = 2          # Number of parallel test cases to 
 timeout_secs = 30        # Timeout per test case in seconds
-offline = false          # Run strictly without network requests
+offline = true           # Run strictly without network requests
 mock_dir = "mocks"       # Directory for HTTP mock definitions
 
 [validate]
@@ -79,7 +78,7 @@ schema_dir = "schemas"   # Path to custom JSON schemas
 strict = true            # Enable strict schema checking
 
 [eval]
-default_evaluator = "golden"  # Default evaluator if unspecified on a case
+default_evaluator = "golden"  # Default evaluator
 effectiveness_threshold = 0.7 # Minimum weighted score for a case to pass
 
 [generator]
@@ -133,25 +132,6 @@ agentcarousel trust-check cmmc-assessor@1.0.0 \
   --url "https://api.agentcarousel.com" \
   --attestation ./attestation-cmmc-assessor-1.0.0.json \
   --minisign-pubkey ./your-minisign.pub
-```
-
-## Configuration
-
-Config file lookup order:
-
-1. `--config <path>` (explicit)
-2. `./agentcarousel.toml` (project)
-3. `~/.config/agentcarousel/config.toml` (user)
-
-Database defaults:
-
-- macOS: `~/Library/Application Support/agentcarousel/history.db`
-- Linux: `~/.local/share/agentcarousel/history.db`
-
-Override history path with:
-
-```bash
-export AGENTCAROUSEL_HISTORY_DB=/path/to/history.db
 ```
 
 ## Contributions
