@@ -141,6 +141,7 @@ cases:
       evaluator: golden
       golden_path: fixtures/golden/terraform-sentinel-scaffold/aws-mfa-stub.tf
       golden_threshold: 0.85
+      effectiveness_threshold: 0.6
 
   - id: terraform-sentinel-scaffold/judge-spot-check
     description: >
@@ -151,6 +152,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a HashiCorp Sentinel and Terraform security engineer judge. Score each rubric item from 0.0 to 1.0 using the policy text, user request, and assistant HCL output.
 
@@ -283,6 +285,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a certification-tier judge for Terraform Sentinel policy scaffolds.
 
@@ -394,6 +397,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a certification-tier judge for Terraform Sentinel policy scaffolds.
 
@@ -495,6 +499,7 @@ cases:
     evaluator_config:
       evaluator: process
       process_cmd: ["bash", "mocks/deslop-harness/count-blocks.sh", "aws_s3_bucket", "azurerm_network_security_group"]
+      effectiveness_threshold: 0.6
 
   # ── Case 5: sentinel.hcl MANDATORY vs ADVISORY distinction ───────────────
   - id: terraform-sentinel-scaffold/positive-sentinel-hcl
@@ -588,6 +593,7 @@ cases:
       evaluator: golden
       golden_path: fixtures/golden/terraform-sentinel-scaffold/sentinel-hcl-stubs.tf
       golden_threshold: 0.85
+      effectiveness_threshold: 0.6
 
   # ── Case 6: Failure mode — no policy files ────────────────────────────────
   - id: terraform-sentinel-scaffold/failure-mode-no-policy
@@ -709,3 +715,4 @@ cases:
     evaluator_config:
       evaluator: process
       process_cmd: ["bash", "mocks/deslop-harness/count-blocks.sh", "variable", "aws_instance"]
+      effectiveness_threshold: 0.6
