@@ -118,7 +118,7 @@ jobs:
           path: eval-results.json
       - name: Regression check
         run: |
-          PREV=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.[0].id // empty')
+          PREV=$(./target/release/agentcarousel report list --limit 2 --json | jq -r '.[1].id // empty')
           if [ -n "$PREV" ]; then
             CURR=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.[0].id')
             ./target/release/agentcarousel report diff "$PREV" "$CURR"
