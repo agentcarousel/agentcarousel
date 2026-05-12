@@ -64,7 +64,8 @@ agentcarousel eval --execution-mode live --judge \
 
 ## Configuration (`agentcarousel.toml`)
 
-`agentcarousel` can be configured globally using an `agentcarousel.toml` file in your workspace root.
+`agentcarousel` can be configured globally using an `agentcarousel.toml` file in your workspace root. 
+To get started, copy the provided `agentcarousel.example.toml` file to `agentcarousel.toml` and customize the settings as needed. `agentcarousel.toml` is ignored by git to keep your local preferences (like model selections or timeouts) private.
 
 ```toml
 [runner]
@@ -87,7 +88,7 @@ max_tokens = 4096                   # Max tokens for the generator response
 
 [judge]
 model = "gemini-2.5-flash"          # Default model for LLM-as-a-judge
-max_tokens = 1536                   # Max tokens for the judge response
+max_tokens = 2048                   # Max tokens for the judge response
 
 [report]
 history_db = ".agentcarousel.db"    # SQLite database for local history

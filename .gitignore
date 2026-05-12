@@ -128,3 +128,5 @@ docs/rba/
 .dolt/
 *.db
 .beads-credential-key
+
+agentcarousel.toml
