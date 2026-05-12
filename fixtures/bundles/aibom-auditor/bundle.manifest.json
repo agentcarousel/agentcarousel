@@ -1,0 +1,85 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/aibom-auditor",
+  "bundle_version": "1.0.0",
+  "case_count": 7,
+  "case_ids": [
+    "aibom-auditor/positive-full-aibom-generation",
+    "aibom-auditor/positive-component-gap-detection",
+    "aibom-auditor/positive-aibom-to-rba-linkage",
+    "aibom-auditor/judge-spot-check",
+    "aibom-auditor/failure-mode-no-system-description",
+    "aibom-auditor/edge-case-mcp-server-inventory",
+    "aibom-auditor/edge-case-prompt-inventory"
+  ],
+  "certification_cases": [
+    "aibom-auditor/positive-full-aibom-generation",
+    "aibom-auditor/positive-component-gap-detection",
+    "aibom-auditor/positive-aibom-to-rba-linkage",
+    "aibom-auditor/judge-spot-check",
+    "aibom-auditor/edge-case-mcp-server-inventory",
+    "aibom-auditor/edge-case-prompt-inventory"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-08T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "OWASP AIBOM audit fixture: complete AIBOM generation, component gap detection, AIBOM-to-RBA linkage, MCP server inventory, and prompt content-addressing; synthetic AI system descriptions only.",
+  "domain": "compliance",
+  "evaluators_used": [
+    "rules",
+    "golden",
+    "judge"
+  ],
+  "fixtures": [
+    {
+      "path": "../../skills/aibom-auditor.yaml",
+      "sha256": "<computed-by-bundle-pack>"
+    },
+    {
+      "path": "../../golden/aibom-auditor/sample-aibom.json",
+      "sha256": "<computed-by-bundle-pack>"
+    }
+  ],
+  "judge_evaluator": true,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [
+    {
+      "path": "../../../mocks/agent-response.json",
+      "sha256": "17e4e409788f67ed28d697f10427e3e486177a94721eb13ceee9428bf4cd4a24"
+    }
+  ],
+  "negative_cases": [
+    "aibom-auditor/failure-mode-no-system-description"
+  ],
+  "notes": [
+    "judge evaluator required for semantic AIBOM component assessment (gap severity, remediation specificity, RBA linkage)",
+    "golden_threshold: 0.75 — allows structural variation in AIBOM format while requiring all 5 component types and identifiers",
+    "RBA fields added: aibom_refs, validity_scope (until_aibom_change), rba_determination_threshold (0.78)",
+    "MCP server component type is the key differentiator from traditional SBOM — judge applies OWASP AIBOM taxonomy",
+    "Prompt content-addressing via SHA-256 is a novel requirement versus traditional SBOM — edge cases 6-7 cover this",
+    "certification_track=candidate; advance to stable after N=5 carousel runs with <10% rubric variance",
+    "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/aibom-auditor` after file changes"
+  ],
+  "open_items": [
+    "OI-001: Compute and replace sha256 placeholders after initial bundle pack",
+    "OI-002: Advance to stable certification track after carousel runs"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "high",
+  "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
+  "skill_or_agent": "aibom-auditor",
+  "source_skill_path": "agentcarousel/skills/aibom-auditor/SKILL.md",
+  "updated_at": "2026-05-08T00:00:00Z",
+  "aibom_refs": [
+    "pkg:generic/owasp-aibom-spec@1.0.0",
+    "https://owasp.org/www-project-ai-bill-of-materials/"
+  ],
+  "validity_scope": {
+    "type": "until_aibom_change",
+    "expires_at": null
+  },
+  "rba_determination_threshold": 0.78
+}
