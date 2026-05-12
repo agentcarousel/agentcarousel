@@ -469,7 +469,10 @@ pub fn print_terminal_summary(run: &Run) {
         if let Some(m) = run.summary.mean_tokens_per_judged_case {
             parts.push(format!("avg_per_judged={}", m));
         }
-        println!("{}", style(format!("🪙  tokens: {}", parts.join(", "))).dim());
+        println!(
+            "{}",
+            style(format!("🪙  tokens: {}", parts.join(", "))).dim()
+        );
     }
 }
 
