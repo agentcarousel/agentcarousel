@@ -784,5 +784,6 @@ fn truncate_for_debug(value: &str, max_chars: usize) -> String {
 
 fn looks_truncated_json(value: &str) -> bool {
     let trimmed = value.trim();
-    trimmed.starts_with('{') && trimmed.contains("\"rubric\"") && !trimmed.ends_with('}')
+    let has_json_start = trimmed.starts_with('{') || trimmed.starts_with("```");
+    has_json_start && trimmed.contains("\"rubric\"") && !trimmed.ends_with('}')
 }
