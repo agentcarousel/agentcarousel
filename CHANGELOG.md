@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.8 - May 2026
+
+- Feature: Added live evaluation token consumption metrics to the terminal output.
+
 ## 0.4.7 - May 2026
 
 - CI/CD Hardening: Fixed skip logic for automated publish jobs to correctly support manual `workflow_dispatch` releases.
