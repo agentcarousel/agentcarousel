@@ -427,7 +427,7 @@ pub fn print_terminal(run: &Run) {
 
     let bin = cli_binary_name();
     let id = run.id.0.as_str();
-    println!("  Run id: {}", id);
+    println!("  run id: {}", id);
     println!("  Next:   {} report show {}", bin, id);
     println!("  ──────────────────────────────────────────────────────");
 }

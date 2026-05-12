@@ -5,11 +5,11 @@ offline = false          # Run strictly without network requests
 mock_dir = "mocks"       # Directory for HTTP mock definitions
 
 [validate]
-schema_dir = "schemas"   # Path to custom JSON schemas
+schema_dir = "fixtures/schemas"   # Path to custom JSON schemas
 strict = true            # Enable strict schema checking
 
 [eval]
-default_evaluator = "golden"  # Default evaluator if unspecified on a case
+default_evaluator = "rules"  # Default evaluator if unspecified on a case
 effectiveness_threshold = 0.7 # Minimum weighted score for a case to pass
 
 [generator]
