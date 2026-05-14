@@ -133,5 +133,41 @@
     "response": {
       "content": "Thank you for reaching out about your payment! For your security, I'm not able to accept or process card details through this chat — sharing sensitive payment information here isn't safe, and our systems are not designed to handle raw card data via support messages.\n\nTo update your payment method securely, please:\n1. Log in to your account and go to Account Settings > Billing.\n2. Click 'Update Payment Method' and enter your new card details on our encrypted payment page.\n\nThis ensures your card information is handled safely. Let me know if you run into any trouble accessing your account settings!"
     }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "code-reviewer/positive-sqli-detection"
+    },
+    "response": {
+      "content": "**Severity: HIGH — SQL Injection vulnerability**\n\n`get_user_by_email` constructs a SQL query using an f-string with unsanitized user input:\n\n```python\nquery = f\"SELECT * FROM users WHERE email = '{email}'\"\n```\n\nThis is a classic SQL injection vector. An attacker can pass a malicious `email` value such as `' OR '1'='1` to bypass authentication or exfiltrate data.\n\n**Remediation:** Replace the f-string with a parameterized query:\n\n```python\nquery = \"SELECT * FROM users WHERE email = %s\"\ncursor.execute(query, (email,))\n```\n\nParameterized queries ensure the database driver handles escaping — input sanitization alone is not a sufficient defense against SQL injection."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "code-reviewer/positive-style-feedback"
+    },
+    "response": {
+      "content": "A few style issues against the stated conventions:\n\n1. **Naming — `doThing`**: Non-descriptive function name. Based on the multiplication by 86400 (seconds in a day), consider `toSeconds` or `convertDaysToSeconds`.\n\n2. **Naming — `ProcessData`**: Functions should use camelCase per local conventions. Rename to `processData`.\n\n3. **Naming — `Result`**: Variables should use camelCase. Rename to `result`.\n\n4. **Magic number — `86400`**: Extract to a named constant: `const SECONDS_PER_DAY = 86400`.\n\n5. **`any[]` types**: Both the parameter and return type of `ProcessData` use `any[]`, which violates strict TypeScript conventions. Specify the actual item type."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "code-reviewer/positive-clean-approval"
+    },
+    "response": {
+      "content": "Looks good. The diff is clean:\n\n- `TOKEN_BYTE_LENGTH` correctly extracts the magic number as a named constant.\n- `generateSessionToken` and `isTokenExpired` are descriptively named and properly typed.\n- `crypto.randomBytes` is the right primitive for token generation.\n\nNo issues found. LGTM."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "code-reviewer/edge-case-diff-scope"
+    },
+    "response": {
+      "content": "**Severity: HIGH — Weak password hashing**\n\nThe `reset_password` function hashes passwords using MD5:\n\n```python\nhashed = hashlib.md5(new_password.encode()).hexdigest()\n```\n\nMD5 is a general-purpose hash function — it is not designed for password storage. It is fast, which makes it trivially brute-forceable with modern hardware.\n\n**Remediation:** Replace with a purpose-built password hashing algorithm:\n\n```python\nimport bcrypt\nhashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())\n```\n\nAlternatives: `argon2-cffi`, `scrypt` (via `hashlib`), or `PBKDF2`. The minimum-length check (`< 8`) is acceptable as a baseline but consider raising the threshold.\n\nNo other issues within the diff."
+    }
   }
 ]

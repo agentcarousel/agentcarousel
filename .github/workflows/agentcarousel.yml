@@ -50,10 +50,10 @@ jobs:
           path: validate-report.json
       - name: Bundle verify (contract)
         run: |
-          ./target/release/agentcarousel bundle verify fixtures/bundles/terraform-sentinel-scaffold
-          ./target/release/agentcarousel bundle verify fixtures/bundles/terraform-sentinel-scaffold/bundle.manifest.json
           ./target/release/agentcarousel bundle verify fixtures/bundles/customer-support
           ./target/release/agentcarousel bundle verify fixtures/bundles/customer-support/bundle.manifest.json
+          ./target/release/agentcarousel bundle verify fixtures/bundles/code-reviewer
+          ./target/release/agentcarousel bundle verify fixtures/bundles/code-reviewer/bundle.manifest.json
 
   offline-fixtures:
     name: Offline test (${{ matrix.name }})

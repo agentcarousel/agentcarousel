@@ -1,0 +1,25 @@
+{
+  "_comment": "agentcarousel golden file — do not edit without bumping bundle_version",
+  "_meta": {
+    "bundle": "agentcarousel/code-reviewer@1.0.0",
+    "last_updated": "2026-05-14",
+    "evaluator_notes": [
+      "golden_threshold: 0.70 — allow 30% variation in phrasing and structure",
+      "REQUIRED: vulnerability class named (SQL injection / SQLi / injection)",
+      "REQUIRED: root cause identified (f-string interpolation / string formatting in query)",
+      "REQUIRED: concrete remediation present (parameterized query / prepared statement)",
+      "ALLOWED: variation in exact phrasing, severity labeling, or additional context",
+      "ALLOWED: additional observations about error handling or return type",
+      "FAIL: response that omits the vulnerability name entirely",
+      "FAIL: response that recommends input sanitization as the primary remediation without mentioning parameterized queries"
+    ]
+  },
+  "response": {
+    "severity": "HIGH",
+    "finding": "SQL Injection vulnerability in `get_user_by_email`",
+    "location": "src/db/users.py — f-string interpolation in SQL query",
+    "description": "The function constructs a SQL query using an f-string with unsanitized user input (`email`). An attacker can craft a malicious email value to manipulate the query structure, potentially extracting or modifying arbitrary data.",
+    "remediation": "Replace the f-string with a parameterized query:\n\n```python\nquery = \"SELECT * FROM users WHERE email = %s\"\ncursor.execute(query, (email,))\n```\n\nThis ensures the database driver handles escaping, eliminating the injection vector.",
+    "additional_notes": "Parameterized queries are the only reliable defense against SQL injection — input validation or escaping are insufficient on their own."
+  }
+}

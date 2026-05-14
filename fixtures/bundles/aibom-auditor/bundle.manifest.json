@@ -45,7 +45,7 @@
   "mocks": [
     {
       "path": "../../../mocks/agent-response.json",
-      "sha256": "3c90ddbcc801035b044936926ebcac7eaa7f0bda00ca761f16915dbe5ca9a109"
+      "sha256": "b8d9e2dd94e747ac058599bfa7f9d726533d93c05d32d45975024cc8f91fcdee"
     }
   ],
   "negative_cases": [

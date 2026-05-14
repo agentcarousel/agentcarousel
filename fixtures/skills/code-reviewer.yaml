@@ -1,0 +1,293 @@
+# agentcarousel fixture — code-reviewer
+# Certification Tier: Candidate
+# Source skill: code-reviewer agent — security findings, style feedback, diff-scoped review
+# Golden files:  fixtures/golden/code-reviewer/
+# Bundle:        fixtures/bundles/code-reviewer/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: code-reviewer
+
+bundle_id: agentcarousel/code-reviewer
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: high
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [code-review, security, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Security vulnerability detection — SQL injection (smoke) ──────────
+  - id: code-reviewer/positive-sqli-detection
+    description: >
+      Diff introduces a raw string interpolation into a SQL query — a classic SQL
+      injection vulnerability. The agent must identify the vulnerability, reference the
+      affected line, and recommend a parameterized query. Pass requires the security
+      finding to be present with a specific remediation suggestion.
+    tags: [smoke, happy-path, security, code-review, certification]
+    seed: 8001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this pull request diff for security issues:
+
+            ```diff
+            diff --git a/src/db/users.py b/src/db/users.py
+            index a1b2c3d..e4f5a6b 100644
+            --- a/src/db/users.py
+            +++ b/src/db/users.py
+            @@ -12,6 +12,12 @@ from db import connection
+            +def get_user_by_email(email: str) -> dict:
+            +    conn = connection()
+            +    cursor = conn.cursor()
+            +    query = f"SELECT * FROM users WHERE email = '{email}'"
+            +    cursor.execute(query)
+            +    return cursor.fetchone()
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(sql injection|sqli|injection|parameteriz|prepared statement|placeholder)'
+        - kind: regex
+          value: '(?i)(f".*email|f-string|string interpolat|format.*string)'
+        - kind: not_contains
+          value: "looks good"
+        - kind: not_contains
+          value: "no issues"
+
+      rubric:
+        - id: sqli-identified
+          description: >
+            Agent identifies the SQL injection vulnerability by name or clear description.
+            A perfect score names SQLi explicitly and points to the f-string interpolation
+            as the root cause.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(sql injection|sqli|injection vulnerability)'
+
+        - id: remediation-specific
+          description: >
+            Agent recommends parameterized queries or prepared statements with a concrete
+            example or reference. "Use parameterized queries" alone scores 0.7; showing
+            the corrected `cursor.execute(query, (email,))` pattern scores 1.0.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(parameteriz|prepared statement|cursor\.execute.*\(.*,|\?.*placeholder|\%s)'
+
+        - id: line-referenced
+          description: >
+            Agent references the specific line or function (`get_user_by_email` or the
+            f-string line) rather than describing the issue in the abstract.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(get_user_by_email|f"SELECT|f-string|line \d+)'
+
+  # ── Case 2: Style feedback — naming and structure ─────────────────────────────
+  - id: code-reviewer/positive-style-feedback
+    description: >
+      Diff introduces a function with a non-descriptive name, inconsistent casing, and
+      a magic number. The agent must provide actionable style feedback without flagging
+      security issues that are not present. Pass requires at least two distinct style
+      observations.
+    tags: [happy-path, code-review]
+    seed: 8002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff for code quality and style:
+
+            ```diff
+            diff --git a/src/utils/calc.ts b/src/utils/calc.ts
+            --- a/src/utils/calc.ts
+            +++ b/src/utils/calc.ts
+            @@ -1,3 +1,14 @@
+            +function doThing(x: number): number {
+            +  // multiply by magic number
+            +  const Result = x * 86400;
+            +  return Result;
+            +}
+            +
+            +function ProcessData(items: any[]): any[] {
+            +  return items.filter(i => i != null).map(i => doThing(i.value));
+            +}
+            ```
+
+            Local conventions: camelCase for functions and variables, no magic numbers, no `any`.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(camelCase|naming|magic number|constant|any|rename|descriptive)'
+        - kind: not_contains
+          value: "SQL injection"
+        - kind: not_contains
+          value: "security vulnerability"
+
+      rubric:
+        - id: naming-flagged
+          description: >
+            Agent flags at least one naming violation: `doThing` (non-descriptive),
+            `ProcessData` (PascalCase for function), or `Result` (PascalCase for variable).
+            A perfect score addresses all three.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(doThing|ProcessData|Result.*camel|naming|PascalCase|camelCase)'
+
+        - id: magic-number-flagged
+          description: >
+            Agent identifies `86400` as a magic number and suggests a named constant
+            (e.g. `SECONDS_PER_DAY`).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(86400|magic number|named constant|SECONDS_PER_DAY|constant)'
+
+        - id: any-type-flagged
+          description: >
+            Agent flags the `any[]` parameter and return type as violating strict
+            TypeScript conventions.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(any\[\]|any type|avoid.*any|strict.*type|replace.*any)'
+
+  # ── Case 3: Clean diff — no findings (approval) ───────────────────────────────
+  - id: code-reviewer/positive-clean-approval
+    description: >
+      Diff is well-written: typed, named clearly, no magic numbers, no security issues.
+      The agent must approve the change without inventing findings. Pass requires an
+      approval signal and zero fabricated issues.
+    tags: [happy-path, code-review, certification]
+    seed: 8003
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff:
+
+            ```diff
+            diff --git a/src/auth/tokens.ts b/src/auth/tokens.ts
+            --- a/src/auth/tokens.ts
+            +++ b/src/auth/tokens.ts
+            @@ -8,0 +9,9 @@
+            +const TOKEN_BYTE_LENGTH = 32;
+            +
+            +export function generateSessionToken(): string {
+            +  return crypto.randomBytes(TOKEN_BYTE_LENGTH).toString('hex');
+            +}
+            +
+            +export function isTokenExpired(issuedAt: number, ttlSeconds: number): boolean {
+            +  return Date.now() / 1000 > issuedAt + ttlSeconds;
+            +}
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(looks good|clean|no issues|approve|lgtm|well.written|solid|nothing to change)'
+        - kind: not_contains
+          value: "SQL injection"
+        - kind: not_contains
+          value: "magic number"
+        - kind: not_contains
+          value: "rename"
+
+      rubric:
+        - id: approval-given
+          description: >
+            Agent approves or positively acknowledges the diff without inventing issues.
+            A perfect score is a concise approval with optional brief positive observation.
+          weight: 0.70
+          auto_check:
+            kind: regex
+            value: '(?i)(looks good|approve|lgtm|clean|no issues|well.written)'
+
+        - id: no-fabricated-findings
+          description: >
+            Agent does not invent style violations, security issues, or change suggestions
+            for this already-clean diff.
+          weight: 0.30
+          auto_check:
+            kind: not_contains
+            value: "should rename"
+
+  # ── Case 4: Diff-scoped review — no hallucinated line references ──────────────
+  - id: code-reviewer/edge-case-diff-scope
+    description: >
+      Diff modifies only one function. The agent must confine its review to the changed
+      lines and must not reference, critique, or suggest changes to code outside the diff.
+      Pass requires all findings to reference only lines present in the diff.
+    tags: [edge-case, code-review, certification]
+    seed: 8004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review only the changed lines in this diff — do not comment on code outside the diff:
+
+            ```diff
+            diff --git a/src/api/auth.py b/src/api/auth.py
+            index 000001..000002 100644
+            --- a/src/api/auth.py
+            +++ b/src/api/auth.py
+            @@ -45,6 +45,12 @@ def logout(user_id: str) -> bool:
+            +def reset_password(user_id: str, new_password: str) -> bool:
+            +    if len(new_password) < 8:
+            +        return False
+            +    hashed = hashlib.md5(new_password.encode()).hexdigest()
+            +    db.users.update(user_id, {"password_hash": hashed})
+            +    return True
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(md5|weak hash|insecure|bcrypt|argon2|scrypt|pbkdf2|password hash)'
+        - kind: not_contains
+          value: "logout"
+        - kind: not_contains
+          value: "line 45"
+        - kind: not_contains
+          value: "line 44"
+
+      rubric:
+        - id: weak-hash-identified
+          description: >
+            Agent identifies MD5 as an insecure password hashing algorithm and recommends
+            a purpose-built password hashing function (bcrypt, argon2, scrypt, or PBKDF2).
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(md5.*insecure|md5.*weak|bcrypt|argon2|scrypt|pbkdf2)'
+
+        - id: diff-scoped
+          description: >
+            Agent's findings reference only code in the diff (`reset_password`, `md5`,
+            `len(new_password)`). No references to `logout` or other out-of-diff functions.
+          weight: 0.50
+          auto_check:
+            kind: not_contains
+            value: "logout"
