@@ -192,7 +192,7 @@ jobs:
           key: release-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}" --features self_update
+        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}"
 
       - name: Record cross-build verification strategy
         if: ${{ !matrix.can_run }}
