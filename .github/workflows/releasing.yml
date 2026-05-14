@@ -120,7 +120,7 @@ jobs:
           else
             BIN="target/${{ matrix.target }}/release/agentcarousel"
           fi
-          bash scripts/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
+          bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -141,12 +141,12 @@ jobs:
           path: release-assets
 
       - name: Attach install.sh to release assets
-        run: cp install.sh release-assets/install.sh
+        run: cp packaging/install.sh release-assets/install.sh
 
       - name: Write SHA256SUMS and scan
         run: |
-          bash scripts/publish-distribution.sh checksums release-assets
-          bash scripts/publish-distribution.sh scan-release-dir release-assets
+          bash packaging/publish-distribution.sh checksums release-assets
+          bash packaging/publish-distribution.sh scan-release-dir release-assets
           ls -la release-assets
 
       - name: Create GitHub release
@@ -201,7 +201,7 @@ jobs:
       - name: Update Formula
         run: |
           TAG=${{ needs.gate.outputs.release_tag }}
-          bash scripts/update-homebrew.sh "${TAG}" "homebrew-tap/Formula/agentcarousel.rb"
+          bash packaging/update-homebrew.sh "${TAG}" "homebrew-tap/Formula/agentcarousel.rb"
 
       - name: Commit and Push
         working-directory: homebrew-tap

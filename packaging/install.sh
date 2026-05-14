@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install agentcarousel from GitHub (latest tag).
 # Usage:
-#   curl -fsSL http://install.agentcarousel.com | sh
+#   curl -fsSL https://install.agentcarousel.com | sh
 
 set -eu
 
