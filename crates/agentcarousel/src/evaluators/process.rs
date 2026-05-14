@@ -23,6 +23,16 @@ impl ProcessEvaluator {
         if command.is_empty() {
             return Err(EvaluatorError::MissingConfig("process_cmd"));
         }
+        let exe = std::path::Path::new(&command[0]);
+        if exe.is_absolute()
+            || exe
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return Err(EvaluatorError::MissingConfig(
+                "process_cmd executable must be a relative path without '..'",
+            ));
+        }
         Ok(Self { command })
     }
 }
