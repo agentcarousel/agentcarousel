@@ -230,7 +230,7 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
     if !globals.quiet && format != "json" && format != "junit" && args.judge && !judge_enabled {
         eprintln!(
             "{} --judge is set but the judge evaluator is not active (--evaluator is {:?}). \
-For fixtures like aibom-auditor that set judge per case, use --evaluator all (and keep --judge).",
+For fixtures like customer-support that set judge per case, use --evaluator all (and keep --judge).",
             style("hint:").yellow().bold(),
             args.evaluator
         );
