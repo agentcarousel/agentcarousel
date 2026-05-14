@@ -32,16 +32,17 @@ cargo install agentcarousel
 ## Quickstart
 
 ```bash
-# Scaffold a fixture
-agentcarousel init --skill my-agent
+# Scaffold a skill or agent fixture
+agentcarousel init --skill my-skill
+agentcarousel init --agent my-agent
 
 # Run it offline (no API keys needed)
-agentcarousel test --offline true
+agentcarousel test fixtures/skills/my-skill.yaml --offline true
 
-# Validate
+# Validate fixture schema and rules
 agentcarousel validate fixtures/skills/aibom-auditor.yaml
 
-# Eval
+# Evaluate (mock by default)
 agentcarousel eval fixtures/skills/aibom-auditor.yaml
 
 # Export evidence bundle
@@ -55,16 +56,49 @@ export GEMINI_API_KEY=gemini_key
 export OPENROUTER_API_KEY=or_key
 export ANTHROPIC_API_KEY=claude_api_key
 export OPENAI_API_KEY=openai_key
-agentcarousel eval --execution-mode live --judge \
+
+# Run all cases, judge-backed cases use the judge
+agentcarousel eval fixtures/ \
+  --execution-mode live \
+  --evaluator all --judge \
   --model gemini-2.5-flash \
-  --judge --judge-model claude-haiku-4-5-20251001 \
-  --evaluator all \
-  --runs 1 \
+  --judge-model claude-haiku-4-5-20251001 \
+  --runs 1
+
+# Narrow to specific cases by id glob or tag
+agentcarousel eval fixtures/ \
+  --evaluator all --judge \
+  --filter "aibom-auditor/judge-*" \
+  --filter-tags certification
+```
+
+`--evaluator all` uses each case's declared evaluator; `--evaluator judge` forces every case through the judge regardless. Use `--filter` (glob on `skill/case-id`) or `--filter-tags` (comma-separated) to scope runs.
+
+## Reports
+
+```bash
+# List recent runs (newest first)
+agentcarousel report list
+
+# Show a run (human-readable, same formatting as eval/test output)
+agentcarousel report show <RUN-ID>
+
+# Also accepts a path to run.json or an evidence directory
+agentcarousel report show ./evidence/my-export/
+
+# Diff two runs to surface regressions
+agentcarousel report diff <RUN-ID-A> <RUN-ID-B>
+
+# JSON output for scripting
+agentcarousel report list --json
+agentcarousel report show <RUN-ID> --json
 ```
 
 ## Configuration (`agentcarousel.toml`)
 
 Copy `agentcarousel.example.toml` to `agentcarousel.toml` and customize as needed.
+
+Per-case effectiveness thresholds override the global `--effectiveness-threshold` flag via the `evaluator_config.effectiveness_threshold` field in YAML.
 
 ## Bundle workflows
 
@@ -73,6 +107,7 @@ Copy `agentcarousel.example.toml` to `agentcarousel.toml` and customize as neede
 agentcarousel bundle pack fixtures/bundles/my-bundle --out my-bundle.tar.gz
 
 # Verify bundle integrity and structure
+agentcarousel bundle verify fixtures/bundles/customer-support
 agentcarousel bundle verify my-bundle.tar.gz
 
 # Pull bundle manifest + artifacts from the registry
@@ -104,6 +139,19 @@ agentcarousel trust-check aibom-auditor@1.0.0 \
   --url "https://api.agentcarousel.com" \
   --attestation ./attestation-aibom-auditor-1.0.0.json \
   --minisign-pubkey ./your-minisign.pub
+```
+
+## Shell completions
+
+```bash
+# Zsh
+agc completions zsh > ~/.zsh/completions/_agc
+
+# Bash
+agc completions bash > /etc/bash_completion.d/agc
+
+# Fish
+agc completions fish > ~/.config/fish/completions/agc.fish
 ```
 
 ## Contributions
