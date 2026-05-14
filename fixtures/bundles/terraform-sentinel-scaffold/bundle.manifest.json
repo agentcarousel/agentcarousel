@@ -30,13 +30,12 @@
   "evaluators_used": [
     "rules",
     "golden",
-    "process",
     "judge"
   ],
   "fixtures": [
     {
       "path": "../../skills/terraform-sentinel-scaffold.yaml",
-      "sha256": "fa13d1b5757ae2aa2ff7306af70e7aecf29af0dd7c9cde4e4ee5a190241979c6"
+      "sha256": "d37cc37c2db05c62225148a2173d4e9eb147333bfbbbd55a1ebe413e7981213e"
     },
     {
       "path": "../../golden/terraform-sentinel-scaffold/aws-mfa-stub.tf",
@@ -53,10 +52,6 @@
     {
       "path": "../../../mocks/agent-response.json",
       "sha256": "17e4e409788f67ed28d697f10427e3e486177a94721eb13ceee9428bf4cd4a24"
-    },
-    {
-      "path": "../../../mocks/deslop-harness/count-blocks.sh",
-      "sha256": "67814dcc8f16bca15574fc04ac951066a3b28f267c9a1a89be24c9a6559bac9e"
     }
   ],
   "negative_cases": [
@@ -66,7 +61,6 @@
   "notes": [
     "judge evaluator enabled for certification-tier rubric scoring",
     "golden_threshold: 0.85 — 15% diff budget for attribute-level variation",
-    "process evaluator counts HCL block types in multi-provider and param cases",
     "Hashes refreshed from repo root; re-run `agentcarousel bundle pack fixtures/bundles/terraform-sentinel-scaffold` after file changes",
     "certification_track=candidate; advance to stable after N=5 carousel runs"
   ],
@@ -77,7 +71,6 @@
     "@agentcarousel"
   ],
   "policy_version": "msp-policy-2026-04",
-  "process_harness": "mocks/deslop-harness/count-blocks.sh",
   "risk_tier": "medium",
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "terraform-sentinel-scaffold",

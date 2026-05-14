@@ -497,8 +497,7 @@ cases:
             value: 'MANDATORY.*aws.s3.*sentinel'
 
     evaluator_config:
-      evaluator: process
-      process_cmd: ["bash", "mocks/deslop-harness/count-blocks.sh", "aws_s3_bucket", "azurerm_network_security_group"]
+      evaluator: rules
       effectiveness_threshold: 0.6
 
   # ── Case 5: sentinel.hcl MANDATORY vs ADVISORY distinction ───────────────
@@ -713,6 +712,5 @@ cases:
             value: '(?i)(default\s*=|t3\.micro|t3\.small|us-east-1)'
 
     evaluator_config:
-      evaluator: process
-      process_cmd: ["bash", "mocks/deslop-harness/count-blocks.sh", "variable", "aws_instance"]
+      evaluator: rules
       effectiveness_threshold: 0.6

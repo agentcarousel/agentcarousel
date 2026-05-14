@@ -75,7 +75,7 @@
   "source_skill_path": "agentcarousel/skills/cmmc-assessor/SKILL.md",
   "updated_at": "2026-05-09T00:00:00Z",
   "validity_scope": {
-    "type": "until_model_update",
-    "expires_at": null
+    "expires_at": null,
+    "type": "until_model_update"
   }
 }
