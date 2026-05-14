@@ -40,10 +40,10 @@ agentcarousel init --agent my-agent
 agentcarousel test fixtures/skills/my-skill.yaml --offline true
 
 # Validate fixture schema and rules
-agentcarousel validate fixtures/skills/aibom-auditor.yaml
+agentcarousel validate fixtures/skills/customer-support.yaml
 
 # Evaluate (mock by default)
-agentcarousel eval fixtures/skills/aibom-auditor.yaml
+agentcarousel eval fixtures/skills/customer-support.yaml
 
 # Export evidence bundle
 agentcarousel export <RUN-ID>
@@ -68,7 +68,7 @@ agentcarousel eval fixtures/ \
 # Narrow to specific cases by id glob or tag
 agentcarousel eval fixtures/ \
   --evaluator all --judge \
-  --filter "aibom-auditor/judge-*" \
+  --filter "customer-support/judge-*" \
   --filter-tags certification
 ```
 
@@ -111,18 +111,18 @@ agentcarousel bundle verify fixtures/bundles/customer-support
 agentcarousel bundle verify my-bundle.tar.gz
 
 # Pull bundle manifest + artifacts from the registry
-agentcarousel bundle pull aibom-auditor-1.0.0 --url "https://api.agentcarousel.com"
+agentcarousel bundle pull customer-support-1.0.0 --url "https://api.agentcarousel.com"
 ```
 
 ## Publish to registry
 
 ```bash
 # Publish bundle + evidence in one flow
-agentcarousel publish fixtures/bundles/aibom-auditor \
+agentcarousel publish fixtures/bundles/customer-suppport \
   --url "https://api.agentcarousel.com"
 
 # Publish multiple matching local runs (newest first)
-agentcarousel publish fixtures/bundles/aibom-auditor \
+agentcarousel publish fixtures/bundles/customer-support \
   --url "https://api.agentcarousel.com" \
   --all-runs --limit 5
 ```
@@ -131,27 +131,14 @@ agentcarousel publish fixtures/bundles/aibom-auditor \
 
 ```bash
 # Registry trust-state check
-agentcarousel trust-check aibom-auditor@1.0.0 \
+agentcarousel trust-check customer-support@1.0.0 \
   --url "https://api.agentcarousel.com"
 
 # Optional offline attestation verification
-agentcarousel trust-check aibom-auditor@1.0.0 \
+agentcarousel trust-check customer-support@1.0.0 \
   --url "https://api.agentcarousel.com" \
-  --attestation ./attestation-aibom-auditor-1.0.0.json \
+  --attestation ./attestation-customer-support-1.0.0.json \
   --minisign-pubkey ./your-minisign.pub
-```
-
-## Shell completions
-
-```bash
-# Zsh
-agc completions zsh > ~/.zsh/completions/_agc
-
-# Bash
-agc completions bash > /etc/bash_completion.d/agc
-
-# Fish
-agc completions fish > ~/.config/fish/completions/agc.fish
 ```
 
 ## Contributions

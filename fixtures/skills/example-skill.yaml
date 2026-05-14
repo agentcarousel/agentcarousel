@@ -1,0 +1,30 @@
+schema_version: 1
+skill_or_agent: example-skill
+cases:
+  - id: example-skill/positive
+    tags: [smoke, happy-path]
+    input:
+      messages:
+        - role: user
+          content: "Summarize this short note."
+    expected:
+      tool_sequence: []
+      output:
+        - kind: contains
+          value: "Summary"
+  - id: example-skill/tool-call
+    tags: [smoke, happy-path]
+    description: "Uses a tool and returns a short answer."
+    input:
+      messages:
+        - role: user
+          content: "Check inventory for Widget A."
+    expected:
+      tool_sequence:
+        - tool: inventory_lookup
+          order: strict
+          args_match:
+            item: "Widget A"
+      output:
+        - kind: contains
+          value: "Widget A"

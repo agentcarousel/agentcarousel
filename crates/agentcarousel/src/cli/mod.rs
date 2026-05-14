@@ -31,7 +31,7 @@ use config::{apply_history_db_env, load_config};
 #[command(
     name = "agentcarousel",
     version,
-    about = "Agent & skill evaluation CLI: validate, test, eval, report, init, bundle (pack/verify/pull), export, trust-check. Quick start (no API keys): agentcarousel validate fixtures/skills/aibom-auditor.yaml && agentcarousel test fixtures/skills/aibom-auditor.yaml fixtures/skills/terraform-sentinel-scaffold.yaml --filter-tags smoke --offline true. Use `agentcarousel SUBCOMMAND -h` for flags and examples."
+    about = "Agent & skill evaluation CLI: validate, test, eval, report, init, bundle (pack/verify/pull), export, trust-check. Quick start (no API keys): agentcarousel validate fixtures/skills/customer-support.yaml && agentcarousel test fixtures/skills/customer-support.yaml fixtures/skills/terraform-sentinel-scaffold.yaml --filter-tags smoke --offline true. Use `agentcarousel SUBCOMMAND -h` for flags and examples."
 )]
 pub struct Cli {
     #[arg(long, global = true)]
@@ -67,7 +67,7 @@ enum Command {
     Report(report::ReportArgs),
     /// Create `fixtures/{name}.yaml` from a template. Example: agentcarousel init --skill my-new-skill.
     Init(InitArgs),
-    /// Pack, verify, or pull a bundle (directory, bundle.manifest.json, .tar.gz, or registry id). Example: agentcarousel bundle verify fixtures/bundles/aibom-auditor.
+    /// Pack, verify, or pull a bundle (directory, bundle.manifest.json, .tar.gz, or registry id). Example: agentcarousel bundle verify fixtures/bundles/customer-support.
     Bundle(bundle::BundleArgs),
     /// Publish bundle + evidence to registry in one flow.
     Publish(publish::PublishArgs),
