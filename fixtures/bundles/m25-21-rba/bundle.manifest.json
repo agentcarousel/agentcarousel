@@ -33,11 +33,11 @@
   "fixtures": [
     {
       "path": "../../skills/m25-21-rba.yaml",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "e0805c482bf3ee5792a5469f98db2e8d631e4ddb3af4e57f28e3c647ff6cefe0"
     },
     {
       "path": "../../golden/m25-21-rba/rba-determination.md",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "23d42d7c3b85d3c9b7a1708d74b5b02acc519917f00162d9ac70438ca079193f"
     }
   ],
   "judge_evaluator": true,
@@ -45,7 +45,7 @@
   "mocks": [
     {
       "path": "../../../mocks/agent-response.json",
-      "sha256": "17e4e409788f67ed28d697f10427e3e486177a94721eb13ceee9428bf4cd4a24"
+      "sha256": "7f6edf6bb0ff97dbe4986cb9f2f40082bb5de5e526cb7d4cac6dd60668fe9b70"
     }
   ],
   "negative_cases": [

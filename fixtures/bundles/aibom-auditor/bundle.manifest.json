@@ -33,11 +33,11 @@
   "fixtures": [
     {
       "path": "../../skills/aibom-auditor.yaml",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "3eb2ffd40abfed789ddba3eb1035ce1e59096f5d9efd212a8522029ff02b8bc4"
     },
     {
       "path": "../../golden/aibom-auditor/sample-aibom.json",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "68cc56c9784c194715aa1649fe4a76002fcfb8fc98dc325961e6f122f6da6f80"
     }
   ],
   "judge_evaluator": true,
@@ -45,7 +45,7 @@
   "mocks": [
     {
       "path": "../../../mocks/agent-response.json",
-      "sha256": "17e4e409788f67ed28d697f10427e3e486177a94721eb13ceee9428bf4cd4a24"
+      "sha256": "7f6edf6bb0ff97dbe4986cb9f2f40082bb5de5e526cb7d4cac6dd60668fe9b70"
     }
   ],
   "negative_cases": [
