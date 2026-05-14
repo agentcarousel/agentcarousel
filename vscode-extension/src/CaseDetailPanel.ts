@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { FixtureCase, FixtureFile, RubricItem, resolveEvaluatorKind } from './types';
@@ -67,7 +68,7 @@ export class CaseDetailPanel {
 // ── HTML ──────────────────────────────────────────────────────────────────────
 
 function buildHtml(c: FixtureCase, f: FixtureFile): string {
-  const nonce = Math.random().toString(36).slice(2);
+  const nonce = crypto.randomBytes(16).toString('hex');
   const evaluatorKind = resolveEvaluatorKind(c, f.defaults);
 
   const skillName = f.skill_or_agent;

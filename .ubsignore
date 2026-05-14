@@ -1,0 +1,17 @@
+# Vendored documentation site assets (third-party bundles, lunr search library)
+site/assets/
+
+# Compiled TypeScript output (source is vscode-extension/src/)
+vscode-extension/out/
+
+# VS Code extension dependencies
+vscode-extension/node_modules/
+
+# Rust doc output
+target/doc/
+
+# Git worktrees (scanned separately if needed)
+.worktrees/
+
+# Python virtual environment
+venv/

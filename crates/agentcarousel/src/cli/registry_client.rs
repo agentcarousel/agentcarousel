@@ -15,6 +15,10 @@ pub struct RegistryClient {
 
 impl RegistryClient {
     pub fn new(base_url: &str, token: &str) -> Result<Self, String> {
+        if !token.is_empty() {
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
+                .map_err(|_| "API token contains invalid header characters".to_string())?;
+        }
         let http = Client::builder()
             .timeout(Duration::from_secs(60))
             .build()
