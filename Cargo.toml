@@ -10,7 +10,7 @@ rust-version = "1.95"
 
 [profile.release]
 opt-level = "z"
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"

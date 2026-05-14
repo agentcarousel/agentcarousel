@@ -1,6 +1,6 @@
 [package]
 name = "agentcarousel"
-version = "0.4.8"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.95"
 description = "Evaluate agents and skills with YAML fixtures, run cases (mock or live), and keep run rows in SQLite for reports and evidence export."
@@ -25,7 +25,7 @@ path = "src/bin/agc.rs"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
 console = "0.16.3"
 flate2 = "1"

@@ -33,6 +33,10 @@ impl ProcessEvaluator {
                 "process_cmd executable must be a relative path without '..'",
             ));
         }
+        eprintln!(
+            "WARN: process evaluator will run `{}` from fixture config — only use with trusted fixtures",
+            &command[0]
+        );
         Ok(Self { command })
     }
 }

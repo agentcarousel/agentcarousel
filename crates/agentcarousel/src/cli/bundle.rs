@@ -16,8 +16,11 @@ use super::exit_codes::ExitCode;
 use super::registry_client::{resolve_registry_url, RegistryClient};
 use super::GlobalOptions;
 
-/// Pack, verify, or pull fixture bundles (manifest + tarball).
+/// Pack, verify, or pull fixture bundles.
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc bundle pack fixtures/bundles/customer-support\n  agc bundle verify fixtures/bundles/customer-support\n  agc bundle pull customer-support-1.0.0 --url https://registry.example.com"
+)]
 pub struct BundleArgs {
     #[command(subcommand)]
     command: BundleCommand,
