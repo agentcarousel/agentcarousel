@@ -64,7 +64,6 @@
   "open_items": [
     "OI-001: Compute and replace sha256 placeholders after initial bundle pack",
     "OI-002: Advance to stable certification track after carousel runs",
-    "OI-003: Cross-reference with cmmc-assessor bundle for CUI/high-impact overlap cases"
   ],
   "owners": [
     "@agentcarousel"

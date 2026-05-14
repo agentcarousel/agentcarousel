@@ -1,126 +1,101 @@
 [
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/judge-spot-check" },
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/judge-spot-check"
+    },
     "response": {
-      "content": "AC: Partially Met — annual access reviews only; stale entitlement risk. IA: Partially Met — MFA for VPN but not workstations. SI: Not Met — antivirus present but no vulnerability scanning program. Highest risks: AC review cadence, IA workstation MFA gap, SI missing continuous vuln assessment."
+      "content": "# MANDATORY \u2014 enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"judge_spot\" {\n  name = \"ci\"\n}\n\nStarter stub; TFE plan governs truth."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "terraform-sentinel-scaffold/judge-spot-check" },
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/positive-aws-mfa"
+    },
     "response": {
-      "content": "# MANDATORY — enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"judge_spot\" {\n  name = \"ci\"\n}\n\nStarter stub; TFE plan governs truth."
+      "content": "# MANDATORY \u2014 enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"example\" {\n  name = \"ci\"\n}\n\nStarter stub only; TFE run governs truth after terraform plan."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/positive-gap-analysis" },
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/positive-azure-encryption"
+    },
     "response": {
-      "content": "CMMC gap (CI mock). AC domain: Partially Met. IA domain: Met. CM IR AU SC SI RA CA MP PS PE MA AT — all fourteen NIST 800-171 families addressed with Met, Partially Met, Not Met, and OTS verdicts.\n\n110 practices assessed; SPRS -47 using DoD Assessment Methodology baseline.\n\nPOA&M table:\n| Practice ID | Finding | Action | Date |\n| 3.1.1 | gap | remediate | 2026-06-01 |\n\nRequire document evidence for MFA claims per AC.\n\nNo invented practice 3.14.99 beyond scope."
+      "content": "# MANDATORY \u2014 require-storage-encryption.sentinel\n# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account\n\nresource \"azurerm_storage_account\" \"example\" {\n  # enable_https_traffic_only = true\n  # min_tls_version = \"TLS1_2\"\n}\n"
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/positive-sprs-calculation" },
+    "args_match": {
+      "case_id": "rag-qa/positive-context-answer"
+    },
     "response": {
-      "content": "SPRS score is 65 after deductions from baseline 110 using DoD Assessment Methodology. Deduct points for each OTS practice. Highest priority: remediate 3.1.2 access control gap first, then 3.3.1 logging, then prioritization for remaining 5-point items."
+      "content": "The Eiffel Tower stands 330 metres tall, as stated in the provided context."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "terraform-sentinel-scaffold/positive-aws-mfa" },
+    "args_match": {
+      "case_id": "rag-qa/positive-citation"
+    },
     "response": {
-      "content": "# MANDATORY — enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"example\" {\n  name = \"ci\"\n}\n\nStarter stub only; TFE run governs truth after terraform plan."
+      "content": "According to DOC-001, the device must be powered off before removing the battery."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "terraform-sentinel-scaffold/positive-azure-encryption" },
+    "args_match": {
+      "case_id": "rag-qa/error-missing-context"
+    },
     "response": {
-      "content": "# MANDATORY — require-storage-encryption.sentinel\n# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account\n\nresource \"azurerm_storage_account\" \"example\" {\n  # enable_https_traffic_only = true\n  # min_tls_version = \"TLS1_2\"\n}\n"
+      "content": "I cannot answer this question because no context was provided about the city."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "rag-qa/positive-context-answer" },
-    "response": { "content": "The Eiffel Tower stands 330 metres tall, as stated in the provided context." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "rag-qa/positive-citation" },
-    "response": { "content": "According to DOC-001, the device must be powered off before removing the battery." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "rag-qa/error-missing-context" },
-    "response": { "content": "I cannot answer this question because no context was provided about the city." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "tool-call-correctness/positive-single-tool" },
-    "response": { "content": "Product SKU-42 is priced at $29.99 with 45 units in stock." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "tool-call-correctness/positive-sequence" },
-    "response": { "content": "GDPR compliance requires organizations to obtain explicit consent before processing personal data." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "tool-call-correctness/error-not-found" },
-    "response": { "content": "Product SKU-99 was not found in the catalog. Please verify the SKU and try again." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "example-skill/positive" },
-    "response": { "content": "Summary: short note." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "example-skill/tool-call" },
-    "response": { "content": "Widget A has 12 units available." }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/positive-cui-scoping" },
+    "args_match": {
+      "case_id": "tool-call-correctness/positive-single-tool"
+    },
     "response": {
-      "content": "CUI Boundary Classification — Acme Defense LLC\n\nDoD CMMC Asset Taxonomy Applied:\n\nCUI Assets (in scope):\n- Engineering workstations (12): CUI asset — directly process and store CUI technical drawings; in scope\n- File server FS-01: CUI asset — stores CUI drawings and specifications; FS-01 is in scope for CMMC Level 2 assessment\n- Microsoft 365 GCC High: CUI asset — GCC High email and SharePoint handle CUI collaboration; GCC High in scope for CMMC Level 2\n\nSecurity Protection Assets (in scope):\n- Jump server JMP-01: security protection asset — provides admin access to CUI systems; must be included in assessment scope\n- Managed SOC provider: security protection asset — SOC provider receives log feeds from CUI systems; SOC provider requires DFARS 252.204-7012 flow-down assessment as an External Service Provider (ESP/MSP)\n\nContractor Risk Managed Assets:\n- Azure DevOps (commercial): contractor risk managed — internal tooling only; no CUI present; out-of-scope or limited-scope assessment\n\nOut of Scope:\n- HR server HR-01: out of scope — employee records only; no CUI access or processing\n- IT Help Desk system: out of scope — no CUI access\n- Salesforce CRM: out of scope — no CUI data\n- Payroll processor: out of scope — payroll data only; no CUI\n\nKey Scoping Determinations: M365 GCC High in scope — CUI resides in SharePoint and email. Commercial Azure DevOps is out of scope or contractor risk managed — no CUI present. MSP/SOC provider flow-down under DFARS 7012 must be confirmed before assessment closes."
+      "content": "Product SKU-42 is priced at $29.99 with 45 units in stock."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/positive-subcontractor-flowdown" },
+    "args_match": {
+      "case_id": "tool-call-correctness/positive-sequence"
+    },
     "response": {
-      "content": "Subcontractor DFARS Flow-Down Obligations — Tier-2 CUI Handler\n\nApplicable clauses: DFARS 252.204-7012 (Safeguarding), 252.204-7019 (SPRS Reporting), and 252.204-7021 (CMMC) — all three flow down and apply equally to you as a tier-2 subcontractor.\n\nAs a tier-2 subcontractor handling CUI for Lockheed Martin, all three DFARS clauses flow down and apply equally:\n\n1. DFARS 252.204-7012 (Safeguarding CUI): You must implement all 110 NIST SP 800-171 Rev 2 practices for any system that handles, stores, or transmits CUI. The clause flows down regardless of subcontract tier — 7012 applies to you the same as to a direct contractor.\n\n2. DFARS 252.204-7019 (SPRS Reporting): You must submit a current SPRS self-assessment score to the Supplier Performance Risk System database. SPRS must be submitted and current before you begin CUI handling. The prime (Lockheed) must verify your SPRS score in the database prior to contract performance.\n\n3. DFARS 252.204-7021 (CMMC Requirement): You must achieve the CMMC Level specified in the prime's contract. 7021 flows down to all tiers that touch CUI — tier-2 status does not reduce this obligation.\n\nSPRS Obligation:\nSPRS score must be submitted to the SPRS database and reflect a current self-assessment (within 3 years). Lockheed Martin must verify your SPRS submission exists and confirm the score before allowing CUI access. The prime may require contractual attestation in addition to the SPRS database check.\n\nTier-2 Distinction:\nYour tier-2 status does not change your obligations. DFARS flow-down provisions apply regardless of tier — any subcontractor handling CUI under a DoD contract chain has the same obligation as a direct prime. CUI handling triggers the requirements irrespective of whether you are tier-1, tier-2, or deeper. The obligation is the same at every tier."
+      "content": "GDPR compliance requires organizations to obtain explicit consent before processing personal data."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/positive-poam-table" },
+    "args_match": {
+      "case_id": "tool-call-correctness/error-not-found"
+    },
     "response": {
-      "content": "POA&M Table — Acme Defense LLC CMMC Level 2 OTS Findings\n\nFindings covered: 3.1.3 (AC — DLP), 3.5.3 (IA — MFA), 3.3.1 (AU — log retention), 3.13.3 (SC — PAW), 3.14.1 (SI — vuln scan)\n\n| Practice ID | Domain | Gap Description | Remediation Action | Responsible Party | Target Completion Date |\n|-------------|--------|-----------------|-------------------|-------------------|----------------------|\n| 3.1.3 | AC | No DLP solution; CUI can egress via email without controls; email gateway logs confirm no DLP policy or enforcement | Deploy email-gateway DLP controls to block CUI egress; configure data classification rules for CUI content | IT Security | 2026-09-30 |\n| 3.5.3 | IA | MFA enforced for O365 only; on-premises CUI systems use password-only; AD GPO export confirms no local MFA | Enable two-factor MFA on all CUI system logons via Azure AD MFA or hardware token; update GPO and policy | IT Security | 2026-08-31 |\n| 3.3.1 | AU | Audit log retention set to 30 days; 90-day minimum required; Windows Event Viewer config confirms 30-day policy | Configure centralized log retention to 90 days on all CUI systems; evaluate SIEM for central log aggregation | IT Operations | 2026-07-31 |\n| 3.13.3 | SC | System admin functions accessible from same workstations used for CUI work; no PAW policy | Implement privileged access PAW workstations for all admin roles; enforce separation via policy and technical controls | IT Security | 2026-10-31 |\n| 3.14.1 | SI | No formal vulnerability scanning program; ad hoc patching only; no scan reports available | Install automated scan tooling (Tenable or Qualys) and establish patch management SLA with tracked remediation | IT Operations | 2026-09-30 |"
+      "content": "Product SKU-99 was not found in the catalog. Please verify the SKU and try again."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/failure-mode-no-ssp" },
+    "args_match": {
+      "case_id": "example-skill/positive"
+    },
     "response": {
-      "content": "To perform a CMMC 2.0 gap analysis, a System Security Plan (SSP) is required. Without an SSP or equivalent artifact documentation, I cannot assess your controls, identify gaps, or compute an SPRS score.\n\nPlease provide your SSP or a control implementation summary before we begin.\n\nWhat I need before proceeding:\n1. System Security Plan (SSP) — documenting implemented NIST SP 800-171 controls with artifact evidence\n2. Asset inventory identifying which systems handle, store, or transmit CUI\n3. Any prior assessment results, audit findings, or SPRS submissions\n\nI cannot produce a gap list, domain verdicts, or SPRS assessment without this documentation. Any score generated without an SSP would be speculative and unsuitable for DFARS compliance purposes. Please provide the SSP so the assessment can proceed."
+      "content": "Summary: short note."
     }
   },
   {
     "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/edge-case-partial-practices" },
+    "args_match": {
+      "case_id": "example-skill/tool-call"
+    },
     "response": {
-      "content": "SPRS Score Calculation — 50 Not Met Practices\n\nBaseline: 110 (DoD Assessment Methodology)\n\nHigh-severity (5-point) Not Met practices identified:\n- 3.14.1 (SI) — identify and correct system flaws\n- 3.14.2 (SI) — provide malicious code protection\n- 3.14.4 (SI) — update malicious code protections\n- 3.1.2 (AC) — limit system access types and functions\n- 3.1.3 (AC) — control CUI flow between networks\n- 3.1.5 (AC) — employ principle of least privilege\nSubtotal: 6 practices × 5 points = 30 points deducted\n\nMedium-severity (3-point) Not Met practices (22 practices across RA, CA, MP, PS, PE, MA, AT, remaining SI):\nSubtotal: 22 × 3 = 66 points deducted\n\nLow-severity (1-point) Not Met practices (remaining 22 practices):\nSubtotal: 22 × 1 = 22 points deducted\n\nEstimated SPRS score: 110 − 30 − 66 − 22 = SPRS -8\nNote: Exact score requires mapping each practice ID to official DoD severity weights; plausible range is -90 to +20 depending on assignments.\n\nSystem and Information Integrity (SI): Not Met across all 7 practices — highest concentration of 5-point weight items; address first.\nRisk Assessment (RA): all 3 practices not met — ongoing risk assessment program absent.\n\nTop 5 prioritized remediation items (highest SPRS point recovery per practice):\n1. First priority: 3.14.1 (SI) — 5-point item; flaw identification program entirely absent; high exploitability risk\n2. Second: 3.1.2 (AC) — 5-point; access type restrictions not enforced; lateral movement risk\n3. Third: 3.14.2 (SI) — 5-point; malicious code protection gaps across all SI systems\n4. Fourth: 3.1.3 (AC) — 5-point; CUI flow control not implemented\n5. Fifth: 3.1.5 (AC) — 5-point; least privilege not enforced organization-wide"
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": { "case_id": "cmmc-assessor/edge-case-c3pao-prep" },
-    "response": {
-      "content": "C3PAO Assessment Preparation Checklist — 90-Day Plan\n\nYour SPRS score of -12 indicates approximately 122 points of deductions above the 110 baseline. The C3PAO assessor team (DIBCAC-accredited) will apply NIST SP 800-171A assessment methodology: Examine, Interview, and Test methods.\n\nAssessment Methodology (800-171A):\n- Examine: Document review — policy, SSP, procedures, configuration baseline records (evidence of implementation)\n- Interview: Personnel discussions — proof of organizational awareness and role-based control knowledge\n- Test: Technical verification — operational proof of control function through active testing\n\nEvidence Package Summary by Domain:\nAC — GPO export for access control policy; user access review records; privileged account inventory listing AC controls\nIA — MFA config and authentication log showing IA enforcement; service account inventory; AD password policy GPO\nCM — configuration baseline config documents for CUI systems; software inventory; change management log\nAU — audit log retention policy; centralized log management config; sample log export proving 90-day retention\nSC — firewall baseline config and network diagram; segmentation scan results showing SC boundary controls\nSI — vulnerability scan reports (last 30 days); patch log and flaw remediation policy for SI practices\nIR — current IR plan; tabletop exercise record; CISA/US-CERT reporting procedures\nRA — formal risk assessment (within 12 months); risk register\nCA — security assessment plan and results; POA&M tracking open items\nMP — removable media policy; media sanitization log\nPS — background check records; personnel screening policy\nPE — physical access control log; visitor records; CUI storage area designation\nMA — maintenance log for CUI systems; remote maintenance procedures\nAT — security awareness training records; CUI-specific training completion log\n\nSPRS Remediation Strategy (from SPRS -12 to positive territory):\nYour SPRS -12 score means you have deductions totaling approximately 122 points. Focus on the 5-point weight practices first — each remediated 5 point highest-weight OTS item recovers 5 SPRS points. Remediating 3–5 of the highest weight 5-point practices could shift SPRS into positive territory before the C3PAO assessment.\n\nAssessment prep checklist before C3PAO assessment:\n- [ ] Update SSP to reflect current control implementation\n- [ ] Complete evidence packages for all 14 domains (see above)\n- [ ] Close highest-priority 5-point OTS findings\n- [ ] Conduct internal mock review using 800-171A Examine/Interview/Test methods\n- [ ] Verify current SPRS self-assessment is posted in SPRS database\n- [ ] Confirm POA&M is current and tracks all open items"
+      "content": "Widget A has 12 units available."
     }
   }
 ]

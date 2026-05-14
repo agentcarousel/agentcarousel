@@ -98,7 +98,7 @@
         "algorithm": "SHA-256",
         "value": "sha256:a4c2f8d9e1b07432f65890abcdef01234567890abcdef01234567890abcdef01"
       },
-      "description": "System prompt instructing the assistant to act as a CMMC 2.0 gap analysis expert",
+      "description": "System prompt instructing the assistant to act as a compliance gap analysis expert",
       "properties": [
         { "name": "prompt-type", "value": "system" },
         { "name": "token-count-approx", "value": "320" }

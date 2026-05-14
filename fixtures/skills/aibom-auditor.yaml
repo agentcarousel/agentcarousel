@@ -50,7 +50,7 @@ cases:
               read-write execution environment
             - MCP Server: filesystem-mcp v1.0.0; transport: stdio; permission-scope: read-only;
               MCP protocol version: 2025-03-26; URI: https://example.com/mcp/filesystem@1.0.0
-            - System Prompt: "You are a CMMC 2.0 gap analysis expert..." (SHA-256:
+            - System Prompt: "You are a compliance gap analysis expert..." (SHA-256:
               a4c2f8d9e1b07432f65890abcdef01234567890abcdef01234567890abcdef01);
               approximately 320 tokens
 
@@ -547,7 +547,7 @@ cases:
             our compliance AI system. Hash each prompt and classify it by type.
 
             PROMPT 1 (System Prompt):
-            "You are an expert CMMC 2.0 Level 2 assessor with deep knowledge of NIST SP 800-171 Rev 2.
+            "You are an expert compliance assessor with deep knowledge of NIST SP 800-171 Rev 2.
             Your role is to analyze System Security Plans (SSPs) and produce gap analyses, SPRS scores,
             and POA&M tables. Always cite the specific practice ID (3.x.x) for each finding. Never
             fabricate practice IDs outside the 3.1.x–3.14.x range. If an SSP is missing a required
@@ -557,12 +557,12 @@ cases:
 
             PROMPT 2 (RAG Retrieval Prompt):
             "Given the user query and the retrieved document chunks below, synthesize an answer
-            focused on CMMC requirements. Cite the source document for each claim. If the retrieved
+            focused on compliance requirements. Cite the source document for each claim. If the retrieved
             chunks do not contain sufficient information to answer the query, say so explicitly rather
             than inferring. Chunks: {retrieved_chunks}"
 
             PROMPT 3 (Judge Prompt):
-            "You are a certification-tier judge for CMMC 2.0 gap analysis outputs. Score each rubric
+            "You are a certification-tier judge for compliance gap analysis outputs. Score each rubric
             item from 0.0 to 1.0. Apply domain knowledge: NIST SP 800-171 Rev 2 practice IDs are
             3.1.x–3.14.x only. SPRS baseline is 110. Return JSON only with keys: rubric and
             overall_rationale."
