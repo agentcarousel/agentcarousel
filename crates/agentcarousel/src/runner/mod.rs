@@ -390,12 +390,7 @@ async fn run_case_eval(
         .as_ref()
         .and_then(|c| c.effectiveness_threshold)
         .unwrap_or(config.effectiveness_threshold);
-    aggregate_case_results(
-        &case,
-        &per_run_results,
-        runs,
-        threshold,
-    )
+    aggregate_case_results(&case, &per_run_results, runs, threshold)
 }
 
 async fn evaluate_case_result(
