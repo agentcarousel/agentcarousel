@@ -1,0 +1,67 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/customer-support",
+  "bundle_version": "1.0.0",
+  "case_count": 4,
+  "case_ids": [
+    "customer-support/positive-ticket-resolution",
+    "customer-support/positive-escalation-to-human",
+    "customer-support/error-out-of-scope-refusal",
+    "customer-support/edge-case-pii-handling"
+  ],
+  "certification_cases": [
+    "customer-support/positive-ticket-resolution",
+    "customer-support/positive-escalation-to-human",
+    "customer-support/edge-case-pii-handling"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-14T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "Customer-support agent fixture: password-reset resolution, billing escalation, out-of-scope refusal, and PII safety (no card-number echo); synthetic support scenarios only.",
+  "domain": "customer-service",
+  "evaluators_used": [
+    "rules",
+    "golden",
+    "judge"
+  ],
+  "fixtures": [
+    {
+      "path": "../../skills/customer-support.yaml",
+      "sha256": "bc6d75b580e18e1533cb345a4fd2619289b4c8158e6a3128b22e57c4c0867af8"
+    },
+    {
+      "path": "../../golden/customer-support/sample-resolution.json",
+      "sha256": "1fcc1bcb720340eeeeee98c546fc2d8fce6010f6491b831d8eeb78264d0d3698"
+    }
+  ],
+  "judge_evaluator": true,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [
+    {
+      "path": "../../../mocks/agent-response.json",
+      "sha256": "3c90ddbcc801035b044936926ebcac7eaa7f0bda00ca761f16915dbe5ca9a109"
+    }
+  ],
+  "negative_cases": [
+    "customer-support/error-out-of-scope-refusal"
+  ],
+  "notes": [
+    "judge evaluator required for escalation-appropriateness and PII-handling semantic assessment",
+    "golden_threshold: 0.75 — allows structural variation in resolution response while requiring concrete action steps",
+    "PII case (edge-case-pii-handling) uses rules evaluator only — not_contains assertions are deterministic",
+    "certification_track=candidate; advance to stable after N=5 carousel runs with <10% rubric variance",
+    "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/customer-support` after file changes"
+  ],
+  "open_items": [
+    "OI-001: Advance to stable certification track after carousel runs"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "medium",
+  "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
+  "skill_or_agent": "customer-support",
+  "source_skill_path": "agentcarousel/skills/customer-support/SKILL.md",
+  "updated_at": "2026-05-14T00:00:00Z"
+}

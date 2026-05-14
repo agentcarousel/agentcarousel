@@ -97,5 +97,41 @@
     "response": {
       "content": "Widget A has 12 units available."
     }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "customer-support/positive-ticket-resolution"
+    },
+    "response": {
+      "content": "I'm sorry to hear you're having trouble logging in! Here's how to reset your password:\n\n1. Go to the login page and click 'Forgot Password' below the sign-in button.\n2. Enter the email address associated with your account.\n3. Check your inbox for a password reset email — it usually arrives within a few minutes.\n4. Click the reset link in the email and follow the prompts to set a new password.\n\nIf you don't see the email within 5 minutes, please check your spam folder. Let me know if you need any further assistance!"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "customer-support/positive-escalation-to-human"
+    },
+    "response": {
+      "content": "I completely understand how frustrating this must be — being overcharged for four months without resolution is unacceptable, and I sincerely apologize for that experience.\n\nThis billing dispute requires review of your full payment history and previous support interactions, which is something our billing specialists are best equipped to handle. I'm escalating this to our billing team right now so they can investigate the overcharges and process the appropriate refund.\n\nYou'll receive a follow-up from a billing specialist within 1 business day. Is there anything else I can help you with in the meantime?"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "customer-support/error-out-of-scope-refusal"
+    },
+    "response": {
+      "content": "That sounds like a fun idea for your colleague! Unfortunately, writing poems is outside the scope of what I'm able to help with — I'm here specifically to assist with account questions, billing issues, and product support.\n\nFor creative writing, you might try a general-purpose AI assistant. Is there anything account-related I can help you with today?"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "customer-support/edge-case-pii-handling"
+    },
+    "response": {
+      "content": "Thank you for reaching out about your payment! For your security, I'm not able to accept or process card details through this chat — sharing sensitive payment information here isn't safe, and our systems are not designed to handle raw card data via support messages.\n\nTo update your payment method securely, please:\n1. Log in to your account and go to Account Settings > Billing.\n2. Click 'Update Payment Method' and enter your new card details on our encrypted payment page.\n\nThis ensures your card information is handled safely. Let me know if you run into any trouble accessing your account settings!"
+    }
   }
 ]

@@ -126,13 +126,6 @@ temp/
 docs/rba/
 *.ubsignore
 
-# Retired fixtures — cmmc-assessor replaced by new agents
-fixtures/skills/cmmc-assessor.yaml
-fixtures/bundles/cmmc-assessor/
-fixtures/golden/cmmc-assessor/
-docs/judge-prompts/cmmc-assessor-v1.md
-
-
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

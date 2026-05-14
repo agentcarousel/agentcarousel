@@ -1,0 +1,28 @@
+{
+  "_comment": "agentcarousel golden file — do not edit without bumping bundle_version",
+  "_meta": {
+    "bundle": "agentcarousel/customer-support@1.0.0",
+    "last_updated": "2026-05-14",
+    "evaluator_notes": [
+      "golden_threshold: 0.75 — allow 25% variation in phrasing and structure",
+      "REQUIRED: at least one concrete resolution action (reset link path, step, or portal reference)",
+      "REQUIRED: professional tone — opening acknowledgment present",
+      "REQUIRED: closing offer for further assistance",
+      "ALLOWED: variation in exact phrasing, step ordering, or number of steps provided",
+      "ALLOWED: additional context (e.g. note about account lockout after N attempts)",
+      "FAIL: response that only acknowledges the problem without providing any resolution action",
+      "FAIL: response that asks unnecessary clarifying questions before providing the reset path"
+    ]
+  },
+  "response": {
+    "opening": "I'm sorry to hear you're having trouble logging in! Let me help you get back into your account.",
+    "resolution_steps": [
+      "Go to the login page and click 'Forgot Password' below the sign-in button.",
+      "Enter the email address associated with your account.",
+      "Check your inbox for a password reset email — it usually arrives within a few minutes.",
+      "Click the reset link in the email and follow the prompts to create a new password."
+    ],
+    "additional_notes": "If you don't receive the email within 5 minutes, please check your spam folder. The reset link expires after 24 hours.",
+    "closing": "Let me know if you run into any trouble with these steps or if there's anything else I can help you with!"
+  }
+}
