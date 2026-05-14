@@ -1,6 +1,7 @@
 use clap::Parser;
 use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
+use ulid::Ulid;
 
 use super::exit_codes::ExitCode;
 
@@ -181,7 +182,7 @@ fn atomic_replace(current_exe: &std::path::Path, new_binary: &[u8]) -> Result<()
         "could not determine parent directory of the current executable".to_string()
     })?;
 
-    let tmp = parent.join(format!(".agentcarousel-update.{}", std::process::id()));
+    let tmp = parent.join(format!(".agentcarousel-update.{}", Ulid::new()));
 
     std::fs::write(&tmp, new_binary)
         .map_err(|e| format!("failed to write update to {}: {e}", tmp.display()))?;
