@@ -7,6 +7,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use tar::Builder;
+use ulid::Ulid;
 
 use crate::hex_util::hex_lower;
 
@@ -242,7 +243,7 @@ fn verify_bundle(path: Option<&Path>) -> Result<PathBuf, String> {
         }
         if is_gzip_tarball(path) {
             let tmp_dir =
-                std::env::temp_dir().join(format!("agentcarousel-bundle-{}", std::process::id()));
+                std::env::temp_dir().join(format!("agentcarousel-bundle-{}", Ulid::new()));
             if tmp_dir.exists() {
                 fs::remove_dir_all(&tmp_dir).map_err(|err| err.to_string())?;
             }
