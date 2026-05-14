@@ -133,6 +133,10 @@ fixtures/bundles/ambient-documentation-rba/
 fixtures/skills/aibom-auditor.yaml
 fixtures/skills/m25-21-rba.yaml
 fixtures/skills/ambient-documentation-rba.yaml
+fixtures/skills/deslop.yaml
+fixtures/skills/example-skill.yaml
+fixtures/skills/rag-qa.yaml
+fixtures/skills/tool-call-correctness.yaml
 fixtures/golden/aibom-auditor/
 fixtures/golden/m25-21-rba/
 fixtures/golden/ambient-documentation-rba/
