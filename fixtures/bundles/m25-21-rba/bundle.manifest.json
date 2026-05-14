@@ -1,5 +1,9 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "aibom_refs": [
+    "pkg:generic/omb/m-25-21@2025-04-03",
+    "https://www.whitehouse.gov/wp-content/uploads/2025/04/M-25-21-Accelerating-Federal-Use-of-AI.pdf"
+  ],
   "bundle_id": "agentcarousel/m25-21-rba",
   "bundle_version": "1.0.0",
   "case_count": 7,
@@ -69,18 +73,14 @@
     "@agentcarousel"
   ],
   "policy_version": "msp-policy-2026-05",
+  "rba_determination_threshold": 0.8,
   "risk_tier": "high",
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "m25-21-rba",
   "source_skill_path": "agentcarousel/skills/m25-21-rba/SKILL.md",
   "updated_at": "2026-05-08T00:00:00Z",
-  "aibom_refs": [
-    "pkg:generic/omb/m-25-21@2025-04-03",
-    "https://www.whitehouse.gov/wp-content/uploads/2025/04/M-25-21-Accelerating-Federal-Use-of-AI.pdf"
-  ],
   "validity_scope": {
-    "type": "until_model_update",
-    "expires_at": null
-  },
-  "rba_determination_threshold": 0.80
+    "expires_at": null,
+    "type": "until_model_update"
+  }
 }
