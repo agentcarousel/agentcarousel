@@ -135,6 +135,7 @@ cases:
       evaluator: golden
       golden_path: fixtures/golden/ambient-documentation-rba/soap-note.md
       golden_threshold: 0.75
+      effectiveness_threshold: 0.6
 
   # ── Case 2: Medication accuracy — four required fields ────────────────────────
   - id: ambient-documentation-rba/positive-medication-accuracy
@@ -208,6 +209,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a clinical documentation judge assessing medication entry accuracy.
         Score each rubric item from 0.0 to 1.0.
@@ -293,6 +295,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a clinical documentation judge assessing follow-up and referral capture accuracy.
         Score each rubric item from 0.0 to 1.0.
@@ -381,6 +384,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a clinical documentation judge assessing the no-hallucination failure mode.
         Score each rubric item from 0.0 to 1.0.
@@ -472,6 +476,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a clinical documentation judge assessing sensitive disclosure handling.
         Score each rubric item from 0.0 to 1.0.
@@ -637,6 +642,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a clinical documentation judge assessing multilingual encounter handling.
         Score each rubric item from 0.0 to 1.0.
@@ -733,6 +739,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a clinical documentation judge assessing urgent finding escalation handling.
         Score each rubric item from 0.0 to 1.0.

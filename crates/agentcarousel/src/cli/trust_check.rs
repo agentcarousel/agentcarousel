@@ -234,6 +234,14 @@ fn verify_attestation(
     attestation: &Path,
     pubkey: &Path,
 ) -> Result<(), TrustCheckError> {
+    if std::path::Path::new(minisign_bin)
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(TrustCheckError::Runtime(
+            "--minisign-bin path must not contain '..'".to_string(),
+        ));
+    }
     if !attestation.exists() {
         return Err(TrustCheckError::Runtime(format!(
             "attestation file not found: {}",

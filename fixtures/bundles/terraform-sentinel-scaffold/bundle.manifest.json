@@ -36,7 +36,7 @@
   "fixtures": [
     {
       "path": "../../skills/terraform-sentinel-scaffold.yaml",
-      "sha256": "7c7ee0e34aac68a9a00ac40c67295b6ab7a05eba6cd86821a563e3410e06b7c7"
+      "sha256": "fa13d1b5757ae2aa2ff7306af70e7aecf29af0dd7c9cde4e4ee5a190241979c6"
     },
     {
       "path": "../../golden/terraform-sentinel-scaffold/aws-mfa-stub.tf",

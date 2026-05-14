@@ -207,6 +207,7 @@ cases:
       evaluator: golden
       golden_path: fixtures/golden/cmmc-assessor/gap-table.md
       golden_threshold: 0.80
+      effectiveness_threshold: 0.6
 
   # Judge spot-check (use: agentcarousel eval … --evaluator all --judge). Not used by default `--evaluator rules`.
   - id: cmmc-assessor/judge-spot-check
@@ -218,6 +219,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are an expert CMMC 2.0 Level 2 and NIST SP 800-171 Rev 2 assessor acting as an evaluation judge. Score each rubric item from 0.0 to 1.0 using only evidence in the assistant output and the user scenario.
 
@@ -361,6 +363,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a certification-tier judge for CMMC 2.0 Level 2 gap analysis outputs.
 
@@ -462,6 +465,7 @@ cases:
 
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a certification-tier judge for CMMC 2.0 Level 2 gap analysis outputs.
 
@@ -655,6 +659,7 @@ cases:
       evaluator: golden
       golden_path: fixtures/golden/cmmc-assessor/gap-table.md
       golden_threshold: 0.75
+      effectiveness_threshold: 0.6
 
   # ── Case 6: Failure mode — no SSP ─────────────────────────────────────────
   - id: cmmc-assessor/failure-mode-no-ssp
@@ -849,6 +854,7 @@ cases:
             value: '(?i)(-12|SPRS.*-12|-12.*SPRS|5.point|5 point|highest.weight|weight.*5)'
     evaluator_config:
       evaluator: judge
+      effectiveness_threshold: 0.6
       judge_prompt: |
         You are a certification-tier judge for CMMC 2.0 Level 2 gap analysis outputs.
 

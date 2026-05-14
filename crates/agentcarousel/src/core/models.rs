@@ -130,6 +130,7 @@ pub struct EvaluatorConfig {
     pub golden_threshold: Option<f32>,
     pub process_cmd: Option<Vec<String>>,
     pub judge_prompt: Option<String>,
+    pub effectiveness_threshold: Option<f32>,
 }
 
 /// Result of executing one or more fixtures: case outcomes, [`RunSummary`], provenance fields.
