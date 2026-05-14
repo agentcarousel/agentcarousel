@@ -18,7 +18,8 @@ mod test;
 mod trust_check;
 mod validate;
 
-use clap::{ArgAction, Parser, Subcommand};
+use clap::{ArgAction, CommandFactory, Parser, Subcommand};
+use clap_complete::CompleteEnv;
 use std::path::PathBuf;
 
 use config::{apply_history_db_env, load_config};
@@ -93,6 +94,7 @@ pub struct InitArgs {
 /// Parse [`std::env::args`], run the selected subcommand, and return a **process exit code**
 /// (`0` = success; non-zero for validation, config, or runtime failures).
 pub fn run() -> i32 {
+    CompleteEnv::with_factory(Cli::command).complete();
     let cli = Cli::parse();
     let config = match load_config(cli.config.as_deref()) {
         Ok(config) => config,
