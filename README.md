@@ -13,13 +13,13 @@
 
 - **Deterministic by default** - Offline runs with mocks mean same inputs → same outputs, every time.
 - **Built for evidence** - Every run produces a signed artifact (`.tar.gz` + `minisign` attestation) you can hand to an auditor, a reviewer, or your customer's security team.
-- **Live evals when you want them** - plug in OpenAI, Anthropic, Gemini, or OpenRouter as generator and judge. Diff runs. Catch regressions.
-- **Compliance-aware fixtures** - Risk tier, data handling, certification track — the metadata your governance program already tracks, baked into the test format.
+- **Live evals when you want them** - plug in OpenAI, Anthropic, Gemini, or OpenRouter as generator and judge, then diff runs to catch regressions.
+- **Compliance-aware fixtures** - Risk tier, data handling, and certification track: the metadata your governance program already tracks, baked into the test format.
 
 ## Install
 
 ```bash
-# Install (Linux — Windows: download .zip from Releases)
+# Linux install; for Windows, download .zip from Releases
 curl -fsSL https://install.agentcarousel.com | sh
 
 # Homebrew (macOS)
@@ -35,7 +35,7 @@ cargo install agentcarousel
 # Scaffold a fixture
 agentcarousel init --skill my-agent
 
-# Run it offline — no API keys needed
+# Run it offline (no API keys needed)
 agentcarousel test --offline true
 
 # Validate
