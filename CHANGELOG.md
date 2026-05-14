@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - May 2026
+
+- Feature: `agc update` subcommand — checks GitHub for a newer release and installs it in-place with an atomic rename; supports `--check` to print availability without installing.
+- Improved `--help` output: ANSI color styles, concise subcommand summaries, and `after_help` example blocks for `eval`, `test`, `validate`, `bundle`, and `trust-check`.
+- Fix: release binary `strip = true` now correctly strips symbols on macOS (switched from thin LTO to fat LTO).
+- Fix: update temp file uses a ULID instead of the process ID for collision-safe naming.
+- Fix: `process` evaluator now emits a stderr warning when `process_cmd` is used, making the trust requirement explicit.
+
 ## 0.4.8 - May 2026
 
 - Feature: `evaluator_config.effectiveness_threshold` per-case field; cases can now override the global `--effectiveness-threshold` flag with a case-specific pass threshold.
