@@ -50,6 +50,17 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Check bundle manifest hashes are current
+        run: |
+          cargo build --release -p agentcarousel
+          for bundle_dir in fixtures/bundles/*/; do
+            ./target/release/agentcarousel bundle pack "${bundle_dir%/}"
+          done
+          if ! git diff --exit-code fixtures/bundles/; then
+            echo "::error::Bundle manifest sha256 values are stale. Run 'agentcarousel bundle pack' on each bundle and commit the updated manifests."
+            exit 1
+          fi
+
       - id: meta
         name: Resolve release tag
         run: |
@@ -120,7 +131,7 @@ jobs:
           else
             BIN="target/${{ matrix.target }}/release/agentcarousel"
           fi
-          bash scripts/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
+          bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -141,12 +152,12 @@ jobs:
           path: release-assets
 
       - name: Attach install.sh to release assets
-        run: cp install.sh release-assets/install.sh
+        run: cp packaging/install.sh release-assets/install.sh
 
       - name: Write SHA256SUMS and scan
         run: |
-          bash scripts/publish-distribution.sh checksums release-assets
-          bash scripts/publish-distribution.sh scan-release-dir release-assets
+          bash packaging/publish-distribution.sh checksums release-assets
+          bash packaging/publish-distribution.sh scan-release-dir release-assets
           ls -la release-assets
 
       - name: Create GitHub release
@@ -201,7 +212,7 @@ jobs:
       - name: Update Formula
         run: |
           TAG=${{ needs.gate.outputs.release_tag }}
-          bash scripts/update-homebrew.sh "${TAG}" "homebrew-tap/Formula/agentcarousel.rb"
+          bash packaging/update-homebrew.sh "${TAG}" "homebrew-tap/Formula/agentcarousel.rb"
 
       - name: Commit and Push
         working-directory: homebrew-tap
