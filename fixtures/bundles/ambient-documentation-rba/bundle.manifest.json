@@ -1,5 +1,10 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "aibom_refs": [
+    "pkg:generic/fda/ai-ml-samd-action-plan@2021-01",
+    "pkg:generic/hhs/hipaa-security-rule@2013-03",
+    "pkg:generic/joint-commission/ld-04-01-01@2024"
+  ],
   "bundle_id": "agentcarousel/ambient-documentation-rba",
   "bundle_version": "1.0.0",
   "case_count": 8,
@@ -42,6 +47,23 @@
       "sha256": "f80f14f69339a0d2853437c2a2f1f49d9dbe7fc78f3311b97b7788980f389ff0"
     }
   ],
+  "healthcare_specific": {
+    "applicable_tools": [
+      "Nuance DAX Copilot",
+      "Abridge",
+      "Suki",
+      "Nabla",
+      "any ambient clinical documentation AI"
+    ],
+    "clinical_workflow": "ambient_documentation",
+    "patient_safety_critical": true,
+    "regulatory_hooks": [
+      "FDA SaMD AI/ML Action Plan — predetermined change control specifications",
+      "HIPAA Security Risk Analysis §164.308(a)(1) — AI tool risk coverage",
+      "Joint Commission LD.04.01.01 — clinical AI governance documentation",
+      "Malpractice liability — pre-deployment due diligence evidence"
+    ]
+  },
   "judge_evaluator": true,
   "min_agentcarousel_version": "0.2.0",
   "mocks": [
@@ -76,37 +98,15 @@
     "@agentcarousel"
   ],
   "policy_version": "msp-policy-2026-05",
+  "rba_determination_threshold": 0.8,
   "risk_tier": "high",
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "ambient-documentation-rba",
   "source_skill_path": "agentcarousel/skills/ambient-documentation-rba/SKILL.md",
   "updated_at": "2026-05-09T00:00:00Z",
-  "aibom_refs": [
-    "pkg:generic/fda/ai-ml-samd-action-plan@2021-01",
-    "pkg:generic/hhs/hipaa-security-rule@2013-03",
-    "pkg:generic/joint-commission/ld-04-01-01@2024"
-  ],
   "validity_scope": {
-    "type": "until_model_update",
     "expires_at": null,
-    "renewal_trigger": "Re-run required on any vendor model update notification, on fixture set change, or quarterly at minimum for ongoing monitoring compliance."
-  },
-  "rba_determination_threshold": 0.80,
-  "healthcare_specific": {
-    "clinical_workflow": "ambient_documentation",
-    "patient_safety_critical": true,
-    "applicable_tools": [
-      "Nuance DAX Copilot",
-      "Abridge",
-      "Suki",
-      "Nabla",
-      "any ambient clinical documentation AI"
-    ],
-    "regulatory_hooks": [
-      "FDA SaMD AI/ML Action Plan — predetermined change control specifications",
-      "HIPAA Security Risk Analysis §164.308(a)(1) — AI tool risk coverage",
-      "Joint Commission LD.04.01.01 — clinical AI governance documentation",
-      "Malpractice liability — pre-deployment due diligence evidence"
-    ]
+    "renewal_trigger": "Re-run required on any vendor model update notification, on fixture set change, or quarterly at minimum for ongoing monitoring compliance.",
+    "type": "until_model_update"
   }
 }

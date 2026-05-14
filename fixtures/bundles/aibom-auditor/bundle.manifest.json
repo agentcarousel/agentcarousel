@@ -1,5 +1,9 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "aibom_refs": [
+    "pkg:generic/owasp-aibom-spec@1.0.0",
+    "https://owasp.org/www-project-ai-bill-of-materials/"
+  ],
   "bundle_id": "agentcarousel/aibom-auditor",
   "bundle_version": "1.0.0",
   "case_count": 7,
@@ -68,18 +72,14 @@
     "@agentcarousel"
   ],
   "policy_version": "msp-policy-2026-05",
+  "rba_determination_threshold": 0.78,
   "risk_tier": "high",
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "aibom-auditor",
   "source_skill_path": "agentcarousel/skills/aibom-auditor/SKILL.md",
   "updated_at": "2026-05-08T00:00:00Z",
-  "aibom_refs": [
-    "pkg:generic/owasp-aibom-spec@1.0.0",
-    "https://owasp.org/www-project-ai-bill-of-materials/"
-  ],
   "validity_scope": {
-    "type": "until_aibom_change",
-    "expires_at": null
-  },
-  "rba_determination_threshold": 0.78
+    "expires_at": null,
+    "type": "until_aibom_change"
+  }
 }
