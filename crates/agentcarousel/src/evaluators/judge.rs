@@ -263,8 +263,9 @@ fn resolve_judge_key(provider: JudgeProvider) -> Result<String, EvaluatorError> 
         .ok_or(EvaluatorError::MissingConfig(
             "missing judge API key (set AGENTCAROUSEL_JUDGE_KEY or provider key)",
         ))?;
-    reqwest::header::HeaderValue::from_str(&key)
-        .map_err(|_| EvaluatorError::MissingConfig("judge API key contains invalid header characters"))?;
+    reqwest::header::HeaderValue::from_str(&key).map_err(|_| {
+        EvaluatorError::MissingConfig("judge API key contains invalid header characters")
+    })?;
     Ok(key)
 }
 
