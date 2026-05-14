@@ -26,6 +26,7 @@ path = "src/bin/agc.rs"
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 console = "0.16.3"
 flate2 = "1"
 globset = "0.4"
