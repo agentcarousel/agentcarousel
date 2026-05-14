@@ -24,8 +24,15 @@ pub fn run_completions(args: CompletionsArgs) -> i32 {
     };
     let cmd = super::Cli::command();
     let name = cmd.get_name().to_owned();
-    match completer.write_registration("COMPLETE", &name, "agc", "agc", &mut out) {
-        Ok(()) => 0,
+    match completer.write_registration("COMPLETE", &name, &name, &name, &mut out) {
+        Ok(()) => {
+            // Also register the agc alias so both names get tab-completion.
+            if matches!(args.shell, Shell::Zsh) {
+                let escaped = name.replace('-', "_");
+                println!("compdef _clap_dynamic_completer_{escaped} agc");
+            }
+            0
+        }
         Err(e) => {
             eprintln!("error: {e}");
             1
