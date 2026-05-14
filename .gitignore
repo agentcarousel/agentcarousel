@@ -38,6 +38,7 @@ release-assets/
 .cargo/credentials.toml
 .cargo/credentials.json
 .direnv/
+.cargo/
 
 # --- Rust ---
 target/
@@ -123,11 +124,16 @@ temp/
 
 # Temp Ignore
 docs/rba/
+*.ubsignore
+
 
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
 .beads-credential-key
+
+# Beads report exports
+beads_report_*.md
 
 agentcarousel.toml
 
