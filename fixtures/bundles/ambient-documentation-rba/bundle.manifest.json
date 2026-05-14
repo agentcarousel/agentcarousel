@@ -35,11 +35,11 @@
   "fixtures": [
     {
       "path": "../../skills/ambient-documentation-rba.yaml",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "203b8396dfd1e4db30706f9a99a04547fae17e052eeba0f939d24382c024a3c1"
     },
     {
       "path": "../../golden/ambient-documentation-rba/soap-note.md",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "f80f14f69339a0d2853437c2a2f1f49d9dbe7fc78f3311b97b7788980f389ff0"
     }
   ],
   "judge_evaluator": true,
@@ -47,7 +47,7 @@
   "mocks": [
     {
       "path": "../../../mocks/agent-response.json",
-      "sha256": "<computed-by-bundle-pack>"
+      "sha256": "7f6edf6bb0ff97dbe4986cb9f2f40082bb5de5e526cb7d4cac6dd60668fe9b70"
     }
   ],
   "negative_cases": [
