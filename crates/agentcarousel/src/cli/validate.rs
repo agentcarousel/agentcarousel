@@ -13,8 +13,11 @@ use super::GlobalOptions;
 
 const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
 
-/// Validate fixtures: JSON Schema, kebab-case ids, case id prefixes, safe relative paths.
+/// Check YAML/TOML fixtures against the schema (no execution). Scans `.` when no paths given.
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc validate fixtures/skills/customer-support.yaml\n  agc validate fixtures/ --strict\n  agc validate                        # scans . respecting .agentcarousel-ignore"
+)]
 pub struct ValidateArgs {
     /// Files or dirs to scan (default: `.` if omitted).
     #[arg(value_name = "PATHS")]

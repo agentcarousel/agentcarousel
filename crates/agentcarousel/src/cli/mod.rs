@@ -19,20 +19,31 @@ mod trust_check;
 mod update;
 mod validate;
 
+use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use clap_complete::CompleteEnv;
 use std::path::PathBuf;
 
 use config::{apply_history_db_env, load_config};
 
-/// Root command parser: global flags (`--config`, `--run-id`, verbosity, color) plus a subcommand.
-///
-/// Construct with [`Parser::parse`] or parse from iterator in tests.
+fn styles() -> Styles {
+    Styles::styled()
+        .header(AnsiColor::Green.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Green.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Cyan.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Cyan.on_default())
+        .error(AnsiColor::Red.on_default() | Effects::BOLD)
+        .valid(AnsiColor::Green.on_default() | Effects::BOLD)
+        .invalid(AnsiColor::Yellow.on_default() | Effects::BOLD)
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "agentcarousel",
     version,
-    about = "Agent & skill evaluation CLI: validate, test, eval, report, init, bundle (pack/verify/pull), export, trust-check. Quick start (no API keys): agentcarousel validate fixtures/skills/customer-support.yaml && agentcarousel test fixtures/skills/customer-support.yaml fixtures/skills/terraform-sentinel-scaffold.yaml --filter-tags smoke --offline true. Use `agentcarousel SUBCOMMAND -h` for flags and examples."
+    about = "Validate, test, and evaluate AI agents and skills using YAML fixtures.",
+    after_help = "Run `agc SUBCOMMAND --help` for flags and examples for any subcommand.\n\nQuick start (no API keys):\n  agc validate fixtures/skills/customer-support.yaml\n  agc test fixtures/skills/customer-support.yaml --filter-tags smoke --offline true",
+    styles = styles(),
 )]
 pub struct Cli {
     #[arg(long, global = true)]
@@ -58,25 +69,25 @@ pub struct GlobalOptions {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Validate YAML/TOML fixtures (schema + rules; no execution). Human output matches eval/test styling (banner, per-file PASS/WARN/FAIL, footer). With no paths, scans `.` (see `.agentcarousel-ignore`).
+    /// Check YAML/TOML fixtures against the schema (no execution). Scans `.` when no paths given.
     Validate(validate::ValidateArgs),
-    /// Run fixtures with mock generation only. Example: agentcarousel test fixtures/skills/foo.yaml --offline true --filter-tags smoke.
+    /// Run fixtures with mock generation (no API keys required).
     Test(test::TestArgs),
-    /// Run evaluation (mock or live). Judge-backed cases: `--evaluator all --judge` for mixed fixtures, or `--evaluator judge` if every case should use the judge; narrow with `--filter` / `--filter-tags`.
+    /// Run evaluation with mock or live generation; optionally score with an LLM judge.
     Eval(eval::EvalArgs),
-    /// Inspect persisted runs (list / show / diff). Example: agentcarousel report list && agentcarousel report show RUN_ID (or a path to run.json / evidence dir).
+    /// Inspect persisted runs: list, show details, or diff two runs.
     Report(report::ReportArgs),
-    /// Create `fixtures/{name}.yaml` from a template. Example: agentcarousel init --skill my-new-skill.
+    /// Scaffold a new skill or agent fixture template.
     Init(InitArgs),
-    /// Pack, verify, or pull a bundle (directory, bundle.manifest.json, .tar.gz, or registry id). Example: agentcarousel bundle verify fixtures/bundles/customer-support.
+    /// Pack, verify, or pull fixture bundles.
     Bundle(bundle::BundleArgs),
-    /// Publish bundle + evidence to registry in one flow.
+    /// Publish a bundle and its evidence to the registry.
     Publish(publish::PublishArgs),
-    /// Export run(s) as evidence tarballs. Examples: `export RUN_ID`, `export --last 5 --out-dir ./evidence`.
+    /// Export run(s) as signed evidence tarballs.
     Export(export::ExportArgs),
-    /// Check registry trust state and optionally verify a signed attestation.
+    /// Check a bundle's trust state in the registry and optionally verify its attestation.
     TrustCheck(trust_check::TrustCheckArgs),
-    /// Print shell completion script to stdout. Example: agc completions zsh > ~/.zsh/completions/_agc
+    /// Print a shell completion script to stdout.
     Completions(completions::CompletionsArgs),
     /// Check for and install updates to the agentcarousel CLI.
     Update(update::UpdateArgs),

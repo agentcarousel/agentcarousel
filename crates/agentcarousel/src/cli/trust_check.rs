@@ -27,8 +27,11 @@ impl TrustTier {
     }
 }
 
-/// Check trust state for a bundle and optionally verify attestation signature offline.
+/// Check a bundle's trust state in the registry and optionally verify its attestation.
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc trust-check customer-support-1.0.0 --url https://registry.example.com\n  agc trust-check customer-support-1.0.0 --min-trust stable\n  agc trust-check customer-support-1.0.0 --attestation ./attestation.json --minisign-pubkey ./key.pub"
+)]
 pub struct TrustCheckArgs {
     /// Bundle selector as `<bundle-id>` or `<bundle-id>@<version>`.
     #[arg(value_name = "BUNDLE[@VERSION]")]

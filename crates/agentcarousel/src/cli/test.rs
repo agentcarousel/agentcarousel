@@ -12,15 +12,19 @@ use super::fixture_utils::{
 };
 use super::GlobalOptions;
 
-/// Run fixtures (mock generation by default; see runner config).
+/// Run fixtures with mock generation (no API keys required).
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc test fixtures/skills/customer-support.yaml\n  agc test fixtures/ --filter-tags smoke --offline true\n  agc test fixtures/ --concurrency 4 --format json"
+)]
 pub struct TestArgs {
     /// Fixture files or dirs (default: fixtures).
     #[arg(value_name = "PATHS", default_value = "fixtures")]
     paths: Vec<PathBuf>,
+    /// Glob matched against full case ids (`skill/case-id`).
     #[arg(short = 'f', long)]
     filter: Option<String>,
-    /// Comma-separated case tags to run (e.g. smoke).
+    /// Comma-separated case tags to include (e.g. `smoke,fast`).
     #[arg(
         short = 'g',
         long = "filter-tags",
@@ -28,18 +32,25 @@ pub struct TestArgs {
         value_delimiter = ','
     )]
     filter_tags: Option<Vec<String>>,
+    /// Maximum number of cases to run in parallel.
     #[arg(short = 'c', long)]
     concurrency: Option<usize>,
+    /// Per-case timeout in seconds.
     #[arg(short = 't', long)]
     timeout: Option<u64>,
+    /// Use mock responses instead of calling an API (`true` / `false`).
     #[arg(short = 'o', long)]
     offline: Option<bool>,
+    /// Disable the config-level offline default (force live mode unless overridden per-case).
     #[arg(short = 'O', long)]
     no_offline_default: bool,
+    /// Directory to load or write mock responses from.
     #[arg(short = 'm', long)]
     mock_dir: Option<PathBuf>,
+    /// Stop after the first failing case.
     #[arg(short = 'F', long)]
     fail_fast: bool,
+    /// Output format: `human` (default) or `json`.
     #[arg(short = 'p', long)]
     format: Option<String>,
 }

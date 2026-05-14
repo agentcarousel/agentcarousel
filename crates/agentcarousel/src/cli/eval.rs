@@ -53,8 +53,11 @@ enum EvalExecutionMode {
     Live,
 }
 
-/// Run evaluation (mock or live). For LLM judge scoring, use `--judge` (and API keys) when the run includes judge evaluators.
+/// Run evaluation with mock or live generation; optionally score with an LLM judge.
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc eval fixtures/skills/customer-support.yaml          # mock, rules evaluator\n  agc eval fixtures/ --execution-mode live               # live generation\n  agc eval fixtures/ --evaluator all --judge             # mixed rules+judge fixtures\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on all cases\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly output"
+)]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
     #[arg(value_name = "PATHS", default_value = "fixtures")]
