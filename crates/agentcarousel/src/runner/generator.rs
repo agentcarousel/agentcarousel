@@ -114,16 +114,19 @@ pub async fn generate_case_output(
 }
 
 fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, String> {
-    provider
+    let key = provider
         .key_candidates()
         .iter()
-        .find_map(|key| std::env::var(key).ok())
+        .find_map(|k| std::env::var(k).ok())
         .ok_or_else(|| {
             format!(
                 "missing generator API key; set one of {}",
                 provider.key_candidates().join(", ")
             )
-        })
+        })?;
+    reqwest::header::HeaderValue::from_str(&key)
+        .map_err(|_| "generator API key contains invalid header characters".to_string())?;
+    Ok(key)
 }
 
 fn build_generation_prompt(case: &Case) -> String {
