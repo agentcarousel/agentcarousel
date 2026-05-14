@@ -50,6 +50,17 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Check bundle manifest hashes are current
+        run: |
+          cargo build --release -p agentcarousel
+          for bundle_dir in fixtures/bundles/*/; do
+            ./target/release/agentcarousel bundle pack "${bundle_dir%/}"
+          done
+          if ! git diff --exit-code fixtures/bundles/; then
+            echo "::error::Bundle manifest sha256 values are stale. Run 'agentcarousel bundle pack' on each bundle and commit the updated manifests."
+            exit 1
+          fi
+
       - id: meta
         name: Resolve release tag
         run: |
