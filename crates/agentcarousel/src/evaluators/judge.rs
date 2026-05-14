@@ -257,12 +257,16 @@ impl Evaluator for JudgeEvaluator {
 }
 
 fn resolve_judge_key(provider: JudgeProvider) -> Result<String, EvaluatorError> {
-    judge_key_candidates(provider)
+    let key = judge_key_candidates(provider)
         .iter()
-        .find_map(|key| std::env::var(key).ok())
+        .find_map(|k| std::env::var(k).ok())
         .ok_or(EvaluatorError::MissingConfig(
             "missing judge API key (set AGENTCAROUSEL_JUDGE_KEY or provider key)",
-        ))
+        ))?;
+    reqwest::header::HeaderValue::from_str(&key).map_err(|_| {
+        EvaluatorError::MissingConfig("judge API key contains invalid header characters")
+    })?;
+    Ok(key)
 }
 
 fn build_system_prompt(case: &Case, custom_prompt: Option<&str>) -> String {

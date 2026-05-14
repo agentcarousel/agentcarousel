@@ -92,6 +92,7 @@ Prefer tags in all new fixtures and examples.
 - `golden_threshold` (number): diff threshold for golden evaluator.
 - `process_cmd` (array): command and args for external evaluator.
 - `judge_prompt` (string): extra prompt for the judge evaluator.
+- `effectiveness_threshold` (number, optional): per-case override for the effectiveness pass threshold (0.0–1.0). Takes precedence over the global `--effectiveness-threshold` flag when set.
 
 ## Templates and examples
 
