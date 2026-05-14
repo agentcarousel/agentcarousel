@@ -6,6 +6,7 @@
 //! [`Cli`] and [`GlobalOptions`] are public for testing or custom front-ends.
 
 mod bundle;
+mod completions;
 mod config;
 mod eval;
 mod export;
@@ -73,6 +74,8 @@ enum Command {
     Export(export::ExportArgs),
     /// Check registry trust state and optionally verify a signed attestation.
     TrustCheck(trust_check::TrustCheckArgs),
+    /// Print shell completion script to stdout. Example: agc completions zsh > ~/.zsh/completions/_agc
+    Completions(completions::CompletionsArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -116,6 +119,7 @@ pub fn run() -> i32 {
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
         Command::Export(args) => export::run_export(args, &globals),
         Command::TrustCheck(args) => trust_check::run_trust_check(args, &config),
+        Command::Completions(args) => completions::run_completions(args),
     }
 }
 
