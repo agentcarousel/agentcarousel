@@ -16,6 +16,7 @@ mod registry_client;
 mod report;
 mod test;
 mod trust_check;
+mod update;
 mod validate;
 
 use clap::{ArgAction, CommandFactory, Parser, Subcommand};
@@ -77,6 +78,8 @@ enum Command {
     TrustCheck(trust_check::TrustCheckArgs),
     /// Print shell completion script to stdout. Example: agc completions zsh > ~/.zsh/completions/_agc
     Completions(completions::CompletionsArgs),
+    /// Check for and install updates to the agentcarousel CLI.
+    Update(update::UpdateArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -122,6 +125,7 @@ pub fn run() -> i32 {
         Command::Export(args) => export::run_export(args, &globals),
         Command::TrustCheck(args) => trust_check::run_trust_check(args, &config),
         Command::Completions(args) => completions::run_completions(args),
+        Command::Update(args) => update::run_update(args),
     }
 }
 
