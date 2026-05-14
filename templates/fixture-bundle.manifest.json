@@ -25,21 +25,23 @@
   "_comment_schema_hash": "SHA-256 of the JSON Schema file used for validation. Computed by `agentcarousel bundle pack`.",
   "schema_hash": "sha256:<computed-by-bundle-pack>",
 
-  "_comment_fixtures": "Each entry has a relative path and SHA-256. Computed by `agentcarousel bundle pack`.",
+  "_comment_fixtures": "Each entry has a relative path and SHA-256. Computed by `agentcarousel bundle pack`. Paths are relative to the repo root; fixtures live under fixtures/skills/ by convention.",
   "fixtures": [
     {
-      "path": "fixtures/<skill-or-agent-id>.yaml",
+      "path": "fixtures/skills/<skill-or-agent-id>.yaml",
       "sha256": "<computed-by-bundle-pack>"
     }
   ],
 
-  "_comment_mocks": "Each mock file used by fixtures in this bundle.",
+  "_comment_mocks": "Each mock file used by fixtures in this bundle. Paths relative to repo root; mock stubs live under mocks/ by convention.",
   "mocks": [
     {
       "path": "mocks/<tool>-stub.json",
       "sha256": "<computed-by-bundle-pack>"
     }
   ],
+
+  "_comment_packaging": "Release tooling for this bundle lives under packaging/. Run `agentcarousel bundle pack fixtures/bundles/<bundle-name>` before every release to refresh all sha256 values. The gate job in releasing.yml enforces this.",
 
   "_comment_owners": "GitHub handles of fixture authors responsible for this bundle.",
   "owners": ["@<github-handle>"],
