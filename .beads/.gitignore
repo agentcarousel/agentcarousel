@@ -14,6 +14,14 @@ last-touched
 # Local history backups
 .br_history/
 
+# Crash recovery artifacts
+.br_recovery/
+
+# Local backup archives and state
+*.darc
+backup/
+export-state.json
+
 # Sync state (local-only, per-machine)
 .sync.lock
 sync_base.jsonl

@@ -2,8 +2,9 @@
 
 ## 0.4.8 - May 2026
 
-- Feature: `evaluator_config.effectiveness_threshold` per-case field — cases can now override the global `--effectiveness-threshold` flag with a case-specific pass threshold.
+- Feature: `evaluator_config.effectiveness_threshold` per-case field; cases can now override the global `--effectiveness-threshold` flag with a case-specific pass threshold.
 - Feature: Added live evaluation token consumption metrics to the terminal output.
+- `agc completions <shell>` subcommand: prints a shell completion script to stdout for bash, zsh, or fish. Pipe to the appropriate completions directory to wire up tab completion.
 
 ## 0.4.7 - May 2026
 
