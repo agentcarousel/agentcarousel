@@ -103,17 +103,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Ensure cargo is in PATH (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          rustup target add "${{ matrix.target }}"
-
       - name: Build release binary
         shell: bash
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}"
+        run: rustup run stable cargo build --release -p agentcarousel --target "${{ matrix.target }}"
 
       - name: Package artifact
         shell: bash
