@@ -39,10 +39,10 @@ agentcarousel init --skill my-agent
 agentcarousel test --offline true
 
 # Validate
-agentcarousel validate fixtures/skills/cmmc-assessor.yaml
+agentcarousel validate fixtures/skills/aibom-auditor.yaml
 
 # Eval
-agentcarousel eval fixtures/skills/cmmc-assessor.yaml
+agentcarousel eval fixtures/skills/aibom-auditor.yaml
 
 # Export evidence bundle
 agentcarousel export <RUN-ID>
@@ -76,18 +76,18 @@ agentcarousel bundle pack fixtures/bundles/my-bundle --out my-bundle.tar.gz
 agentcarousel bundle verify my-bundle.tar.gz
 
 # Pull bundle manifest + artifacts from the registry
-agentcarousel bundle pull cmmc-assessor-1.0.0 --url "https://api.agentcarousel.com"
+agentcarousel bundle pull aibom-auditor-1.0.0 --url "https://api.agentcarousel.com"
 ```
 
 ## Publish to registry
 
 ```bash
 # Publish bundle + evidence in one flow
-agentcarousel publish fixtures/bundles/cmmc-assessor \
+agentcarousel publish fixtures/bundles/aibom-auditor \
   --url "https://api.agentcarousel.com"
 
 # Publish multiple matching local runs (newest first)
-agentcarousel publish fixtures/bundles/cmmc-assessor \
+agentcarousel publish fixtures/bundles/aibom-auditor \
   --url "https://api.agentcarousel.com" \
   --all-runs --limit 5
 ```
@@ -96,13 +96,13 @@ agentcarousel publish fixtures/bundles/cmmc-assessor \
 
 ```bash
 # Registry trust-state check
-agentcarousel trust-check cmmc-assessor@1.0.0 \
+agentcarousel trust-check aibom-auditor@1.0.0 \
   --url "https://api.agentcarousel.com"
 
 # Optional offline attestation verification
-agentcarousel trust-check cmmc-assessor@1.0.0 \
+agentcarousel trust-check aibom-auditor@1.0.0 \
   --url "https://api.agentcarousel.com" \
-  --attestation ./attestation-cmmc-assessor-1.0.0.json \
+  --attestation ./attestation-aibom-auditor-1.0.0.json \
   --minisign-pubkey ./your-minisign.pub
 ```
 

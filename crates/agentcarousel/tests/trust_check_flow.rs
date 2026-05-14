@@ -46,7 +46,7 @@ fn trust_check_fails_without_registry_url() {
     let assert = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["trust-check", "cmmc-assessor@1.0.0"])
+        .args(["trust-check", "aibom-auditor@1.0.0"])
         .assert()
         .failure();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
@@ -60,7 +60,7 @@ fn trust_check_fails_without_registry_url() {
 fn trust_check_parses_bundle_version_and_enforces_threshold() {
     let (url, rx) = spawn_json_server(
         "200 OK",
-        r#"{"bundle_id":"cmmc-assessor-1.0.0","trust_state":"Experimental"}"#,
+        r#"{"bundle_id":"aibom-auditor-1.0.0","trust_state":"Experimental"}"#,
     );
     let root = workspace_root();
     let assert = Command::cargo_bin("agentcarousel")
@@ -68,7 +68,7 @@ fn trust_check_parses_bundle_version_and_enforces_threshold() {
         .current_dir(&root)
         .args([
             "trust-check",
-            "cmmc-assessor@1.0.0",
+            "aibom-auditor@1.0.0",
             "--url",
             &url,
             "--min-trust",
@@ -84,7 +84,7 @@ fn trust_check_parses_bundle_version_and_enforces_threshold() {
 
     let first_line = rx.recv().expect("request first line");
     assert!(
-        first_line.contains("GET /v1/bundles/cmmc-assessor-1.0.0/trust-state"),
+        first_line.contains("GET /v1/bundles/aibom-auditor-1.0.0/trust-state"),
         "unexpected request path: {first_line:?}"
     );
 }
@@ -105,7 +105,7 @@ fn trust_check_reports_missing_minisign_binary() {
         .current_dir(&root)
         .args([
             "trust-check",
-            "cmmc-assessor@1.0.0",
+            "aibom-auditor@1.0.0",
             "--url",
             &url,
             "--attestation",

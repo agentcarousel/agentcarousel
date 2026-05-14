@@ -89,7 +89,7 @@ function buildHtml(c: FixtureCase, f: FixtureFile): string {
     ? `<span class="tag tag-cert">certification</span>`
     : '';
 
-  // Registry link: extract agent name from bundle_id (e.g. "agentcarousel/cmmc-assessor" → "cmmc-assessor")
+  // Registry link: extract agent name from bundle_id (e.g. "agentcarousel/aibom-auditor" → "aibom-auditor")
   const agentName = f.bundle_id
     ? f.bundle_id.includes('/') ? f.bundle_id.slice(f.bundle_id.lastIndexOf('/') + 1) : f.bundle_id
     : f.skill_or_agent;

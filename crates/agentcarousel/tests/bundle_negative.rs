@@ -15,7 +15,7 @@ fn bundle_verify_ok_prints_for_bundle_directory() {
     let assert = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["bundle", "verify", "fixtures/bundles/cmmc-assessor"])
+        .args(["bundle", "verify", "fixtures/bundles/aibom-auditor"])
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
@@ -34,7 +34,7 @@ fn bundle_verify_ok_when_passing_bundle_manifest_json() {
         .args([
             "bundle",
             "verify",
-            "fixtures/bundles/cmmc-assessor/bundle.manifest.json",
+            "fixtures/bundles/aibom-auditor/bundle.manifest.json",
         ])
         .assert()
         .success();
@@ -51,7 +51,7 @@ fn agc_bundle_verify_matches_agentcarousel_binary() {
     Command::cargo_bin("agc")
         .unwrap()
         .current_dir(&root)
-        .args(["bundle", "verify", "fixtures/bundles/cmmc-assessor"])
+        .args(["bundle", "verify", "fixtures/bundles/aibom-auditor"])
         .assert()
         .success();
 }

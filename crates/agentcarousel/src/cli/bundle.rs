@@ -37,7 +37,7 @@ enum BundleCommand {
     Verify { path: Option<PathBuf> },
     /// Download bundle manifest and artifacts from a registry (`GET /v1/bundles/{id}/manifest` + `/file?path=...`).
     Pull {
-        /// Registry bundle id (e.g. `cmmc-assessor-1.0.0`), matching `publish --dry-run` `registry_bundle_id`.
+        /// Registry bundle id (e.g. `aibom-auditor-1.0.0`), matching `publish --dry-run` `registry_bundle_id`.
         #[arg(value_name = "REGISTRY_BUNDLE_ID")]
         registry_bundle_id: String,
         /// Registry API URL (alias: --registry-url). Falls back to config/env.
