@@ -207,7 +207,7 @@ jobs:
           RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
         run: |
           mkdir -p dist
-          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+          if [[ "${{ matrix.target }}" == *-windows-* ]]; then
             BIN="target/${{ matrix.target }}/release/agentcarousel.exe"
           else
             BIN="target/${{ matrix.target }}/release/agentcarousel"
