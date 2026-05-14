@@ -118,7 +118,7 @@ jobs:
         shell: bash
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: rustup run stable cargo build --release -p agentcarousel --target "${{ matrix.target }}"
+        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}"
 
       - name: Package artifact
         shell: bash
