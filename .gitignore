@@ -130,3 +130,6 @@ docs/rba/
 .beads-credential-key
 
 agentcarousel.toml
+
+# bv (beads viewer) local config and caches
+.bv/
