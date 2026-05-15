@@ -51,7 +51,12 @@ fn styles() -> Styles {
 pub struct Cli {
     #[arg(long, global = true, help = "Disable color output")]
     no_color: bool,
-    #[arg(short = 'q', long, global = true, help = "Suppress non-essential output")]
+    #[arg(
+        short = 'q',
+        long,
+        global = true,
+        help = "Suppress non-essential output"
+    )]
     quiet: bool,
     #[arg(short = 'v', long, action = ArgAction::Count, global = true, help = "Increase output verbosity")]
     verbose: u8,
@@ -114,10 +119,18 @@ fn cli_command() -> clap::Command {
 fn help_template() -> String {
     let colors = console::colors_enabled();
     let h = |s: &str| -> String {
-        if colors { format!("\x1b[38;2;127;255;212m{s}\x1b[0m") } else { s.to_owned() }
+        if colors {
+            format!("\x1b[38;2;127;255;212m{s}\x1b[0m")
+        } else {
+            s.to_owned()
+        }
     };
     let c = |s: &str| -> String {
-        if colors { format!("\x1b[38;2;191;189;182m{s}\x1b[0m") } else { s.to_owned() }
+        if colors {
+            format!("\x1b[38;2;191;189;182m{s}\x1b[0m")
+        } else {
+            s.to_owned()
+        }
     };
 
     let fw = h("Fixture work");
@@ -126,20 +139,20 @@ fn help_template() -> String {
     let to = h("Tooling");
     let op = h("Options");
 
-    let validate    = c("validate");
-    let test        = c("test");
-    let eval        = c("eval");
-    let lint        = c("lint");
-    let init        = c("init");
-    let report      = c("report");
-    let export      = c("export");
-    let bundle      = c("bundle");
-    let publish     = c("publish");
+    let validate = c("validate");
+    let test = c("test");
+    let eval = c("eval");
+    let lint = c("lint");
+    let init = c("init");
+    let report = c("report");
+    let export = c("export");
+    let bundle = c("bundle");
+    let publish = c("publish");
     let trust_check = c("trust-check");
     let completions = c("completions");
-    let update      = c("update");
-    let doctor      = c("doctor");
-    let help        = c("help");
+    let update = c("update");
+    let doctor = c("doctor");
+    let help = c("help");
 
     format!(
         r#"{{about}}
