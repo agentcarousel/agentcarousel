@@ -16,19 +16,22 @@ const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
 /// Check YAML/TOML fixtures against the schema (no execution). Scans `.` when no paths given.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc validate fixtures/skills/customer-support.yaml\n  agc validate fixtures/ --strict\n  agc validate                        # scans . respecting .agentcarousel-ignore"
+    after_help = "Examples:\n  agc validate fixtures/skills/customer-support.yaml\n  agc validate fixtures/ --strict\n  agc validate --format sarif > results.sarif  # GitHub code scanning\n  agc validate                        # scans . respecting .agentcarousel-ignore"
 )]
 pub struct ValidateArgs {
     /// Files or dirs to scan (default: `.` if omitted).
     #[arg(value_name = "PATHS")]
     paths: Vec<PathBuf>,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     /// JSON Schema file (default from config).
     #[arg(short = 's', long)]
     schema: Option<PathBuf>,
     /// Fail on warnings too (also if validate.strict in config).
     #[arg(short = 'x', long)]
     strict: bool,
-    /// `human` or `json` (default from config). Human uses the same carousel-style banner and summary as eval/test.
+    /// `human`, `json`, or `sarif` (default from config). `sarif` emits SARIF 2.1.0 for GitHub code scanning.
     #[arg(short = 'f', long)]
     format: Option<String>,
 }
@@ -370,8 +373,53 @@ fn output_reports(format: &str, reports: &[ValidationReport], atf_summary: &AtfS
                 serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{\"messages\":[]}".into());
             println!("{payload}");
         }
+        "sarif" => {
+            let payload = build_sarif(reports);
+            println!("{payload}");
+        }
         _ => print_validate_terminal(reports, atf_summary),
     }
+}
+
+fn build_sarif(reports: &[ValidationReport]) -> String {
+    let tool = serde_json::json!({
+        "driver": {
+            "name": "agentcarousel",
+            "version": env!("CARGO_PKG_VERSION"),
+            "informationUri": "https://agentcarousel.com",
+            "rules": [
+                { "id": "AC001", "name": "SchemaError", "shortDescription": { "text": "Fixture schema validation error" } },
+                { "id": "AC002", "name": "SchemaWarning", "shortDescription": { "text": "Fixture schema validation warning" } }
+            ]
+        }
+    });
+
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    for report in reports {
+        for error in &report.errors {
+            results.push(serde_json::json!({
+                "ruleId": "AC001",
+                "level": "error",
+                "message": { "text": error },
+                "locations": [{ "physicalLocation": { "artifactLocation": { "uri": report.path } } }]
+            }));
+        }
+        for warning in &report.warnings {
+            results.push(serde_json::json!({
+                "ruleId": "AC002",
+                "level": "warning",
+                "message": { "text": warning },
+                "locations": [{ "physicalLocation": { "artifactLocation": { "uri": report.path } } }]
+            }));
+        }
+    }
+
+    let sarif = serde_json::json!({
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{ "tool": tool, "results": results }]
+    });
+    serde_json::to_string_pretty(&sarif).unwrap_or_else(|_| "{}".into())
 }
 
 /// Carousel-style terminal output aligned with eval/test (`print_terminal`).

@@ -135,9 +135,9 @@ history_db = "{}"
         .unwrap()
         .current_dir(&root)
         .args([
+            "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "publish",
             "fixtures/bundles/customer-support",
             "--url",
             "https://registry.example.test",
@@ -195,9 +195,9 @@ history_db = "{}"
         .unwrap()
         .current_dir(&root)
         .args([
+            "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "publish",
             "fixtures/bundles/customer-support",
             "--url",
             "https://registry.example.test",
@@ -250,9 +250,9 @@ history_db = "{}"
         .unwrap()
         .current_dir(&root)
         .args([
+            "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "publish",
             "fixtures/bundles/customer-support",
             "--url",
             "https://registry.example.test",
@@ -353,9 +353,9 @@ history_db = "{}"
         .unwrap()
         .current_dir(&root)
         .args([
+            "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "publish",
             "fixtures/bundles/customer-support",
             "--url",
             "https://registry.example.test",

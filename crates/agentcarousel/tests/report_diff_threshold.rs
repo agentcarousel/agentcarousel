@@ -93,9 +93,9 @@ regression_threshold = 0.0
     Command::cargo_bin("agentcarousel")
         .unwrap()
         .args([
+            "report",
             "--config",
             config_path.to_str().expect("config path"),
-            "report",
             "diff",
             "run-a",
             "run-b",

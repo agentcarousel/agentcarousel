@@ -110,14 +110,7 @@ history_db = "{}"
         .unwrap()
         .current_dir(&root)
         .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
-        .args([
-            "--config",
-            config_path.to_str().expect("config"),
-            "export",
-            run_id,
-            "--out",
-            out_path.to_str().expect("out"),
-        ])
+        .args(["export", run_id, "--out", out_path.to_str().expect("out")])
         .assert()
         .success();
 
@@ -202,8 +195,6 @@ history_db = "{}"
         .current_dir(&root)
         .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
         .args([
-            "--config",
-            config_path.to_str().expect("config"),
             "export",
             "--last",
             "1",

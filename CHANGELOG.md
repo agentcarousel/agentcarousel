@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 - May 2026
+
+- Feature: `agc doctor` subcommand — checks API keys, config file, history DB, fixtures directory, and JSON schema in one pass; supports `--json` for machine-readable output.
+- Feature: `agc lint` subcommand — checks fixture quality beyond schema: smoke-tag coverage, judge-case descriptions, rubric weight sums, and bundle compliance fields.
+- Feature: `agc validate --format sarif` — emits SARIF 2.1.0 for GitHub code scanning integration.
+- Fix: `--config` and `--run-id` removed from the global flag set; they now appear only on the subcommands that consume them (`update`, `completions`, and `init` no longer advertise them).
+- Fix: top-level quick-start example dropped redundant `--offline true` (mock mode is already the default for `agc test`).
+- Fix: `trust-check` temp pubkey file now uses a ULID instead of the process ID, closing a predictable-name race on the temp path.
+
 ## 0.5.0 - May 2026
 
 - Feature: `agc update` subcommand — checks GitHub for a newer release and installs it in-place with an atomic rename; supports `--check` to print availability without installing.

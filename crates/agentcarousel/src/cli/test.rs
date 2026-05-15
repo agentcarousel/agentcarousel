@@ -15,12 +15,18 @@ use super::GlobalOptions;
 /// Run fixtures with mock generation (no API keys required).
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc test fixtures/skills/customer-support.yaml\n  agc test fixtures/ --filter-tags smoke --offline true\n  agc test fixtures/ --concurrency 4 --format json"
+    after_help = "Examples:\n  agc test fixtures/skills/customer-support.yaml\n  agc test fixtures/ --filter-tags smoke\n  agc test fixtures/ --concurrency 4 --format json"
 )]
 pub struct TestArgs {
     /// Fixture files or dirs (default: fixtures).
     #[arg(value_name = "PATHS", default_value = "fixtures")]
     paths: Vec<PathBuf>,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    /// Override the run id stored in the history DB for this run.
+    #[arg(long)]
+    pub run_id: Option<String>,
     /// Glob matched against full case ids (`skill/case-id`).
     #[arg(short = 'f', long)]
     filter: Option<String>,
@@ -105,7 +111,7 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
         command: "test".to_string(),
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
-        run_id: globals.run_id.clone(),
+        run_id: args.run_id.clone(),
     };
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
