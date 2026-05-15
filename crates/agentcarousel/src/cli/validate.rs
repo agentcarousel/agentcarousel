@@ -22,6 +22,9 @@ pub struct ValidateArgs {
     /// Files or dirs to scan (default: `.` if omitted).
     #[arg(value_name = "PATHS")]
     paths: Vec<PathBuf>,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     /// JSON Schema file (default from config).
     #[arg(short = 's', long)]
     schema: Option<PathBuf>,

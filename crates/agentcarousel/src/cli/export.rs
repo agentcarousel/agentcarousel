@@ -18,8 +18,6 @@ const SKILL_DEFINITION_SCHEMA: &str = include_str!(concat!(
 ));
 
 use super::exit_codes::ExitCode;
-use super::GlobalOptions;
-
 /// Export run(s) as evidence .tar.gz (run.json + fingerprints per run).
 #[derive(Debug, Parser)]
 pub struct ExportArgs {
@@ -39,8 +37,8 @@ pub struct ExportArgs {
 
 const EXPORT_LAST_MAX: usize = 50;
 
-pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
-    let run_id = globals.run_id.as_ref().or(args.run_id_positional.as_ref());
+pub fn run_export(args: ExportArgs) -> i32 {
+    let run_id = args.run_id_positional.as_ref();
     match (run_id, args.last) {
         (Some(_), Some(_)) => {
             eprintln!("error: specify either RUN_ID or --last N, not both");

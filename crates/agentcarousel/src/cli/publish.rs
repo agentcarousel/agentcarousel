@@ -9,7 +9,6 @@ use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
 use super::export::export_run_artifact;
 use super::registry_client::{resolve_registry_url, RegistryClient};
-use super::GlobalOptions;
 
 /// Publish a bundle to registry (register + submit run evidence).
 #[derive(Debug, Parser)]
@@ -17,6 +16,9 @@ pub struct PublishArgs {
     /// Bundle directory or explicit bundle.manifest.json path.
     #[arg(value_name = "PATH", default_value = ".")]
     path: PathBuf,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     /// Registry API URL (alias: --registry-url). Falls back to config/env.
     #[arg(long = "url", alias = "registry-url")]
     url: Option<String>,
@@ -44,8 +46,8 @@ struct BundleManifestMeta {
     skill_or_agent: Option<String>,
 }
 
-pub fn run_publish(args: PublishArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
-    match publish_bundle(args, config, globals) {
+pub fn run_publish(args: PublishArgs, config: &ResolvedConfig) -> i32 {
+    match publish_bundle(args, config) {
         Ok(payload) => {
             println!(
                 "{}",
@@ -60,11 +62,7 @@ pub fn run_publish(args: PublishArgs, config: &ResolvedConfig, globals: &GlobalO
     }
 }
 
-fn publish_bundle(
-    args: PublishArgs,
-    config: &ResolvedConfig,
-    globals: &GlobalOptions,
-) -> Result<Value, String> {
+fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, String> {
     let (manifest, meta, _root) = load_bundle_manifest(&args.path)?;
     let endpoint = resolve_registry_url(args.url.as_deref(), config)?;
     let registry_bundle_id = compute_registry_bundle_id(&meta);
@@ -84,7 +82,7 @@ fn publish_bundle(
     let selected_run_ids = if args.all_runs {
         matching_run_ids(&meta, config, args.limit)?
     } else {
-        vec![match args.run_id.as_deref().or(globals.run_id.as_deref()) {
+        vec![match args.run_id.as_deref() {
             Some(id) => id.to_string(),
             None => latest_matching_run_id(&meta, config)?,
         }]

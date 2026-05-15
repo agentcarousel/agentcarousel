@@ -62,6 +62,12 @@ pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
     #[arg(value_name = "PATHS", default_value = "fixtures")]
     paths: Vec<PathBuf>,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    /// Override the run id stored in the history DB for this run.
+    #[arg(long)]
+    pub run_id: Option<String>,
     #[arg(short = 'n', long, default_value_t = 1)]
     runs: u32,
     #[arg(short = 's', long, default_value_t = 0)]
@@ -259,7 +265,7 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
         command: "eval".to_string(),
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
-        run_id: globals.run_id.clone(),
+        run_id: args.run_id.clone(),
     };
 
     let eval_config = EvalConfig {

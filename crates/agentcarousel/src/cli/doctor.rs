@@ -11,6 +11,9 @@ use super::exit_codes::ExitCode;
     after_help = "Examples:\n  agc doctor                    # full environment check\n  agc doctor --json             # machine-readable output"
 )]
 pub struct DoctorArgs {
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<std::path::PathBuf>,
     #[arg(short = 'j', long)]
     pub json: bool,
 }

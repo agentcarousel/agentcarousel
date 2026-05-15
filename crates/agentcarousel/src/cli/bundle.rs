@@ -22,6 +22,9 @@ use super::GlobalOptions;
     after_help = "Examples:\n  agc bundle pack fixtures/bundles/customer-support\n  agc bundle verify fixtures/bundles/customer-support\n  agc bundle pull customer-support-1.0.0 --url https://registry.example.com"
 )]
 pub struct BundleArgs {
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     #[command(subcommand)]
     command: BundleCommand,
 }

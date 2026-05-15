@@ -24,7 +24,6 @@ mod validate;
 use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use clap_complete::CompleteEnv;
-use std::path::PathBuf;
 
 use config::{apply_history_db_env, load_config};
 
@@ -49,10 +48,6 @@ fn styles() -> Styles {
 )]
 pub struct Cli {
     #[arg(long, global = true)]
-    config: Option<PathBuf>,
-    #[arg(long, global = true)]
-    run_id: Option<String>,
-    #[arg(long, global = true)]
     no_color: bool,
     #[arg(short = 'q', long, global = true)]
     quiet: bool,
@@ -62,9 +57,8 @@ pub struct Cli {
     command: Command,
 }
 
-/// Options propagated from [`Cli`] into subcommands (run id override, quiet, verbose level).
+/// Options propagated from [`Cli`] into subcommands (quiet, verbose level).
 pub struct GlobalOptions {
-    pub run_id: Option<String>,
     pub quiet: bool,
     pub verbose: u8,
 }
@@ -116,7 +110,20 @@ pub struct InitArgs {
 pub fn run() -> i32 {
     CompleteEnv::with_factory(Cli::command).complete();
     let cli = Cli::parse();
-    let config = match load_config(cli.config.as_deref()) {
+
+    let config_path: Option<&std::path::Path> = match &cli.command {
+        Command::Validate(a) => a.config.as_deref(),
+        Command::Test(a) => a.config.as_deref(),
+        Command::Eval(a) => a.config.as_deref(),
+        Command::Report(a) => a.config.as_deref(),
+        Command::Bundle(a) => a.config.as_deref(),
+        Command::Publish(a) => a.config.as_deref(),
+        Command::TrustCheck(a) => a.config.as_deref(),
+        Command::Doctor(a) => a.config.as_deref(),
+        _ => None,
+    };
+
+    let config = match load_config(config_path) {
         Ok(config) => config,
         Err(err) => {
             eprintln!("error: {err}");
@@ -127,7 +134,6 @@ pub fn run() -> i32 {
     apply_history_db_env(&config);
     apply_color_settings(&config, cli.no_color);
     let globals = GlobalOptions {
-        run_id: cli.run_id.clone(),
         quiet: cli.quiet,
         verbose: cli.verbose,
     };
@@ -138,8 +144,8 @@ pub fn run() -> i32 {
         Command::Report(args) => report::run_report(args, &config),
         Command::Init(args) => run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
-        Command::Publish(args) => publish::run_publish(args, &config, &globals),
-        Command::Export(args) => export::run_export(args, &globals),
+        Command::Publish(args) => publish::run_publish(args, &config),
+        Command::Export(args) => export::run_export(args),
         Command::TrustCheck(args) => trust_check::run_trust_check(args, &config),
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),

@@ -4,7 +4,7 @@ use agentcarousel_reporters::{
 };
 use clap::{Parser, Subcommand};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
@@ -12,6 +12,9 @@ use super::exit_codes::ExitCode;
 /// List/show/diff runs in the local history DB (same DB as test/eval; see config).
 #[derive(Debug, Parser)]
 pub struct ReportArgs {
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     #[command(subcommand)]
     command: ReportCommand,
 }

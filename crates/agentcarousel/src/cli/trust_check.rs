@@ -36,6 +36,9 @@ pub struct TrustCheckArgs {
     /// Bundle selector as `<bundle-id>` or `<bundle-id>@<version>`.
     #[arg(value_name = "BUNDLE[@VERSION]")]
     target: String,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     /// Registry API URL (alias: --registry-url). Falls back to config/env.
     #[arg(long = "url", alias = "registry-url")]
     url: Option<String>,
