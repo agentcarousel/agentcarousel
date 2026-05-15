@@ -12,6 +12,7 @@ mod doctor;
 mod eval;
 mod export;
 mod fixture_utils;
+mod lint;
 mod publish;
 mod registry_client;
 mod report;
@@ -94,6 +95,8 @@ enum Command {
     Update(update::UpdateArgs),
     /// Check environment, config, and fixture setup for common issues.
     Doctor(doctor::DoctorArgs),
+    /// Check fixture quality beyond schema: smoke coverage, rubric weights, descriptions.
+    Lint(lint::LintArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -141,6 +144,7 @@ pub fn run() -> i32 {
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
+        Command::Lint(args) => lint::run_lint(args, &globals),
     }
 }
 
