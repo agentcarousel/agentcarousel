@@ -223,7 +223,7 @@ fn resolve_pubkey_path(input: &str) -> Result<PathBuf, TrustCheckError> {
                 TrustCheckError::Runtime(format!("failed to read pubkey response body: {err}"))
             })?;
         let tmp_path =
-            std::env::temp_dir().join(format!("agentcarousel-minisign-{}.pub", std::process::id()));
+            std::env::temp_dir().join(format!("agentcarousel-minisign-{}.pub", ulid::Ulid::new()));
         std::fs::write(&tmp_path, body).map_err(|err| {
             TrustCheckError::Runtime(format!("failed to write temp pubkey: {err}"))
         })?;
