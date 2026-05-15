@@ -21,21 +21,24 @@ mod trust_check;
 mod update;
 mod validate;
 
-use clap::builder::styling::{AnsiColor, Effects, Styles};
-use clap::{ArgAction, CommandFactory, Parser, Subcommand};
+use clap::builder::styling::{AnsiColor, Color, Effects, RgbColor, Style, Styles};
+use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_complete::CompleteEnv;
 
 use config::{apply_history_db_env, load_config};
 
 fn styles() -> Styles {
+    let blue = Some(Color::Rgb(RgbColor(127, 255, 212)));
+    let gray = Some(Color::Rgb(RgbColor(191, 189, 182)));
+    let dim = Some(Color::Rgb(RgbColor(108, 118, 128)));
     Styles::styled()
-        .header(AnsiColor::Green.on_default() | Effects::BOLD)
-        .usage(AnsiColor::Green.on_default() | Effects::BOLD)
-        .literal(AnsiColor::Cyan.on_default() | Effects::BOLD)
-        .placeholder(AnsiColor::Cyan.on_default())
+        .header(Style::new().fg_color(blue))
+        .usage(Style::new().fg_color(blue))
+        .literal(Style::new().fg_color(gray))
+        .placeholder(Style::new().fg_color(dim))
         .error(AnsiColor::Red.on_default() | Effects::BOLD)
-        .valid(AnsiColor::Green.on_default() | Effects::BOLD)
-        .invalid(AnsiColor::Yellow.on_default() | Effects::BOLD)
+        .valid(Style::new().fg_color(blue))
+        .invalid(AnsiColor::Yellow.on_default())
 }
 
 #[derive(Debug, Parser)]
@@ -43,15 +46,14 @@ fn styles() -> Styles {
     name = "agentcarousel",
     version,
     about = "Validate, test, and evaluate AI agents and skills using YAML fixtures.",
-    after_help = "Run `agc SUBCOMMAND --help` for flags and examples for any subcommand.\n\nQuick start (no API keys):\n  agc validate fixtures/skills/customer-support.yaml\n  agc test fixtures/skills/customer-support.yaml --filter-tags smoke",
     styles = styles(),
 )]
 pub struct Cli {
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help = "Disable color output")]
     no_color: bool,
-    #[arg(short = 'q', long, global = true)]
+    #[arg(short = 'q', long, global = true, help = "Suppress non-essential output")]
     quiet: bool,
-    #[arg(short = 'v', long, action = ArgAction::Count, global = true)]
+    #[arg(short = 'v', long, action = ArgAction::Count, global = true, help = "Increase output verbosity")]
     verbose: u8,
     #[command(subcommand)]
     command: Command,
@@ -105,11 +107,84 @@ pub struct InitArgs {
     name: String,
 }
 
+fn cli_command() -> clap::Command {
+    Cli::command().help_template(help_template())
+}
+
+fn help_template() -> String {
+    let colors = console::colors_enabled();
+    let h = |s: &str| -> String {
+        if colors { format!("\x1b[38;2;127;255;212m{s}\x1b[0m") } else { s.to_owned() }
+    };
+    let c = |s: &str| -> String {
+        if colors { format!("\x1b[38;2;191;189;182m{s}\x1b[0m") } else { s.to_owned() }
+    };
+
+    let fw = h("Fixture work");
+    let re = h("Results");
+    let bu = h("Bundles & registry");
+    let to = h("Tooling");
+    let op = h("Options");
+
+    let validate    = c("validate");
+    let test        = c("test");
+    let eval        = c("eval");
+    let lint        = c("lint");
+    let init        = c("init");
+    let report      = c("report");
+    let export      = c("export");
+    let bundle      = c("bundle");
+    let publish     = c("publish");
+    let trust_check = c("trust-check");
+    let completions = c("completions");
+    let update      = c("update");
+    let doctor      = c("doctor");
+    let help        = c("help");
+
+    format!(
+        r#"{{about}}
+
+Usage:
+  agc [OPTIONS] <COMMAND>
+  agc validate fixtures/skills/customer-support.yaml
+  agc test fixtures/skills/customer-support.yaml --filter-tags smoke
+
+{fw}:
+  {validate}     Validate YAML/TOML fixtures against the schema (no execution); scans `.` by default
+  {test}         Run fixtures with mock generation (no API keys required)
+  {eval}         Run evaluation with mock or live generation; optionally score with an LLM judge
+  {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
+  {init}         Scaffold a new skill or agent fixture template
+
+{re}:
+  {report}       Inspect persisted runs: list, show details, or diff two runs
+  {export}       Export run(s) as signed evidence tarballs
+
+{bu}:
+  {bundle}       Pack, verify, or pull fixture bundles
+  {publish}      Publish a bundle and its evidence to the registry
+  {trust_check}  Check a bundle's trust state in the registry and optionally verify its attestation
+
+{to}:
+  {completions}  Print a shell completion script to stdout
+  {update}       Check for and install updates to the agentcarousel CLI
+  {doctor}       Check environment, config, and fixture setup for common issues
+  {help}         Print this message or the help of the given subcommand(s)
+
+{op}:
+{{options}}
+
+Use "agc <COMMAND> --help" for more information about a command.
+"#
+    )
+}
+
 /// Parse [`std::env::args`], run the selected subcommand, and return a **process exit code**
 /// (`0` = success; non-zero for validation, config, or runtime failures).
 pub fn run() -> i32 {
-    CompleteEnv::with_factory(Cli::command).complete();
-    let cli = Cli::parse();
+    CompleteEnv::with_factory(cli_command).complete();
+    let matches = cli_command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
     let config_path: Option<&std::path::Path> = match &cli.command {
         Command::Validate(a) => a.config.as_deref(),
