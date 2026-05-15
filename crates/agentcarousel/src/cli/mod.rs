@@ -8,6 +8,7 @@
 mod bundle;
 mod completions;
 mod config;
+mod doctor;
 mod eval;
 mod export;
 mod fixture_utils;
@@ -91,6 +92,8 @@ enum Command {
     Completions(completions::CompletionsArgs),
     /// Check for and install updates to the agentcarousel CLI.
     Update(update::UpdateArgs),
+    /// Check environment, config, and fixture setup for common issues.
+    Doctor(doctor::DoctorArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -137,6 +140,7 @@ pub fn run() -> i32 {
         Command::TrustCheck(args) => trust_check::run_trust_check(args, &config),
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),
+        Command::Doctor(args) => doctor::run_doctor(args, &config),
     }
 }
 
