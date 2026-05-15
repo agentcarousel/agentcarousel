@@ -44,7 +44,7 @@ fn styles() -> Styles {
     name = "agentcarousel",
     version,
     about = "Validate, test, and evaluate AI agents and skills using YAML fixtures.",
-    after_help = "Run `agc SUBCOMMAND --help` for flags and examples for any subcommand.\n\nQuick start (no API keys):\n  agc validate fixtures/skills/customer-support.yaml\n  agc test fixtures/skills/customer-support.yaml --filter-tags smoke --offline true",
+    after_help = "Run `agc SUBCOMMAND --help` for flags and examples for any subcommand.\n\nQuick start (no API keys):\n  agc validate fixtures/skills/customer-support.yaml\n  agc test fixtures/skills/customer-support.yaml --filter-tags smoke",
     styles = styles(),
 )]
 pub struct Cli {

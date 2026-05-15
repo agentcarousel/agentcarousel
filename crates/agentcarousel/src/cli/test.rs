@@ -15,7 +15,7 @@ use super::GlobalOptions;
 /// Run fixtures with mock generation (no API keys required).
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc test fixtures/skills/customer-support.yaml\n  agc test fixtures/ --filter-tags smoke --offline true\n  agc test fixtures/ --concurrency 4 --format json"
+    after_help = "Examples:\n  agc test fixtures/skills/customer-support.yaml\n  agc test fixtures/ --filter-tags smoke\n  agc test fixtures/ --concurrency 4 --format json"
 )]
 pub struct TestArgs {
     /// Fixture files or dirs (default: fixtures).
