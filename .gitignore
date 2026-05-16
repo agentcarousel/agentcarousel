@@ -5,13 +5,6 @@
 .dirac-symbol-index/
 .idea/
 
-gtm/
-
-# --- AI agent / assistant local state ---
-.claude/
-CLAUDE.md
-AGENTS.md
-
 # --- Internal process / planning (never ship) ---
 authorizing-packages/
 docs/designs/
@@ -138,3 +131,7 @@ agentcarousel.toml
 
 # bv (beads viewer) local config and caches
 .bv/
+
+.claude/
+CLAUDE.md
+AGENTS.md

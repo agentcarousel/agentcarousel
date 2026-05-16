@@ -97,7 +97,7 @@ impl Default for ResolvedConfig {
                 mock_dir: PathBuf::from("mocks"),
             },
             validate: ValidateConfig {
-                schema_dir: PathBuf::from("fixtures/schemas"),
+                schema_dir: PathBuf::from("schemas"),
                 strict: false,
             },
             eval: EvalConfig {

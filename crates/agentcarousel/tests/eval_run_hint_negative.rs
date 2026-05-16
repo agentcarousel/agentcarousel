@@ -17,7 +17,7 @@ fn eval_json_writes_run_id_hint_to_stderr() {
         .current_dir(&root)
         .args([
             "eval",
-            "fixtures/examples/example-skill.yaml",
+            "examples/example-skill.yaml",
             "--execution-mode",
             "mock",
             "--format",

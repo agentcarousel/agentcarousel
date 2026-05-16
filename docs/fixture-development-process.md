@@ -1,7 +1,7 @@
 # Fixture Development Process
 
 > **Related:** [Fixture format](fixture-format.md) · [agentcarousel.com](https://agentcarousel.com)  
-> **Templates:** [`templates/fixture-skeleton.yaml`](https://github.com/agentcarousel/agentcarousel/blob/main/templates/fixture-skeleton.yaml) · [`templates/fixture-bundle.manifest.json`](https://github.com/agentcarousel/agentcarousel/blob/main/templates/fixture-bundle.manifest.json) · [Tag examples](fixture-tag-examples.md)
+> **Templates:** [`templates/fixture-skeleton.yaml`](https://github.com/agentcarousel/agentcarousel/blob/main/templates/fixture-skeleton.yaml) · [`templates/bundle-manifest-skeleton.json`](https://github.com/agentcarousel/agentcarousel/blob/main/templates/bundle-manifest-skeleton.json) · [Tag examples](fixture-tag-examples.md)
 
 ---
 
@@ -82,10 +82,9 @@ fixture file
 Use `agentcarousel init` as your starting point. Never write a fixture from a blank file.
 
 ```sh
-# Scaffold from init, then replace with your values:
-agentcarousel init --skill summarize-skill > fixtures/skill-summarize.yaml
-# Or copy the annotated template:
-cp templates/fixture-skeleton.yaml fixtures/my-new-fixture.yaml
+# Scaffold the full per-skill directory (cases.yaml, prompt.md, bundle.manifest.json, golden/):
+agentcarousel init --skill summarize-skill
+# Outputs: fixtures/summarize-skill/
 ```
 
 **Author checklist (run through before Phase 4):**
@@ -115,16 +114,16 @@ Run all three checks locally before requesting a review. Do not skip `--mock-str
 
 ```sh
 # 1. Schema validation — must exit 0
-agentcarousel validate fixtures/my-new-fixture.yaml --strict
+agentcarousel validate fixtures/my-new-skill/cases.yaml --strict
 
 # 2. Offline test with strict mock enforcement
-agentcarousel test fixtures/my-new-fixture.yaml \
+agentcarousel test fixtures/my-new-skill/cases.yaml \
   --offline \
   --mock-dir mocks/ \
   --mock-strict
 
 # 3. Eval pass (if rubric items exist)
-agentcarousel eval fixtures/my-new-fixture.yaml \
+agentcarousel eval fixtures/my-new-skill/cases.yaml \
   --mock-dir mocks/ \
   --offline
 
@@ -155,7 +154,7 @@ Open a PR or share the fixture file with the reviewer. Use the review checklist 
 ```markdown
 ## Fixture Review Checklist
 
-**Fixture file:** `fixtures/<name>.yaml`
+**Fixture file:** `fixtures/<name>/cases.yaml`
 **Author:** @...
 **Reviewer:** @...
 
@@ -208,8 +207,8 @@ After review is approved and CI is green:
 
 A fixture is **done** when all of the following are true:
 
-- [ ] `agentcarousel validate fixtures/<name>.yaml --strict` exits 0
-- [ ] `agentcarousel test fixtures/<name>.yaml --offline --mock-dir mocks/ --mock-strict` exits 0
+- [ ] `agentcarousel validate fixtures/<name>/cases.yaml --strict` exits 0
+- [ ] `agentcarousel test fixtures/<name>/cases.yaml --offline --mock-dir mocks/ --mock-strict` exits 0
 - [ ] JSON or JUnit XML is parseable by CI (run once in the pipeline)
 - [ ] Every case has `description` and at least one tag
 - [ ] PR reviewed and approved (self-review acceptable for standard tier)
@@ -220,7 +219,7 @@ All Standard items, plus:
 
 - [ ] Bundle manifest (`bundle.manifest.json`) present, valid, and up-to-date
 - [ ] `bundle_id`, `bundle_version`, `certification_track: candidate`, `risk_tier`, `data_handling` all set
-- [ ] `agentcarousel eval fixtures/<name>.yaml --offline --runs 5 --mock-dir mocks/` exits 0 with all 5 runs passing
+- [ ] `agentcarousel eval fixtures/<name>/cases.yaml --offline --runs 5 --mock-dir mocks/` exits 0 with all 5 runs passing
 - [ ] Effectiveness score ≥ `effectiveness_threshold` across all 5 runs
 - [ ] 0 flakes across 5 local eval runs (no intermittent failures)
 - [ ] Domain reviewer has approved (second reviewer, separate from Author)
@@ -236,10 +235,10 @@ For authors iterating on an existing fixture (not starting from scratch):
 
 ```sh
 # After making changes:
-agentcarousel validate fixtures/my-fixture.yaml --strict
-agentcarousel test fixtures/my-fixture.yaml --offline --mock-dir mocks/ --mock-strict
+agentcarousel validate fixtures/my-skill/cases.yaml --strict
+agentcarousel test fixtures/my-skill/cases.yaml --offline --mock-dir mocks/ --mock-strict
 # If rubric changed:
-agentcarousel eval fixtures/my-fixture.yaml --offline --runs 3
+agentcarousel eval fixtures/my-skill/cases.yaml --offline --runs 3
 # Check for regressions against previous run:
 agentcarousel report diff <PREV_RUN_ID> $(agentcarousel report list --limit 1 --json | jq -r '.[0].id')
 ```
@@ -275,21 +274,23 @@ Any unmocked tool call discovered during review or CI is a fixture authoring err
 
 ---
 
-## Fixture File Naming Convention
+## Fixture Directory Layout
+
+Each skill or agent lives in its own directory under `fixtures/`:
 
 ```
 fixtures/
-├── <domain>/
-│   ├── <skill-or-agent-id>.yaml           # primary fixture file
-│   ├── <skill-or-agent-id>-edge.yaml      # edge cases (separate file if many)
-│   └── <skill-or-agent-id>-stress.yaml    # load/stress cases (optional)
-└── examples/                              # curated examples (maintained by AGC)
-    └── *.yaml
+└── <skill-or-agent-id>/
+    ├── cases.yaml               # test cases (primary fixture file)
+    ├── prompt.md                # system prompt for the skill or agent
+    ├── bundle.manifest.json     # bundle metadata for certification and registry
+    └── golden/                  # golden output files for golden_diff assertions
+        └── <case-name>.txt
 ```
 
-Case ids must always match the fixture file stem:
-- File `fixtures/text-processing/skill-summarize.yaml` → case ids start with `skill-summarize/`
-- File `fixtures/search/agent-web-search.yaml` → case ids start with `agent-web-search/`
+`agentcarousel init --skill <name>` scaffolds the full directory. Case ids must always start with the `skill_or_agent` value:
+- Skill `regex-builder` in `fixtures/regex-builder/cases.yaml` → case ids start with `regex-builder/`
+- Agent `web-search-agent` in `fixtures/web-search-agent/cases.yaml` → case ids start with `web-search-agent/`
 
 This is enforced by `agentcarousel validate` and the schema.
 

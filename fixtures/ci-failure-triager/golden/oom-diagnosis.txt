@@ -1,0 +1,13 @@
+Root cause: JavaScript heap out-of-memory (OOM).
+
+The V8 engine hit its heap limit (~4 GB) partway through the test suite. Earlier
+suites (users, orders, products) completed successfully, suggesting memory
+accumulates progressively across test files — a common pattern when Jest workers
+share global state or when large fixtures/mocks are not released between files.
+
+Fixes (in order of preference):
+1. Increase heap: NODE_OPTIONS=--max-old-space-size=8192 npm test
+2. Reduce parallelism: npx jest --runInBand (single-threaded, lower peak memory)
+3. Shard the suite: split into smaller subsets run in separate CI steps
+4. Profile allocations: run with --inspect and check for retained mock objects or
+   large test fixture data not cleaned up in afterEach/afterAll.

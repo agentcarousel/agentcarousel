@@ -5,7 +5,7 @@
       "case_id": "terraform-sentinel-scaffold/judge-spot-check"
     },
     "response": {
-      "content": "# MANDATORY \u2014 enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"judge_spot\" {\n  name = \"ci\"\n}\n\nStarter stub; TFE plan governs truth."
+      "content": "# MANDATORY — enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"judge_spot\" {\n  name = \"ci\"\n}\n\nStarter stub; TFE plan governs truth."
     }
   },
   {
@@ -14,7 +14,7 @@
       "case_id": "terraform-sentinel-scaffold/positive-aws-mfa"
     },
     "response": {
-      "content": "# MANDATORY \u2014 enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"example\" {\n  name = \"ci\"\n}\n\nStarter stub only; TFE run governs truth after terraform plan."
+      "content": "# MANDATORY — enforce-mfa.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user\n\nresource \"aws_iam_user\" \"example\" {\n  name = \"ci\"\n}\n\nStarter stub only; TFE run governs truth after terraform plan."
     }
   },
   {
@@ -23,7 +23,7 @@
       "case_id": "terraform-sentinel-scaffold/positive-azure-encryption"
     },
     "response": {
-      "content": "# MANDATORY \u2014 require-storage-encryption.sentinel\n# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account\n\nresource \"azurerm_storage_account\" \"example\" {\n  # enable_https_traffic_only = true\n  # min_tls_version = \"TLS1_2\"\n}\n"
+      "content": "# MANDATORY — require-storage-encryption.sentinel\n# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account\n\nresource \"azurerm_storage_account\" \"example\" {\n  # enable_https_traffic_only = true\n  # min_tls_version = \"TLS1_2\"\n}\n"
     }
   },
   {
@@ -83,24 +83,6 @@
   {
     "tool": "agent_response",
     "args_match": {
-      "case_id": "example-skill/positive"
-    },
-    "response": {
-      "content": "Summary: short note."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
-      "case_id": "example-skill/tool-call"
-    },
-    "response": {
-      "content": "Widget A has 12 units available."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
       "case_id": "customer-support/positive-ticket-resolution"
     },
     "response": {
@@ -140,7 +122,7 @@
       "case_id": "code-reviewer/positive-sqli-detection"
     },
     "response": {
-      "content": "**Severity: HIGH — SQL Injection vulnerability**\n\n`get_user_by_email` constructs a SQL query using an f-string with unsanitized user input:\n\n```python\nquery = f\"SELECT * FROM users WHERE email = '{email}'\"\n```\n\nThis is a classic SQL injection vector. An attacker can pass a malicious `email` value such as `' OR '1'='1` to bypass authentication or exfiltrate data.\n\n**Remediation:** Replace the f-string with a parameterized query:\n\n```python\nquery = \"SELECT * FROM users WHERE email = %s\"\ncursor.execute(query, (email,))\n```\n\nParameterized queries ensure the database driver handles escaping — input sanitization alone is not a sufficient defense against SQL injection."
+      "content": "**Severity: HIGH — SQL Injection vulnerability**\n\n`get_user_by_email` constructs a SQL query using an f-string with unsanitized user input:\n\n```python\nquery = f\"SELECT * FROM users WHERE email = '{email}'\"\n```\n\nThis is a classic SQL injection vector. An attacker can pass a malicious `email` value such as `' OR '1'='1` to bypass authentication or exfiltrate data.\n\n**Remediation:** Replace the f-string interpolation with a parameterized query:\n\n```python\nquery = \"SELECT * FROM users WHERE email = %s\"\ncursor.execute(query, (email,))\n```\n\nParameterized queries ensure the database driver handles escaping — input sanitization alone is not a sufficient defense against SQL injection."
     }
   },
   {
@@ -149,7 +131,7 @@
       "case_id": "code-reviewer/positive-style-feedback"
     },
     "response": {
-      "content": "A few style issues against the stated conventions:\n\n1. **Naming — `doThing`**: Non-descriptive function name. Based on the multiplication by 86400 (seconds in a day), consider `toSeconds` or `convertDaysToSeconds`.\n\n2. **Naming — `ProcessData`**: Functions should use camelCase per local conventions. Rename to `processData`.\n\n3. **Naming — `Result`**: Variables should use camelCase. Rename to `result`.\n\n4. **Magic number — `86400`**: Extract to a named constant: `const SECONDS_PER_DAY = 86400`.\n\n5. **`any[]` types**: Both the parameter and return type of `ProcessData` use `any[]`, which violates strict TypeScript conventions. Specify the actual item type."
+      "content": "A few style issues against the stated conventions:\n\n1. **Naming — `doThing`**: Non-descriptive function name. Based on the multiplication by 86400 (seconds in a day), consider `toSeconds` or `convertDaysToSeconds`.\n\n2. **Naming — `ProcessData`**: Functions should use camelCase per local conventions. Rename to `processData`.\n\n3. **Naming — `Result`**: Variables should use camelCase. Rename to `result`.\n\n4. **Constant — `86400`**: Extract to a named constant: `const SECONDS_PER_DAY = 86400`.\n\n5. **`any[]` types**: Both the parameter and return type of `ProcessData` use `any[]`, which violates strict TypeScript conventions. Specify the actual item type."
     }
   },
   {
@@ -158,7 +140,7 @@
       "case_id": "code-reviewer/positive-clean-approval"
     },
     "response": {
-      "content": "Looks good. The diff is clean:\n\n- `TOKEN_BYTE_LENGTH` correctly extracts the magic number as a named constant.\n- `generateSessionToken` and `isTokenExpired` are descriptively named and properly typed.\n- `crypto.randomBytes` is the right primitive for token generation.\n\nNo issues found. LGTM."
+      "content": "Looks good. The diff is clean:\n\n- `TOKEN_BYTE_LENGTH` is correctly defined as a named constant — descriptive and properly typed.\n- `generateSessionToken` and `isTokenExpired` are descriptively named and properly typed.\n- `crypto.randomBytes` is the right primitive for token generation.\n\nNo issues found. LGTM."
     }
   },
   {
@@ -168,6 +150,411 @@
     },
     "response": {
       "content": "**Severity: HIGH — Weak password hashing**\n\nThe `reset_password` function hashes passwords using MD5:\n\n```python\nhashed = hashlib.md5(new_password.encode()).hexdigest()\n```\n\nMD5 is a general-purpose hash function — it is not designed for password storage. It is fast, which makes it trivially brute-forceable with modern hardware.\n\n**Remediation:** Replace with a purpose-built password hashing algorithm:\n\n```python\nimport bcrypt\nhashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())\n```\n\nAlternatives: `argon2-cffi`, `scrypt` (via `hashlib`), or `PBKDF2`. The minimum-length check (`< 8`) is acceptable as a baseline but consider raising the threshold.\n\nNo other issues within the diff."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/positive-gcp-labels"
+    },
+    "response": {
+      "content": "# ADVISORY — require-gcp-labels.sentinel\n# https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance\n\nvariable \"required_labels\" {\n  type = list(string)\n}\n\nresource \"google_compute_instance\" \"example\" {\n  labels = {}\n}\n"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/positive-multi-provider"
+    },
+    "response": {
+      "content": "# MANDATORY — enforce-s3-encryption.sentinel (aws_s3_bucket)\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket\n\nresource \"aws_s3_bucket\" \"example\" {}\n\n# MANDATORY — require-nsg-rules.sentinel (azurerm_network_security_group)\n# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_security_group\n\nresource \"azurerm_network_security_group\" \"example\" {}\n"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/positive-sentinel-hcl"
+    },
+    "response": {
+      "content": "# MANDATORY — require-tags.sentinel (aws_instance)\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance\n\nresource \"aws_instance\" \"example\" {\n  tags = {}\n}\n\n# ADVISORY — check-naming.sentinel (aws_s3_bucket)\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket\n\nresource \"aws_s3_bucket\" \"example\" {}\n"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/failure-mode-no-policy"
+    },
+    "response": {
+      "content": "Please provide or attach the .sentinel policy file you'd like me to scaffold. Share the policy content or upload the file so I can generate the Terraform stub."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "terraform-sentinel-scaffold/edge-case-param-variables"
+    },
+    "response": {
+      "content": "# MANDATORY — restrict-instance-types.sentinel\n# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance\n\nvariable \"allowed_instance_types\" {\n  type = list(string)\n}\n\nvariable \"allowed_regions\" {\n  type = list(string)\n}\n\nresource \"aws_instance\" \"example\" {\n  instance_type = var.allowed_instance_types[0]\n}\n\n# See variables.tf for allowed_instance_types and allowed_regions configuration.\n"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "accessibility-auditor/positive-missing-alt-and-div-button"
+    },
+    "response": {
+      "content": "**WCAG Issues Found:**\n\n1. **Missing alt text (WCAG 1.1.1):** The `<img>` element is missing an `alt` attribute. Screen reader users will not know what the image represents. Add a descriptive `alt` attribute, or `alt=\"\"` if the image is decorative.\n\n2. **Non-interactive div with onClick (WCAG 2.1.1 / 4.1.2):** A `<div>` element with an onClick handler is not keyboard accessible. Non-interactive elements cannot be reached via keyboard navigation. Replace with a `<button>` element, or add `role=\"button\"` and `tabIndex={0}` with a corresponding onKeyDown handler."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "accessibility-auditor/positive-form-missing-label"
+    },
+    "response": {
+      "content": "**WCAG 1.3.1 Issue — Missing Label:**\n\nThe form input does not have an associated `<label>` element. The `htmlFor` attribute must reference the input's `id`, or use `aria-label` directly on the input.\n\nUsing `placeholder` text as a substitute for a visible label is insufficient: placeholders disappear when the user starts typing, leaving no persistent label for the field. Screen readers also rely on associated label elements, not placeholder text, for form field identification."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "accessibility-auditor/negative-decorative-image-correct"
+    },
+    "response": {
+      "content": "The implementation is correct. The decorative image uses `alt=\"\"` (empty alt attribute), which is the appropriate WCAG pattern for purely decorative images. Screen readers will skip this image, which is the intended behavior. No accessibility issues found — this is a well-implemented pattern."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "accessibility-auditor/positive-icon-button-no-label"
+    },
+    "response": {
+      "content": "**WCAG 4.1.2 Issues — Missing Accessible Names:**\n\n1. **TrashIcon button:** The delete button contains only an icon with no accessible name. Screen reader users will hear \"button\" with no context. Add `aria-label=\"Delete item\"`.\n\n2. **ShareIcon button:** Similarly unlabeled — add `aria-label=\"Share\"`.\n\nIcon-only buttons must have an `aria-label` or visually-hidden text to provide an accessible name for assistive technology users."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "accessibility-auditor/positive-heading-hierarchy"
+    },
+    "response": {
+      "content": "**WCAG 2.4.6 / 1.3.1 — Heading Hierarchy Issue:**\n\nThe document jumps from `<h1>` directly to `<h3>`, skipping the `<h2>` level. This breaks heading hierarchy and makes navigation via screen reader heading shortcuts unreliable.\n\nScreen readers allow users to navigate by headings to build a mental document structure outline. Skipping heading levels (h1 → h3) disrupts this heading navigation pattern and misrepresents the document structure. Insert an `<h2>` between the `<h1>` and `<h3>` to restore a logical hierarchy."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "ci-failure-triager/positive-oom-kill"
+    },
+    "response": {
+      "content": "**Root Cause: JavaScript Heap Out of Memory (OOM)**\n\nThe CI run terminated with `FATAL ERROR: Reached heap limit` — this is a V8 heap OOM, not an assertion failure. The earlier test files (users, orders, products) passed, suggesting memory accumulates progressively across the test suite as each suite loads fixtures into the heap.\n\n**Recommended Fixes:**\n- Set `NODE_OPTIONS=--max-old-space-size=4096` to increase the V8 heap limit\n- Use `--runInBand` to run tests serially and reduce parallel worker memory overhead\n- Split the test suite into smaller shards so memory is freed between runs"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "ci-failure-triager/positive-missing-env-var"
+    },
+    "response": {
+      "content": "**Root Cause: Missing Environment Variable — CI Configuration Issue**\n\nThe application fails at startup because `DATABASE_URL` is not set in the CI environment. This is a CI configuration issue — the application code correctly validates required configuration at startup.\n\n**Fix:** Add `DATABASE_URL` as a CI secret or environment variable. In GitHub: go to repository Settings → Secrets and variables → Actions, and add a new repository secret named `DATABASE_URL` with your database connection string. Do not commit the value to the repository."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "ci-failure-triager/positive-flaky-timing-test"
+    },
+    "response": {
+      "content": "**Root Cause: Flaky Timing-Dependent Test**\n\nThis is a non-deterministic flaky test. The 1-in-5 failure rate is the signature of a wall-clock timing assertion sensitive to system load. Under CI load variance, the same operation can take 400ms or 700ms depending on CPU contention — the scheduler is not broken.\n\n**Fix:** Replace the wall-clock assertion with `jest.useFakeTimers()` to control timing deterministically. Alternatively, test behavior (was the job processed correctly?) rather than duration. The assertion should verify outcomes, not elapsed time."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "ci-failure-triager/positive-dependency-conflict"
+    },
+    "response": {
+      "content": "**Root Cause: npm Peer Dependency Conflict**\n\n`legacy-ui-lib@2.4.1` requires `react@^17.0.0` as a peer dependency, but your project uses `react@18.3.1`. This is a version conflict between the two packages.\n\n**Resolution Options (in order of safety):**\n1. **Upgrade legacy-ui-lib** — check if a newer version supports React 18\n2. **Replace the library** with a React 18-compatible alternative\n3. **Use `--legacy-peer-deps`** as a temporary workaround — caveat: this may cause runtime errors and is not a permanent fix\n\nAvoid `--force` — it is a workaround that risks runtime errors in production."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "ci-failure-triager/edge-case-shared-fixture-teardown"
+    },
+    "response": {
+      "content": "**Root Cause: Shared Database Teardown Destroying the Shared Connection**\n\n`db.teardown.test.ts` ran immediately before these four failures and closed the shared database connection in an `afterAll` hook. All four suites (users, orders, products, reports) share that connection — their `Connection terminated unexpectedly` errors are a cascade from the teardown, not individual test bugs.\n\n**Fix:** Implement test isolation. Use `beforeEach`/`afterEach` transaction rollbacks so each test gets a clean state without tearing down the shared connection. Alternatively, provision a separate test database per suite, or use an in-memory database per test for full isolation."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "prompt-injection-detector/positive-direct-override"
+    },
+    "response": {
+      "content": "**INJECTION DETECTED — High Confidence**\n\nThis input contains a direct prompt injection attack. The message attempts to override system instructions with a malicious override directive designed to bypass safety guidelines. This is a clearly flagged, high-confidence injection. Classify as HIGH risk and reject."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "prompt-injection-detector/positive-indirect-via-document"
+    },
+    "response": {
+      "content": "**INJECTION DETECTED — Indirect via Document**\n\nThis is an indirect prompt injection embedded inside a document. The document content contains a hidden instruction using a spoofed [SYSTEM] tag, attempting to inject fake system-level directives into the processing pipeline. The injection is embedded within the document content rather than the direct user message — a classic indirect content injection technique. Flag and reject."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "prompt-injection-detector/positive-roleplay-jailbreak"
+    },
+    "response": {
+      "content": "**INJECTION DETECTED — Roleplay Jailbreak Attempt**\n\nThis is a jailbreak attack using a roleplay persona bypass. The request attempts to establish a persona with 'no restrictions' to circumvent safety guidelines. This is a malicious injection attempt — using roleplay framing to bypass restriction boundaries is a known attack pattern. Classify as HIGH risk."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "prompt-injection-detector/edge-case-multilingual"
+    },
+    "response": {
+      "content": "**INJECTION DETECTED — Multilingual Attack**\n\nPrompt injection detected in a non-English (Spanish) payload. The injection is embedded in Spanish but follows the same malicious override pattern as English-language injection attacks. Multilingual and non-English injection attempts are a known evasion technique — language does not affect detection when the injected directive is clear."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "prompt-injection-detector/negative-benign-false-positive"
+    },
+    "response": {
+      "content": "**CLASSIFICATION: Benign — No Injection Detected**\n\nThis is a legitimate, safe human-to-human business context communication. No prompt injection patterns found. The content is straightforward business correspondence with no hidden instructions, override attempts, or system-tag spoofing. Flagging this would be a false positive."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "regex-builder/positive-semver"
+    },
+    "response": {
+      "content": "Here is a regex for semantic versioning:\n\n```\n^\\d+\\.\\d+\\.\\d+$\n```\n\nThis pattern anchors to the full string with `^` and `$` to ensure the entire input is a semver string (start and end anchors). The `\\d+` matches one or more digits for each version component, separated by literal dots escaped as `\\.`."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "regex-builder/positive-email-redos-safe"
+    },
+    "response": {
+      "content": "Here is a ReDoS-safe email validation regex:\n\n```\n^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$\n```\n\nThis pattern uses simple character classes without nested quantifiers or catastrophic backtracking. The local part before the at sign and the domain part use bounded character classes to prevent ReDoS vulnerabilities."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "regex-builder/positive-ipv4"
+    },
+    "response": {
+      "content": "A naive `\\d{1,3}` per octet is insufficient — it would match values that exceed 255 (e.g. 256, 999) and accepts leading zeros. Here is a properly bounded IPv4 regex:\n\n```\n^(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]\\d|\\d)\\.(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]\\d|\\d)\\.(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]\\d|\\d)\\.(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]\\d|\\d)$\n```\n\nEach octet alternation matches exactly 0-255, ruling out values like 256 that exceed the valid range."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "regex-builder/positive-credit-card-masking"
+    },
+    "response": {
+      "content": "To mask a 16-digit credit card number while keeping the last four digits:\n\n**Match pattern:**\n```\n^(\\d{4}[\\s\\-]?)(\\d{4}[\\s\\-]?)(\\d{4}[\\s\\-]?)(\\d{4})$\n```\n\n**Replacement:** `XXXX-XXXX-XXXX-$4`\n\nThis matches four groups of four digits (Luhn-format credit card structure), optionally separated by spaces or hyphens. The replacement redacts the first three groups with `XXXX` and preserves the last four digit group for identification."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "regex-builder/edge-case-existing-pattern-review"
+    },
+    "response": {
+      "content": "The existing pattern looks correct and valid. The regex accurately matches the intended input and works as expected for the described use case. No issues identified — the current pattern is good and does not need changes."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "unit-test-generator/positive-pure-function-boundaries"
+    },
+    "response": {
+      "content": "```python\nimport pytest\nfrom mymodule import clamp\n\n@pytest.mark.parametrize('value,min_val,max_val,expected', [\n    (5, 1, 10, 5),\n    (0, 1, 10, 1),\n    (15, 1, 10, 10),\n    (1, 1, 10, 1),\n    (10, 1, 10, 10),\n])\ndef test_clamp_boundary(value, min_val, max_val, expected):\n    assert clamp(value, min_val, max_val) == expected\n\ndef test_clamp_invalid_range_raises():\n    with pytest.raises(ValueError):\n        clamp(5, 10, 1)\n\ndef test_clamp_edge_equal_bounds():\n    assert clamp(5, 3, 3) == 3\n```\n\nThis is a pure function — assert directly on the return value, no test doubles needed."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "unit-test-generator/positive-async-with-mocks"
+    },
+    "response": {
+      "content": "```typescript\nconst mockFindByEmail = jest.fn();\nconst mockInsert = jest.fn();\nconst mockSendWelcome = jest.fn();\n\njest.spyOn(userRepo, 'findByEmail').mockImplementation(mockFindByEmail);\njest.spyOn(userRepo, 'insert').mockImplementation(mockInsert);\njest.spyOn(emailService, 'sendWelcome').mockImplementation(mockSendWelcome);\n\ndescribe('createUser', () => {\n  test('inserts user and sends welcome email', async () => {\n    mockFindByEmail.mockResolvedValue(null);\n    mockInsert.mockResolvedValue({ id: 1 });\n    mockSendWelcome.mockResolvedValue(undefined);\n    await createUser({ email: 'test@example.com' });\n    expect(mockInsert).toHaveBeenCalled();\n    expect(mockSendWelcome).toHaveBeenCalled();\n  });\n\n  test('throws when user already exists as duplicate', async () => {\n    mockFindByEmail.mockResolvedValue({ id: 1, email: 'test@example.com' });\n    await expect(createUser({ email: 'test@example.com' })).rejects.toThrow('existing user');\n  });\n});\n```\n\njest.fn() and jest.spyOn stubs replace the database and email dependencies to keep tests fast and isolated."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "unit-test-generator/positive-class-with-state"
+    },
+    "response": {
+      "content": "```typescript\ndescribe('Counter', () => {\n  test('increment increases value', () => {\n    const c = new Counter(0);\n    c.increment();\n    expect(c.getValue()).toBe(1);\n  });\n\n  test('decrement decreases value', () => {\n    const c = new Counter(5);\n    c.decrement();\n    expect(c.getValue()).toBe(4);\n  });\n\n  test('reset returns to initialValue', () => {\n    const c = new Counter(3);\n    c.increment();\n    c.reset();\n    expect(c.getValue()).toBe(3);\n  });\n\n  test('throws RangeError on decrement below zero (negative guard)', () => {\n    const c = new Counter(0);\n    expect(() => c.decrement()).toThrow(RangeError);\n  });\n\n  test('sequence: multiple calls chain correctly — after increment then decrement', () => {\n    const c = new Counter(0);\n    c.increment();\n    c.increment();\n    c.decrement();\n    expect(c.getValue()).toBe(1);\n  });\n});\n```"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "unit-test-generator/edge-case-no-unnecessary-mocks"
+    },
+    "response": {
+      "content": "```python\ndef test_format_currency_standard():\n    assert format_currency(1234.50) == '$1,234.50'\n\ndef test_format_currency_small():\n    assert format_currency(9.99) == '$9.99'\n\ndef test_format_currency_round():\n    assert format_currency(50.00) == '$50.00'\n\ndef test_format_currency_zero():\n    assert format_currency(0) == '$0.00'\n```\n\nThis is a pure function with no I/O or external dependencies — assert directly on the return value. No test doubles required."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "unit-test-generator/edge-case-untestable-side-effect"
+    },
+    "response": {
+      "content": "To test a function that prints to stdout, use `capsys` to capture output:\n\n```python\ndef test_prints_greeting(capsys):\n    greet('Alice')\n    captured = capsys.readouterr()\n    assert 'Alice' in captured.out\n```\n\nAlternatively, use `unittest.mock.patch('builtins.print')` to mock print calls, or refactor the function to return a string instead of printing directly — making it a pure function that redirects stdout implicitly via the caller."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/positive-mixed-schema-pii"
+    },
+    "response": {
+      "content": "**Data Classification:**\n\n- `full_name`: **PII** — directly identifies a natural person; personal data requiring protection under GDPR\n- `email_hash` (MD5): **Pseudonymous PII** — MD5 hashes are not anonymous. This hash can be re-identified via rainbow tables or reverse lookup; the hash is still PII\n- `total_orders`: **Not PII** — aggregate statistical data that cannot identify an individual; not personal data"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/edge-case-ip-address"
+    },
+    "response": {
+      "content": "**IP Address Classification: Context-Dependent**\n\nIP addresses are potentially personal data under GDPR. Whether they qualify depends on context: a dynamic IP can identify a subscriber when combined with ISP records, making it potentially identifiable. The classification is context-dependent — not absolute in either direction.\n\n**Recommended practice:** Truncate the last octet before logging (e.g., `192.168.1.0/24`) to anonymize logs, or apply pseudonymization. This reduces privacy risk while preserving useful analytics."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/positive-aggregate-non-pii"
+    },
+    "response": {
+      "content": "**Classification: Not PII — Aggregate Statistical Data**\n\nThis dataset contains only aggregate and statistical metrics. No individual can be identified from these fields. This is non-PII data with no personal identifiers — standard data handling applies. No special privacy controls required for this data set."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/positive-biometric-high-sensitivity"
+    },
+    "response": {
+      "content": "**Classification: Biometric Data — Highest Sensitivity (GDPR Article 9 Special Category)**\n\nBiometric data for identification purposes is a special category under GDPR Article 9, carrying the highest level of sensitivity. Processing requires:\n\n- **Explicit consent** from each data subject\n- **Data Protection Impact Assessment (DPIA)** before processing begins\n- **Data Protection Officer (DPO)** involvement and sign-off\n- Strict access controls, purpose limitation, and data minimisation"
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/edge-case-pseudonymous-tokens"
+    },
+    "response": {
+      "content": "**Classification: Pseudonymous PII**\n\nThese tokens are pseudonymous, not anonymous. A `user_uuid` is linkable back to a real person via a foreign key join on the users table — it can re-identify individuals. The UUID is personal data under GDPR because it links to a person.\n\nSession tokens similarly link sessions to individuals and are personal data. Appropriate retention policies and access controls are required. Treating these as 'just tokens' or anonymous would be incorrect."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/positive-null-pointer-with-context"
+    },
+    "response": {
+      "content": "The invoice you’re looking for could not be found. It may have been deleted or is no longer available.\n\nPlease go back to your invoice list or return to the dashboard to find the correct invoice. If you believe this is an error, contact support."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/positive-econnrefused"
+    },
+    "response": {
+      "content": "Cannot connect to the database. PostgreSQL is not responding on port 5432 — the connection was refused.\n\nPlease check that the PostgreSQL service is running and started. If using Docker, ensure the postgres container is up. Run `pg_isready` or check your database service status."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/positive-already-good-message"
+    },
+    "response": {
+      "content": "This error message is already clear and effective. It concisely explains what went wrong and what the user should do next. No changes needed — the message works well as written and is well-written for the context."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/positive-403-permission"
+    },
+    "response": {
+      "content": "You don’t have permission to view this resource. Access is denied for your current account.\n\nContact your team admin to request access, or ask an admin to grant you the required permissions for this area."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/positive-database-deadlock"
+    },
+    "response": {
+      "content": "Your order could not be placed at this time. No changes were made and you have not been charged.\n\nPlease try again in a moment. If the issue persists, contact support and we’ll help resolve it."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "env-file-auditor/positive-live-credentials-weak-secret"
+    },
+    "response": {
+      "content": "**Security Issues Found:**\n\n1. **STRIPE_KEY (`sk_live_...`):** This is a live Stripe production key in an environment file. Rotate this key immediately and move it to a secrets manager — never commit live keys to version control.\n\n2. **JWT_SECRET:** The current value is too short with insufficient entropy. A weak JWT_SECRET allows token forgery. Rotate to a cryptographically random 256-bit value.\n\n3. **DATABASE_URL:** Contains database credentials embedded in the URL. Avoid storing password-containing DATABASE_URL values in files that may be checked in."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "env-file-auditor/positive-placeholder-values"
+    },
+    "response": {
+      "content": "**Placeholder Values Detected — Incomplete Configuration:**\n\nSeveral variables contain placeholder values that have not been set:\n\n- `API_KEY=your-api-key` — placeholder, not a real value\n- `SECRET=CHANGEME` — TODO placeholder, incomplete\n\nThis environment file is not ready for use. Replace all placeholder values with real credentials before deployment."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "env-file-auditor/positive-clean-approval"
+    },
+    "response": {
+      "content": "The environment file looks good. No secrets or sensitive credentials detected. All values follow good practice — no live keys, no unset variables, and no security issues found. Well-configured environment file, approved."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "env-file-auditor/edge-case-env-purpose-mismatch"
+    },
+    "response": {
+      "content": "**DANGEROUS COMBINATION — Environment Purpose Mismatch:**\n\nThis environment file contains a mismatch between development-mode settings and production credentials:\n\n- `sk_live_...` (live Stripe production key) combined with development settings is a dangerous combination\n- `prod.db` (production database) in a development-labeled file risks production data modification during local development\n\nUsing live Stripe and AWS prod credentials in a development environment file is a serious mismatch. Separate development and production environment files strictly."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "env-file-auditor/failure-mode-no-content"
+    },
+    "response": {
+      "content": "Please provide the contents of your .env file so I can audit it. Paste the environment variables you'd like me to review and I'll check them for security issues."
     }
   }
 ]

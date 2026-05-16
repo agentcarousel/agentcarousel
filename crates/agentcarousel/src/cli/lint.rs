@@ -13,7 +13,7 @@ const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
 /// Check fixture quality beyond schema: smoke coverage, rubric weights, descriptions.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc lint fixtures/                     # check all fixtures\n  agc lint fixtures/skills/my-skill.yaml # check one file\n  agc lint --error-on-warn               # fail on any warning"
+    after_help = "Examples:\n  agc lint fixtures/                     # check all fixtures\n  agc lint fixtures/my-skill/cases.yaml  # check one file\n  agc lint --error-on-warn               # fail on any warning"
 )]
 pub struct LintArgs {
     /// Fixture files or dirs (default: fixtures/).

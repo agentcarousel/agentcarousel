@@ -16,7 +16,7 @@ const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
 /// Check YAML/TOML fixtures against the schema (no execution). Scans `.` when no paths given.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc validate fixtures/skills/customer-support.yaml\n  agc validate fixtures/ --strict\n  agc validate --format sarif > results.sarif  # GitHub code scanning\n  agc validate                        # scans . respecting .agentcarousel-ignore"
+    after_help = "Examples:\n  agc validate fixtures/customer-support/cases.yaml\n  agc validate fixtures/ --strict\n  agc validate --format sarif > results.sarif  # GitHub code scanning\n  agc validate                        # scans . respecting .agentcarousel-ignore"
 )]
 pub struct ValidateArgs {
     /// Files or dirs to scan (default: `.` if omitted).

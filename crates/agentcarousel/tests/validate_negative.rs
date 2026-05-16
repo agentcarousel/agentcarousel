@@ -15,7 +15,7 @@ fn validate_examples() {
     Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["validate", "fixtures/examples/example-skill.yaml"])
+        .args(["validate", "fixtures/regex-builder/cases.yaml"])
         .assert()
         .success();
 }
@@ -23,10 +23,16 @@ fn validate_examples() {
 #[test]
 fn validate_invalid_examples() {
     let root = workspace_root();
+    let tmp = tempfile::NamedTempFile::with_suffix(".yaml").expect("tmp file");
+    std::fs::write(
+        tmp.path(),
+        "schema_version: 99\nskill_or_agent: ''\ncases:\n  - id: bad case\n",
+    )
+    .expect("write invalid fixture");
     Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["validate", "fixtures/examples/invalid-skill.yaml"])
+        .args(["validate", tmp.path().to_str().unwrap()])
         .assert()
         .failure()
         .code(2);
@@ -40,7 +46,7 @@ fn validate_json_includes_atf_summary() {
         .current_dir(&root)
         .args([
             "validate",
-            "fixtures/examples/example-skill.yaml",
+            "fixtures/regex-builder/cases.yaml",
             "--format",
             "json",
         ])

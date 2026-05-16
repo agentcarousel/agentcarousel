@@ -1,0 +1,405 @@
+# agentcarousel fixture — dockerfile-linter
+# Certification Tier: Candidate
+# Source skill: Dockerfile security and best-practice linting agent
+# Golden files:  fixtures/golden/dockerfile-linter/
+# Bundle:        fixtures/bundles/dockerfile-linter/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: dockerfile-linter
+
+bundle_id: agentcarousel/dockerfile-linter
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: high
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [security, devops, dockerfile, docker, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Root user + mutable tag (smoke + certification) ──────────────────
+  - id: dockerfile-linter/positive-root-user-mutable-tag
+    description: >
+      Dockerfile with no USER directive (runs as root by default) and a mutable
+      :latest base image tag. Agent must identify both: the privilege escalation risk
+      from root execution and the supply-chain risk from mutable tags. Pass requires
+      both findings with specific remediation.
+    tags: [smoke, happy-path, security, devops, dockerfile, certification]
+    seed: 5001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this Dockerfile for security issues:
+
+            ```dockerfile
+            FROM python:3.11-latest
+            WORKDIR /app
+            COPY . .
+            RUN pip install -r requirements.txt
+            EXPOSE 8080
+            CMD ["python", "app.py"]
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(root|no.*USER|USER.*directive|non-root|privilege|running as root)'
+        - kind: regex
+          value: '(?i)(latest|mutable.*tag|pin|digest|sha256|specific.*version)'
+        - kind: not_contains
+          value: "looks great"
+        - kind: not_contains
+          value: "no issues"
+
+      rubric:
+        - id: root-execution-flagged
+          description: >
+            Agent flags absence of USER directive — container runs as root by default.
+            A perfect score names the specific risk and recommends adding USER with
+            a non-root UID (e.g. USER 1001 or useradd + USER appuser).
+          weight: 0.45
+          auto_check:
+            kind: regex
+            value: '(?i)(USER|non-root|no.*user.*directive|running as root|root.*default)'
+
+        - id: mutable-tag-flagged
+          description: >
+            Agent flags :latest (or the mutable :3.11-latest alias) as a supply-chain
+            risk — the base image can change without the Dockerfile changing. A perfect
+            score recommends a pinned version tag or SHA digest.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(latest|mutable|pin.*digest|sha256|specific.*tag|immutable)'
+
+        - id: remediation-actionable
+          description: >
+            At least one finding includes a concrete remediation example (e.g. `USER 1001`
+            or `FROM python:3.11.9-slim@sha256:...`). A perfect score gives both.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(USER \d+|USER appuser|sha256:|pin.*sha|add.*USER)'
+
+  # ── Case 2: Secrets baked into ENV layer ─────────────────────────────────────
+  - id: dockerfile-linter/positive-secret-in-env
+    description: >
+      Dockerfile bakes production credentials into ENV layers. They persist in every
+      image layer and are visible via `docker history` or image inspection. Agent must
+      flag both secrets, explain layer-persistence, and recommend runtime injection.
+    tags: [happy-path, security, devops, dockerfile, certification]
+    seed: 5002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this Dockerfile for security issues:
+
+            ```dockerfile
+            FROM node:18-alpine
+            WORKDIR /app
+            ENV DATABASE_URL=postgres://admin:s3cr3tP4ss@prod.db.internal:5432/appdb
+            ENV AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+            COPY package*.json ./
+            RUN npm ci
+            COPY . .
+            RUN npm run build
+            EXPOSE 3000
+            CMD ["node", "dist/server.js"]
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(DATABASE_URL|AWS_SECRET|bake.*secret|secret.*layer|history|inspect)'
+        - kind: regex
+          value: '(?i)(runtime|--env-file|docker.*secret|secret.*manager|inject.*runtime|environment.*file)'
+        - kind: not_contains
+          value: "looks secure"
+        - kind: not_contains
+          value: "no security issues"
+
+      rubric:
+        - id: both-secrets-identified
+          description: >
+            Agent identifies DATABASE_URL (contains password in URL) and AWS_SECRET_ACCESS_KEY
+            as secrets baked into the image. A perfect score names both.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(DATABASE_URL|AWS_SECRET_ACCESS_KEY|both.*secret|credential)'
+
+        - id: layer-persistence-explained
+          description: >
+            Agent explains that ENV values persist in every image layer and are accessible
+            via `docker history --no-trunc` or image inspection — even if overridden later.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(layer|docker history|image inspect|persist|expose.*layer|bake.*layer)'
+
+        - id: runtime-injection-recommended
+          description: >
+            Agent recommends injecting secrets at runtime rather than build time:
+            --env-file, Docker secrets, or an orchestrator secrets manager.
+            A perfect score gives a concrete alternative.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(--env-file|docker secret|runtime|secret.*manager|inject.*runtime)'
+
+  # ── Case 3: Clean Dockerfile — approve without fabricating findings ───────────
+  - id: dockerfile-linter/positive-clean-approval
+    description: >
+      Well-structured Dockerfile: pinned base image digest, explicit non-root USER,
+      multi-stage build to reduce final image size, no secrets in ENV. Agent must
+      approve without inventing violations.
+    tags: [happy-path, devops, dockerfile, certification]
+    seed: 5003
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this Dockerfile for security issues:
+
+            ```dockerfile
+            FROM python:3.11.9-slim@sha256:a8462db480ec3a74499a297b1f8e074944288a21e7da9d992377fa7a77e78c09 AS builder
+            WORKDIR /build
+            COPY requirements.txt .
+            RUN pip install --no-cache-dir --user -r requirements.txt
+
+            FROM python:3.11.9-slim@sha256:a8462db480ec3a74499a297b1f8e074944288a21e7da9d992377fa7a77e78c09
+            WORKDIR /app
+            COPY --from=builder /root/.local /home/appuser/.local
+            COPY src/ ./src/
+            RUN useradd -r -u 1001 appuser && chown -R appuser:appuser /app
+            USER 1001
+            EXPOSE 8080
+            CMD ["python", "-m", "src.server"]
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(looks good|well.structured|clean|no.*security.*issue|approve|solid|good.*practice)'
+        - kind: not_contains
+          value: "running as root"
+        - kind: not_contains
+          value: "mutable"
+        - kind: not_contains
+          value: "secret in ENV"
+        - kind: not_contains
+          value: "should add USER"
+
+      rubric:
+        - id: approval-given
+          description: >
+            Agent approves or positively acknowledges the Dockerfile without inventing
+            security findings. A perfect score is concise with optional brief positive
+            observation (e.g. noting the pinned digest or multi-stage build).
+          weight: 0.65
+          auto_check:
+            kind: regex
+            value: '(?i)(looks good|no.*issue|well.structured|approve|clean|solid)'
+
+        - id: no-fabricated-findings
+          description: >
+            Agent does not invent violations for the non-root USER, the pinned digest,
+            or the multi-stage pattern — all are already correct.
+          weight: 0.35
+          auto_check:
+            kind: not_contains
+            value: "should pin"
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/dockerfile-linter/clean-approval.txt
+      golden_threshold: 0.70
+      effectiveness_threshold: 0.6
+
+  # ── Case 4: ADD used where COPY suffices ─────────────────────────────────────
+  - id: dockerfile-linter/positive-add-vs-copy
+    description: >
+      Dockerfile uses ADD for local file copies — a best-practice violation since ADD
+      has implicit tar-extraction and URL-fetching side effects that COPY does not.
+      Agent must flag ADD and recommend COPY with explanation of the risk.
+    tags: [happy-path, devops, dockerfile]
+    seed: 5004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this Dockerfile for best practices:
+
+            ```dockerfile
+            FROM golang:1.22-alpine
+            WORKDIR /app
+            ADD . /app/
+            RUN go build -o server ./cmd/server
+
+            FROM alpine:3.19
+            WORKDIR /app
+            ADD server /app/server
+            EXPOSE 8080
+            ENTRYPOINT ["/app/server"]
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(ADD|COPY|tar.*extract|url.*fetch|unintended|unexpected|side effect)'
+        - kind: regex
+          value: '(?i)(replace.*ADD.*COPY|use.*COPY|COPY.*instead|prefer.*COPY)'
+
+      rubric:
+        - id: add-flagged
+          description: >
+            Agent flags the ADD instructions and explains that ADD silently extracts
+            tarballs and fetches remote URLs — surprising behavior when copying local files.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(ADD.*COPY|replace.*ADD|use COPY|COPY.*prefer|COPY.*instead)'
+
+        - id: side-effects-explained
+          description: >
+            Agent explains the specific risk: if a .tar.gz file enters the build context,
+            ADD auto-extracts it; COPY always copies verbatim.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(tar|extract|url|remote|auto.extract|side effect|verbatim)'
+
+        - id: valid-exception-acknowledged
+          description: >
+            Agent notes ADD remains valid for intentional remote URL fetching or
+            tar extraction — not as a general-purpose copy instruction.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(exception|unless|intentional|when.*url|when.*tar|remote.*url|appropriate.*when)'
+
+  # ── Case 5: SSH key leak through intermediate build stage ────────────────────
+  - id: dockerfile-linter/edge-case-multi-stage-secret-leak
+    description: >
+      Multi-stage build copies an SSH private key into the builder stage to clone a
+      private repo. The final image does not include the key directly, but the key is
+      baked into the intermediate builder layer and is accessible via build cache
+      inspection. Agent must flag the key exposure and recommend BuildKit secret mounting.
+    tags: [edge-case, security, devops, dockerfile, certification]
+    seed: 5005
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this multi-stage Dockerfile for security issues:
+
+            ```dockerfile
+            FROM ubuntu:22.04 AS builder
+            WORKDIR /build
+            RUN mkdir -p /root/.ssh
+            COPY id_rsa /root/.ssh/id_rsa
+            RUN chmod 600 /root/.ssh/id_rsa
+            RUN apt-get update && apt-get install -y git
+            RUN git clone git@github.com:myorg/private-lib.git /build/lib
+            RUN make all
+
+            FROM ubuntu:22.04
+            WORKDIR /app
+            COPY --from=builder /build/dist/server /app/server
+            EXPOSE 8080
+            CMD ["/app/server"]
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(id_rsa|SSH.*key|private.*key|COPY.*id_rsa|key.*bake|secret.*layer)'
+        - kind: regex
+          value: '(?i)(build.*cache|intermediate.*layer|builder.*stage|BuildKit|--mount.*secret|--mount.*ssh|ssh.*agent)'
+
+      rubric:
+        - id: ssh-key-exposure-flagged
+          description: >
+            Agent flags that id_rsa is COPY'd into the builder stage. Even though the
+            final image omits it, the key is baked into the builder layer and accessible
+            via docker buildx imagetools inspect or layer extraction of the builder stage.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(id_rsa|ssh.*key|private.*key.*builder|builder.*stage.*key|COPY.*id_rsa)'
+
+        - id: buildkit-mount-recommended
+          description: >
+            Agent recommends BuildKit RUN --mount=type=ssh or --mount=type=secret to
+            inject the SSH key at build time without writing it to any layer.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(--mount.*secret|--mount.*ssh|BuildKit|RUN --mount|ssh-agent|DOCKER_BUILDKIT)'
+
+        - id: cache-risk-explained
+          description: >
+            Agent explains that intermediate builder layers persist in the Docker build
+            cache and can be extracted even when not in the final image.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(build cache|layer.*cache|intermediate|builder.*stage.*accessible|cache.*leak)'
+
+  # ── Case 6: No content provided — request Dockerfile ────────────────────────
+  - id: dockerfile-linter/failure-mode-no-content
+    description: >
+      User asks to review a Dockerfile but provides no content. Agent must request
+      the Dockerfile rather than speculating about potential issues.
+    tags: [error-handling, devops, dockerfile]
+    timeout_secs: 20
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Can you review my Dockerfile for security issues?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(provide|share|paste|send|attach).*(Dockerfile|content|file)'
+        - kind: not_contains
+          value: "FROM "
+        - kind: not_contains
+          value: "no USER"
+        - kind: not_contains
+          value: "mutable tag"
+
+      rubric:
+        - id: dockerfile-content-requested
+          description: >
+            Agent requests the Dockerfile content before generating findings. A perfect
+            score specifies what to share (the Dockerfile text or paste it inline).
+          weight: 1.0
+          auto_check:
+            kind: regex
+            value: '(?i)(provide|paste|share).*(Dockerfile|content)'

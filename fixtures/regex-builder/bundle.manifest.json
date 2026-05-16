@@ -1,0 +1,49 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/regex-builder",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "regex-builder/positive-semver",
+    "regex-builder/positive-email-redos-safe",
+    "regex-builder/positive-ipv4",
+    "regex-builder/positive-credit-card-masking",
+    "regex-builder/edge-case-existing-pattern-review"
+  ],
+  "certification_cases": [
+    "regex-builder/positive-semver",
+    "regex-builder/positive-email-redos-safe",
+    "regex-builder/positive-ipv4"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "Regex construction fixture: semantic version with anchoring, email with ReDoS avoidance (security), IPv4 with octet-range enforcement, credit card masking pattern, and existing-pattern correctness review.",
+  "domain": "developer-tools",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "fc4ef5b8380db0ab21fce904fc4478c767d921661a7e1a97ce56af3c684c8ecd"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/regex-builder` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "low",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "regex-builder",
+  "source_skill_path": "agentcarousel/skills/regex-builder/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

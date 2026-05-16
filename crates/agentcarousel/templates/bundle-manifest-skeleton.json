@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "<org>/<skill-or-agent-id>",
+  "bundle_version": "1.0.0",
+  "certification_track": "candidate",
+  "created_at": "1970-01-01T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "evaluators_used": ["rules"],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "owners": ["@agentcarousel"],
+  "policy_version": "msp-policy-2026-05",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "<skill-or-agent-id>",
+  "source_skill_path": "agentcarousel/skills/<skill-or-agent-id>/SKILL.md",
+  "updated_at": "1970-01-01T00:00:00Z",
+  "risk_tier": "low",
+  "case_count": 0,
+  "case_ids": [],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "placeholder"
+    }
+  ],
+  "notes": [
+    "Run `agentcarousel bundle pack fixtures/<skill-or-agent-id>` to update hashes after editing cases."
+  ]
+}

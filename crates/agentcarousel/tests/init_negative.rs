@@ -18,6 +18,11 @@ fn write_template(root: &Path) {
         "schema_version: 1\nskill_or_agent: <skill-or-agent-id>\ncases: []\n",
     )
     .expect("write fixture template");
+    fs::write(
+        templates_dir.join("bundle-manifest-skeleton.json"),
+        "{\"bundle_id\":\"<org>/<skill-or-agent-id>\",\"fixtures\":[]}\n",
+    )
+    .expect("write bundle manifest template");
 }
 
 #[test]
@@ -60,8 +65,24 @@ fn init_creates_fixture_with_sanitized_name() {
         .assert()
         .success();
 
-    let output_path = workspace.path().join("fixtures/sample-agent.yaml");
-    assert!(output_path.exists(), "expected generated fixture to exist");
-    let contents = fs::read_to_string(output_path).expect("read generated fixture");
+    let cases_path = workspace.path().join("fixtures/sample-agent/cases.yaml");
+    assert!(
+        cases_path.exists(),
+        "expected fixtures/sample-agent/cases.yaml to exist"
+    );
+    let contents = fs::read_to_string(&cases_path).expect("read generated fixture");
     assert!(contents.contains("skill_or_agent: sample-agent"));
+
+    assert!(workspace
+        .path()
+        .join("fixtures/sample-agent/prompt.md")
+        .exists());
+    assert!(workspace
+        .path()
+        .join("fixtures/sample-agent/bundle.manifest.json")
+        .exists());
+    assert!(workspace
+        .path()
+        .join("fixtures/sample-agent/golden")
+        .is_dir());
 }

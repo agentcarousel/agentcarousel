@@ -1,0 +1,55 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/data-privacy-classifier",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "data-privacy-classifier/positive-mixed-schema-pii",
+    "data-privacy-classifier/edge-case-ip-address",
+    "data-privacy-classifier/positive-aggregate-non-pii",
+    "data-privacy-classifier/positive-biometric-high-sensitivity",
+    "data-privacy-classifier/edge-case-pseudonymous-tokens"
+  ],
+  "certification_cases": [
+    "data-privacy-classifier/positive-mixed-schema-pii",
+    "data-privacy-classifier/edge-case-ip-address",
+    "data-privacy-classifier/positive-aggregate-non-pii",
+    "data-privacy-classifier/positive-biometric-high-sensitivity",
+    "data-privacy-classifier/edge-case-pseudonymous-tokens"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "GDPR/CCPA schema field classification fixture: mixed PII with hashed-email nuance, IP address context dependency, aggregate non-PII, biometric Article 9 special category, pseudonymous UUID linkability. Engineering guidance only, not legal advice.",
+  "domain": "privacy-compliance",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "412112f843c8dcc5d113b53430e2297064e0b502c7bb929a3fb2b416bb3afae6"
+    },
+    {
+      "path": "golden/mixed-schema-classification.txt",
+      "sha256": "85e70642feaeab6333d526480a18697a84d96bfa61d3702f5581607ab52e05ab"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/data-privacy-classifier` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "medium",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "data-privacy-classifier",
+  "source_skill_path": "agentcarousel/skills/data-privacy-classifier/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/prompt-injection-detector",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "prompt-injection-detector/positive-direct-override",
+    "prompt-injection-detector/positive-indirect-via-document",
+    "prompt-injection-detector/positive-roleplay-jailbreak",
+    "prompt-injection-detector/edge-case-multilingual",
+    "prompt-injection-detector/negative-benign-false-positive"
+  ],
+  "certification_cases": [
+    "prompt-injection-detector/positive-direct-override",
+    "prompt-injection-detector/positive-indirect-via-document",
+    "prompt-injection-detector/positive-roleplay-jailbreak",
+    "prompt-injection-detector/negative-benign-false-positive"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "Prompt injection detection fixture: direct override (DAN), indirect injection via resume document, roleplay jailbreak (ARIA persona), multilingual Spanish injection, and benign email false-positive avoidance. Precision (no over-flagging) is as important as recall.",
+  "domain": "ai-safety-security",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "68e071628a848a05e85d1788caea841eaed71bead33136f0eba094c099a15ddf"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [
+    "prompt-injection-detector/negative-benign-false-positive"
+  ],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/prompt-injection-detector` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "medium",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "prompt-injection-detector",
+  "source_skill_path": "agentcarousel/skills/prompt-injection-detector/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

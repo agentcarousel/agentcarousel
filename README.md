@@ -32,22 +32,51 @@ cargo install agentcarousel
 ## Quickstart
 
 ```bash
-# Scaffold a skill or agent fixture
+# Scaffold a skill fixture (creates fixtures/my-skill/ directory)
 agentcarousel init --skill my-skill
 agentcarousel init --agent my-agent
 
 # Run it offline (no API keys needed)
-agentcarousel test fixtures/skills/my-skill.yaml --offline true
+agentcarousel test fixtures/my-skill/cases.yaml --offline true
 
 # Validate fixture schema and rules
-agentcarousel validate fixtures/skills/customer-support.yaml
+agentcarousel validate fixtures/regex-builder/cases.yaml
 
 # Evaluate (mock by default)
-agentcarousel eval fixtures/skills/customer-support.yaml
+agentcarousel eval fixtures/regex-builder/cases.yaml
 
 # Export evidence bundle
 agentcarousel export <RUN-ID>
 ```
+
+## Example fixture — `regex-builder`
+
+```yaml
+schema_version: 1
+skill_or_agent: regex-builder
+
+cases:
+  - id: regex-builder/positive-semver
+    tags: [smoke, happy-path]
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex for semantic version strings.
+            Must match: 1.2.3 | 0.0.1 | 1.0.0-alpha | 2.0.0-rc.1
+            Must NOT match: 1.2 | .1.2.3 | 1.a.3
+            Anchor the pattern to match the full string.
+    expected:
+      output:
+        - kind: regex
+          value: '\\d+\\.\\d+\\.\\d+'
+        - kind: regex
+          value: '(?i)(anchor|full.*string|\^|\$)'
+        - kind: not_contains
+          value: '(a+)+'
+```
+
+See [`fixtures/regex-builder/`](fixtures/regex-builder/) for the full fixture with all cases, golden outputs, and bundle manifest.
 
 ## Live Eval with LLM-as-a-judge
 
@@ -104,10 +133,10 @@ Per-case effectiveness thresholds override the global `--effectiveness-threshold
 
 ```bash
 # Create a distributable bundle archive
-agentcarousel bundle pack fixtures/bundles/my-bundle --out my-bundle.tar.gz
+agentcarousel bundle pack fixtures/regex-builder
 
 # Verify bundle integrity and structure
-agentcarousel bundle verify fixtures/bundles/customer-support
+agentcarousel bundle verify fixtures/customer-support
 agentcarousel bundle verify my-bundle.tar.gz
 
 # Pull bundle manifest + artifacts from the registry
@@ -118,11 +147,11 @@ agentcarousel bundle pull customer-support-1.0.0 --url "https://api.agentcarouse
 
 ```bash
 # Publish bundle + evidence in one flow
-agentcarousel publish fixtures/bundles/customer-suppport \
+agentcarousel publish fixtures/customer-support \
   --url "https://api.agentcarousel.com"
 
 # Publish multiple matching local runs (newest first)
-agentcarousel publish fixtures/bundles/customer-support \
+agentcarousel publish fixtures/customer-support \
   --url "https://api.agentcarousel.com" \
   --all-runs --limit 5
 ```
