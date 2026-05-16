@@ -39,7 +39,7 @@ Open an issue with the title `Fixture proposal: <skill-or-agent-id>` and fill in
 | **Cases** | Table or list: case id, one-line description, tags (`smoke`, `happy-path`, `error-handling`). |
 | **Tool calls** | Names and trigger conditions, or "none". |
 
-After issue acceptance, scaffold with `agentcarousel init`, then follow the `init → validate → test --offline` loop before opening a PR.
+After issue acceptance, scaffold with `agentcarousel init`, then follow the `init → validate → test` loop before opening a PR.
 
 See [docs/contributing-fixtures.md](docs/contributing-fixtures.md) for the full process and [docs/fixture-format.md](docs/fixture-format.md) for field reference.
 
@@ -62,7 +62,7 @@ PRs without a linked issue may be closed without review.
 
 ## Building from source
 
-Requires stable Rust (1.75+):
+Requires stable Rust (1.95+):
 
 ```bash
 # Install directly from source
@@ -80,17 +80,3 @@ cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 The installed binary lands in `~/.cargo/bin/agentcarousel`. For the pre-built installer, see the **Install** section in [README.md](README.md) (curl installer and GitHub releases).
-
----
-
-## ATF evidence and attestation contributions
-
-If you are contributing fixtures for certification-style bundles (trust state, evidence export), use `bundle_id` / `bundle_version` on the fixture and keep the bundle manifest under `fixtures/bundles/<bundle>/` in sync. See [docs/fixture-development-process.md](docs/fixture-development-process.md) for the intake → review → bundle workflow. Export and registry workflows are described in the CLI (`agentcarousel export`, `agentcarousel publish`, `agentcarousel trust-check --help`) and on [agentcarousel.com](https://agentcarousel.com).
-
----
-
-## Style notes
-
-- Keep fixture `id` fields in stable kebab-case; changing an id is a breaking change for anyone pinning it.
-- New docs go in `docs/`; reference new docs from an existing page so they are reachable.
-- Commit messages: `type(scope): short description` where type is `feat`, `fix`, `chore`, `docs`, or `refactor`.

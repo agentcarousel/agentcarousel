@@ -21,7 +21,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "Dockerfile security and best-practice linting agent fixture: root user detection, ENV secret exposure, clean approval (false-positive avoidance), ADD vs COPY best practice, multi-stage SSH key leak, and no-content error handling. All Dockerfiles are synthetic.",
-  "domain": "devops-security",
+  "domain": "devops",
   "evaluators_used": [
     "rules",
     "golden"

@@ -20,7 +20,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "WCAG 2.1 accessibility audit fixture: missing alt + div-as-button, form without label, decorative-image false-positive avoidance, icon button without accessible name, heading hierarchy skip. Code-level audit only; contrast ratio requires rendered output.",
-  "domain": "frontend-accessibility",
+  "domain": "developer-tools",
   "evaluators_used": [
     "rules",
     "golden"

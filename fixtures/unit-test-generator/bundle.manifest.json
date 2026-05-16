@@ -19,7 +19,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "Unit test generation fixture: pure function boundary cases (pytest), async function with mocks (Jest), class with state transitions, no-unnecessary-mocks discipline, and stdout-only function testability guidance.",
-  "domain": "testing-quality",
+  "domain": "developer-tools",
   "evaluators_used": [
     "rules",
     "golden"

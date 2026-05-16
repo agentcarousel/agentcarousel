@@ -20,7 +20,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "Prompt injection detection fixture: direct override (DAN), indirect injection via resume document, roleplay jailbreak (ARIA persona), multilingual Spanish injection, and benign email false-positive avoidance. Precision (no over-flagging) is as important as recall.",
-  "domain": "ai-safety-security",
+  "domain": "security",
   "evaluators_used": [
     "rules",
     "golden"
