@@ -33,7 +33,6 @@
     "vscode": "^1.85.0"
   },
   "activationEvents": [
-    "onView:agentcarousel-fixtures",
     "workspaceContains:fixtures/**/*.yaml"
   ],
   "main": "./out/extension.js",

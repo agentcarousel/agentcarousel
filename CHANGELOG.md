@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.6 - May 2026
+
+### Chores
+
+- Relicense from Apache-2.0 to MIT.
+- Realize you're not as clever as you thought you were and take a break.
+- Add prompt text to bundle schema and registry API (optional)
+- Go outside, it's a nice day.
+
 ## 0.5.5 - May 2026
 
 ### Features
