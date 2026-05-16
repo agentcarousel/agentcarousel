@@ -3,6 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+const EMBEDDED_SCHEMA: &str =
+    include_str!("../../../../schemas/skill-definition.schema.json");
+
 #[derive(Debug, Clone)]
 pub enum SchemaLocation {
     Default,
@@ -21,12 +24,12 @@ pub fn validate_fixture_value(
     value: &Value,
     schema_location: SchemaLocation,
 ) -> Result<Vec<SchemaValidationIssue>, SchemaValidationIssue> {
-    let schema_path = match schema_location {
-        SchemaLocation::Default => PathBuf::from("schemas/skill-definition.schema.json"),
-        SchemaLocation::Path(path) => path,
+    let schema: Value = match schema_location {
+        SchemaLocation::Default => serde_json::from_str(EMBEDDED_SCHEMA)
+            .map_err(|err| SchemaValidationIssue::SchemaError(err.to_string()))?,
+        SchemaLocation::Path(path) => load_schema(&path)?,
     };
 
-    let schema = load_schema(&schema_path)?;
     let compiled = jsonschema::validator_for(&schema)
         .map_err(|err| SchemaValidationIssue::SchemaError(err.to_string()))?;
 
