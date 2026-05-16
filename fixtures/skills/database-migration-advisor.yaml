@@ -1,0 +1,388 @@
+# agentcarousel fixture — database-migration-advisor
+# Certification Tier: Candidate
+# Source skill: SQL migration safety and locking-risk advisor agent
+# Golden files:  fixtures/golden/database-migration-advisor/
+# Bundle:        fixtures/bundles/database-migration-advisor/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: database-migration-advisor
+
+bundle_id: agentcarousel/database-migration-advisor
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: high
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [database, migrations, safety, devops, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: DROP TABLE with no rollback (smoke + certification) ───────────────
+  - id: database-migration-advisor/positive-drop-table-no-rollback
+    description: >
+      Migration drops two tables with no Down/rollback section. Agent must flag the
+      irreversibility of DROP TABLE, the absence of any rollback path, and recommend
+      verifying a recent backup before running. Pass requires explicit irreversibility
+      warning and backup recommendation.
+    tags: [smoke, happy-path, database, migrations, certification]
+    seed: 6001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration before we run it in production (PostgreSQL 15):
+
+            -- Migration: 2024_05_16_drop_legacy_audit_log.sql
+            -- Up
+            DROP TABLE IF EXISTS legacy_audit_log;
+            DROP TABLE IF EXISTS legacy_audit_log_archive;
+
+            -- Down
+            -- (no rollback defined)
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(irreversible|cannot.*rollback|no.*rollback|unrecoverable|permanent|destructive)'
+        - kind: regex
+          value: '(?i)(backup|snapshot|point.in.time|restore|verify.*data)'
+        - kind: not_contains
+          value: "looks safe"
+        - kind: not_contains
+          value: "no issues"
+
+      rubric:
+        - id: irreversibility-flagged
+          description: >
+            Agent flags that DROP TABLE is irreversible and the missing Down section
+            means no rollback path exists. A perfect score explains that IF EXISTS
+            suppresses errors but does not provide recoverability.
+          weight: 0.45
+          auto_check:
+            kind: regex
+            value: '(?i)(irreversible|cannot.*rollback|no.*rollback|permanent.*loss|unrecoverable)'
+
+        - id: backup-verification-recommended
+          description: >
+            Agent recommends verifying a recent backup or snapshot exists before running
+            this migration. A perfect score suggests a specific action (pg_dump, RDS snapshot,
+            PITR verification).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(backup|pg_dump|snapshot|PITR|point.in.time|verify.*backup|restore.*test)'
+
+        - id: blast-radius-noted
+          description: >
+            Agent notes that two tables are dropped, increasing the blast radius if run
+            accidentally or on the wrong environment.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(two tables|both|multiple|legacy_audit_log.*legacy_audit_log_archive|blast radius|both table)'
+
+  # ── Case 2: NOT NULL column without DEFAULT on large table ────────────────────
+  - id: database-migration-advisor/positive-not-null-without-default
+    description: >
+      Migration adds a NOT NULL column without a DEFAULT to a 50M-row table on
+      PostgreSQL. On older PostgreSQL this causes a full table rewrite with an
+      ACCESS EXCLUSIVE lock. Agent must identify the lock risk, explain the business
+      impact (blocking reads and writes), and recommend a safe multi-step alternative.
+    tags: [happy-path, database, migrations, certification]
+    seed: 6002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration. Our users table has approximately 50 million rows
+            (PostgreSQL 14). This will run during business hours.
+
+            -- Migration: 2024_05_17_add_verified_at.sql
+            -- Up
+            ALTER TABLE users ADD COLUMN verified_at TIMESTAMP NOT NULL;
+
+            -- Down
+            ALTER TABLE users DROP COLUMN verified_at;
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(lock|ACCESS EXCLUSIVE|table.*lock|full.*table.*rewrite|block.*read|block.*write)'
+        - kind: regex
+          value: '(?i)(DEFAULT|nullable.*first|backfill|NOT VALID|VALIDATE CONSTRAINT|multi.step|online.*migration)'
+        - kind: not_contains
+          value: "safe to run"
+        - kind: not_contains
+          value: "no concerns"
+
+      rubric:
+        - id: lock-risk-identified
+          description: >
+            Agent explains that NOT NULL without DEFAULT on PostgreSQL forces a full table
+            rewrite with an ACCESS EXCLUSIVE lock, blocking all reads and writes for the
+            duration. On 50M rows this can take minutes.
+          weight: 0.45
+          auto_check:
+            kind: regex
+            value: '(?i)(lock|ACCESS EXCLUSIVE|table.*rewrite|full.*scan|blocking|block.*read|block.*write)'
+
+        - id: safe-alternative-given
+          description: >
+            Agent recommends a safe multi-step approach: (1) add column as nullable,
+            (2) backfill, (3) apply NOT NULL via a NOT VALID constraint followed by
+            VALIDATE CONSTRAINT — or equivalent online migration strategy.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(nullable.*first|add.*nullable|DEFAULT.*null|NOT VALID|VALIDATE CONSTRAINT|backfill|multi.step)'
+
+        - id: business-hours-risk-noted
+          description: >
+            Agent flags the specific risk of running during business hours given the
+            lock duration on a 50M-row table.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(business hours|off.peak|maintenance window|downtime|production.*traffic)'
+
+  # ── Case 3: Clean reversible migration — approve ──────────────────────────────
+  - id: database-migration-advisor/positive-clean-migration-approval
+    description: >
+      Migration adds a nullable column with a DEFAULT, includes a complete Down section,
+      and uses CONCURRENTLY for the index creation. Agent must approve without inventing
+      concerns about safe, well-written migrations.
+    tags: [happy-path, database, migrations, certification]
+    seed: 6003
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration before production deploy (PostgreSQL 15):
+
+            -- Migration: 2024_05_18_add_archived_at.sql
+            -- Up
+            ALTER TABLE posts ADD COLUMN archived_at TIMESTAMP DEFAULT NULL;
+            CREATE INDEX CONCURRENTLY idx_posts_archived_at ON posts (archived_at)
+              WHERE archived_at IS NOT NULL;
+
+            -- Down
+            DROP INDEX CONCURRENTLY IF EXISTS idx_posts_archived_at;
+            ALTER TABLE posts DROP COLUMN IF EXISTS archived_at;
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(safe|looks good|clean|approve|no.*concern|well.written|reversible|solid)'
+        - kind: not_contains
+          value: "lock risk"
+        - kind: not_contains
+          value: "ACCESS EXCLUSIVE"
+        - kind: not_contains
+          value: "should add DEFAULT"
+        - kind: not_contains
+          value: "missing rollback"
+
+      rubric:
+        - id: migration-approved
+          description: >
+            Agent approves the migration. A perfect score notes specific strengths:
+            nullable column avoids table rewrite, CONCURRENTLY avoids index lock,
+            complete Down section enables rollback.
+          weight: 0.60
+          auto_check:
+            kind: regex
+            value: '(?i)(safe|looks good|approve|clean|no.*concern|solid)'
+
+        - id: no-fabricated-concerns
+          description: >
+            Agent does not invent concerns about CONCURRENTLY (correct here), DEFAULT NULL
+            (safe), or the presence of a Down section (already present).
+          weight: 0.40
+          auto_check:
+            kind: not_contains
+            value: "should use CONCURRENTLY"
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/database-migration-advisor/clean-migration-approval.txt
+      golden_threshold: 0.70
+      effectiveness_threshold: 0.6
+
+  # ── Case 4: CREATE INDEX without CONCURRENTLY (PostgreSQL) ───────────────────
+  - id: database-migration-advisor/positive-index-without-concurrently
+    description: >
+      Migration creates an index on a high-traffic table without CONCURRENTLY. On
+      PostgreSQL this takes a ShareLock that blocks writes for the entire index build.
+      Agent must identify the lock type, estimate impact, and recommend CONCURRENTLY.
+    tags: [happy-path, database, migrations, certification]
+    seed: 6004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration (PostgreSQL 15, orders table has ~8M rows, receives
+            ~500 writes/sec during business hours):
+
+            -- Migration: 2024_05_19_index_orders_status.sql
+            -- Up
+            CREATE INDEX idx_orders_customer_status ON orders (customer_id, status);
+
+            -- Down
+            DROP INDEX IF EXISTS idx_orders_customer_status;
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(ShareLock|share.*lock|write.*block|lock.*write|CONCURRENTLY|without CONCURRENTLY)'
+        - kind: regex
+          value: '(?i)(CONCURRENTLY|concurrent.*index|CREATE INDEX CONCURRENTLY)'
+        - kind: not_contains
+          value: "safe to run as-is"
+        - kind: not_contains
+          value: "no lock"
+
+      rubric:
+        - id: share-lock-identified
+          description: >
+            Agent identifies that CREATE INDEX (without CONCURRENTLY) takes a ShareLock
+            on PostgreSQL, blocking all concurrent INSERT/UPDATE/DELETE operations until
+            the index build completes.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(ShareLock|share.*lock|block.*write|write.*block|INSERT.*block|lock.*DML)'
+
+        - id: concurrently-recommended
+          description: >
+            Agent recommends CREATE INDEX CONCURRENTLY as the safe alternative.
+            A perfect score notes the one caveat: CONCURRENTLY cannot run inside a
+            transaction block.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(CREATE INDEX CONCURRENTLY|CONCURRENTLY)'
+
+        - id: traffic-impact-estimated
+          description: >
+            Agent relates the lock risk to the provided context (8M rows, 500 writes/sec)
+            to estimate real-world impact duration or severity.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(8M|8 million|500.*write|high.*traffic|seconds|minutes|impact)'
+
+  # ── Case 5: Column rename with unknown application impact ─────────────────────
+  - id: database-migration-advisor/edge-case-column-rename-impact
+    description: >
+      Migration renames a column on a core table. The migration itself is syntactically
+      valid and uses a safe DDL operation, but agent must flag that the application code
+      referencing the old column name is not shown and may break at runtime if not
+      updated atomically with this migration.
+    tags: [edge-case, database, migrations, certification]
+    seed: 6005
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration (PostgreSQL 15):
+
+            -- Migration: 2024_05_20_rename_user_handle.sql
+            -- Up
+            ALTER TABLE users RENAME COLUMN username TO handle;
+
+            -- Down
+            ALTER TABLE users RENAME COLUMN handle TO username;
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(application.*code|column.*reference|ORM|query.*username|break.*runtime|application.*break)'
+        - kind: regex
+          value: '(?i)(deploy.*order|atomic|blue.green|feature.*flag|zero.downtime|backward.*compat|dual.write)'
+
+      rubric:
+        - id: application-impact-flagged
+          description: >
+            Agent flags that renaming `username` to `handle` will break any application
+            code, ORM model, or raw query that references the old column name. The
+            migration does not show whether application code has been updated.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(application.*code|ORM|query.*username|reference.*username|column.*rename.*break|application.*break)'
+
+        - id: deployment-strategy-raised
+          description: >
+            Agent recommends a zero-downtime strategy: either (1) deploy application code
+            first with dual-read support for both column names, then rename; or (2) use
+            a feature flag / blue-green deployment to coordinate the cutover atomically.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(deploy.*order|dual.write|dual.read|blue.green|feature.*flag|zero.downtime|coordinate|backward.*compat)'
+
+        - id: ddl-operation-acknowledged-safe
+          description: >
+            Agent acknowledges the DDL itself (RENAME COLUMN) is a fast metadata-only
+            operation on PostgreSQL — the concern is application coordination, not locking.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(metadata.only|fast|no.*lock|lock.*free|DDL.*safe|RENAME.*fast)'
+
+  # ── Case 6: No migration content provided ────────────────────────────────────
+  - id: database-migration-advisor/failure-mode-no-content
+    description: >
+      User asks for a migration review but provides no SQL content. Agent must request
+      the migration file rather than generating speculative advice.
+    tags: [error-handling, database, migrations]
+    timeout_secs: 20
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Can you review my database migration for safety?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(provide|share|paste|send|attach).*(migration|SQL|file|content)'
+        - kind: not_contains
+          value: "DROP TABLE"
+        - kind: not_contains
+          value: "lock risk"
+        - kind: not_contains
+          value: "NOT NULL"
+
+      rubric:
+        - id: migration-content-requested
+          description: >
+            Agent requests the migration SQL content before generating findings. A perfect
+            score asks for the migration file content and optionally the database engine
+            and table sizes for context.
+          weight: 1.0
+          auto_check:
+            kind: regex
+            value: '(?i)(provide|paste|share).*(migration|SQL|content)'
