@@ -101,13 +101,13 @@ jobs:
         run: echo "$(pwd)/target/release" >> "${GITHUB_PATH}"
 
       - name: Validate good fixture
-        run: agentcarousel validate fixtures/skills/example-skill.yaml
+        run: agentcarousel validate fixtures/regex-builder/cases.yaml
 
       - name: Validate bad fixture (expect failure)
         shell: bash
         run: |
           set +e
-          agentcarousel validate fixtures/examples/invalid-skill.yaml
+          agentcarousel validate .github/test-fixtures/invalid-skill.yaml
           code=$?
           set -e
           if [ "${code}" -eq 0 ]; then
@@ -115,5 +115,5 @@ jobs:
             exit 1
           fi
 
-      - name: Offline smoke tests
-        run: agentcarousel test fixtures/skills/example-skill.yaml --offline true --filter-tags smoke
+      - name: Smoke tests
+        run: agentcarousel test fixtures/regex-builder/cases.yaml --filter-tags smoke
