@@ -112,7 +112,11 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
 
     let token = token.expect("token is resolved for non-dry-run path");
     let client = RegistryClient::new(&endpoint, &token)?;
-    let bundle_response = client.push_bundle_manifest(&manifest)?;
+    let prompt_text = fs::read_to_string(_root.join("prompt.md")).ok();
+    let bundle_response = match prompt_text.as_deref() {
+        Some(prompt) => client.push_bundle_manifest_with_prompt(&manifest, prompt)?,
+        None => client.push_bundle_manifest(&manifest)?,
+    };
 
     let mut run_results = Vec::new();
     for run_id in &selected_run_ids {

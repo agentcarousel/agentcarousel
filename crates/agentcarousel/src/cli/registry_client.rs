@@ -43,6 +43,27 @@ impl RegistryClient {
         parse_json_response("bundle push", res)
     }
 
+    pub fn push_bundle_manifest_with_prompt(
+        &self,
+        manifest: &Value,
+        prompt: &str,
+    ) -> Result<Value, String> {
+        let url = format!("{}/v1/bundles", self.base_url);
+        let manifest_str =
+            serde_json::to_string(manifest).map_err(|e| format!("manifest serialize: {e}"))?;
+        let form = multipart::Form::new()
+            .text("manifest", manifest_str)
+            .text("prompt", prompt.to_string());
+        let res = self
+            .http
+            .post(url)
+            .header(AUTHORIZATION, format!("Bearer {}", self.token))
+            .multipart(form)
+            .send()
+            .map_err(|err| format!("request failed: {err}"))?;
+        parse_json_response("bundle push", res)
+    }
+
     pub fn submit_run_evidence(
         &self,
         registry_bundle_id: &str,
