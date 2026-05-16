@@ -1,0 +1,12 @@
+schema_version: 1
+skill_or_agent: invalid-skill
+cases:
+  - id: "Invalid_Skill/Bad Case ID"
+    input:
+      messages:
+        - role: user
+          content: test
+    expected:
+      output:
+        - kind: contains
+          value: test
