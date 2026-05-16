@@ -6,7 +6,7 @@ use tempfile::NamedTempFile;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
-use super::registry_client::RegistryClient;
+use super::registry_client::{resolve_registry_url, RegistryClient};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum TrustTier {
@@ -123,33 +123,6 @@ fn trust_check(args: TrustCheckArgs, config: &ResolvedConfig) -> Result<(), Trus
     }
 
     Ok(())
-}
-
-fn resolve_registry_url(
-    registry_url: Option<&str>,
-    config: &ResolvedConfig,
-) -> Result<String, String> {
-    if let Some(url) = registry_url {
-        let trimmed = url.trim();
-        if !trimmed.is_empty() {
-            return Ok(trimmed.to_string());
-        }
-    }
-    if let Some(url) = &config.msp.registry_endpoint {
-        let trimmed = url.trim();
-        if !trimmed.is_empty() {
-            return Ok(trimmed.to_string());
-        }
-    }
-    for key in ["REGISTRY_API_BASE_URL", "REGISTRY_URL"] {
-        if let Ok(value) = std::env::var(key) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                return Ok(trimmed.to_string());
-            }
-        }
-    }
-    Err("registry URL is required: pass --url/--registry-url, set msp.registry_endpoint in config, or export REGISTRY_API_BASE_URL".to_string())
 }
 
 fn compute_registry_bundle_id(target: &str) -> Result<String, String> {
