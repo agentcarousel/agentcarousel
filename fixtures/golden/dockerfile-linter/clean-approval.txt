@@ -1,0 +1,12 @@
+This Dockerfile follows security best practices with no findings.
+
+Assessment:
+- Base image is pinned to a specific SHA digest — immune to upstream tag mutation.
+- Multi-stage build: dependencies installed in builder stage; only the installed
+  packages are copied to the final image, minimizing attack surface.
+- Non-root user created via useradd and enforced with USER 1001 — container process
+  runs without root privileges.
+- No secrets in ENV or ARG layers.
+- EXPOSE 8080 is a non-privileged port, appropriate for a non-root user.
+
+Approved. No changes required.

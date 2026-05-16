@@ -1,0 +1,12 @@
+This migration is safe to run in production with no changes required.
+
+Assessment:
+- ALTER TABLE ... ADD COLUMN ... DEFAULT NULL: nullable column addition is a fast
+  metadata-only operation on PostgreSQL — no table rewrite, no lock beyond the brief
+  ALTER TABLE lock.
+- CREATE INDEX CONCURRENTLY: builds the index without blocking concurrent reads or
+  writes. Correct choice for a production table.
+- Down section is complete and uses DROP INDEX CONCURRENTLY IF EXISTS and DROP COLUMN
+  IF EXISTS — both safe and idempotent.
+
+Approved.
