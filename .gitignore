@@ -131,3 +131,7 @@ agentcarousel.toml
 
 # bv (beads viewer) local config and caches
 .bv/
+
+.claude/
+CLAUDE.md
+AGENTS.md

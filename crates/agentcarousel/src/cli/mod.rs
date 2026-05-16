@@ -104,7 +104,7 @@ pub struct InitArgs {
     /// Scaffold an agent fixture template (conflicts with --skill).
     #[arg(short = 'a', long, conflicts_with = "skill")]
     agent: bool,
-    /// Kebab-case stem for the new file (`fixtures/{stem}.yaml`).
+    /// Kebab-case name for the new skill directory (`fixtures/{name}/`).
     name: String,
 }
 

@@ -97,6 +97,7 @@ Prefer tags in all new fixtures and examples.
 ## Templates and examples
 
 - Template: `templates/fixture-skeleton.yaml`
+- Bundle manifest template: `templates/bundle-manifest-skeleton.json`
 - Intake: open a GitHub issue using the checklist in [CONTRIBUTING.md](https://github.com/agentcarousel/agentcarousel/blob/main/CONTRIBUTING.md) before large additions
 - Tag examples: [`docs/fixture-tag-examples.md`](fixture-tag-examples.md)
-- Example fixtures: `examples/`
+- Example fixtures: [`fixtures/regex-builder/`](../fixtures/regex-builder/)

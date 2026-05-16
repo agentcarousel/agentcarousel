@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.3 - May 2026
+
+### Features
+
+- Custom HTTP endpoint provider (`GeneratorProvider::Custom`, `call_custom_endpoint()`); wired through `RunnerConfig` and CLI args.
+- `--update-golden` flag for the golden evaluator; writes golden files in place when set.
+- `agc stats` command for historical trend analysis.
+- Global run timeout (`--timeout-run`); `run_timeout_secs` on `RunnerConfig`.
+- p50/p95/p99 latency percentiles in `RunSummary`; shown in terminal reporter.
+- Deduplicated API key candidate lists; `GeneratorProvider::key_candidates()` is now public.
+
+### Fixture layout
+
+Fixtures now live in per-skill directories (`fixtures/<skill>/`) containing `cases.yaml`, `prompt.md`, `bundle.manifest.json`, and `golden/`. `agc init --skill <name>` scaffolds the full structure. The old flat layout (`fixtures/skills/<skill>.yaml`) is removed.
+
+### Fixtures
+
+12 built-in skills: accessibility-auditor, ci-failure-triager, code-reviewer, customer-support, data-privacy-classifier, database-migration-advisor, dockerfile-linter, env-file-auditor, error-message-improver, github-actions-generator, prompt-injection-detector, regex-builder, sql-query-generator, terraform-sentinel-scaffold, unit-test-generator.
+
+## 0.5.2 - May 2026
+
+### Bug fixes
+
+- `trust_check`: temp pubkey file leaked to disk after attestation (agc-1wd).
+- Epic E: bounded judge response cache — `BoundedCache` with `VecDeque` FIFO eviction; `run_eval()` uses `Arc<Mutex<BoundedCache>>` instead of unbounded `HashMap` (agc-cyw, agc-gfo, agc-3t3).
+
 ## 0.5.1 - May 2026
 
 - Feature: `agc doctor` subcommand — checks API keys, config file, history DB, fixtures directory, and JSON schema in one pass; supports `--json` for machine-readable output.
