@@ -19,7 +19,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "Error message clarity improvement fixture: null pointer with context, ECONNREFUSED, already-good approval, 403 permission, database deadlock. Tests user-language translation and restraint (no rewriting good messages).",
-  "domain": "developer-experience",
+  "domain": "developer-tools",
   "evaluators_used": [
     "rules",
     "golden"

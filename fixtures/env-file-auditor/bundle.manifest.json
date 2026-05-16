@@ -20,7 +20,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": ".env file secret and misconfiguration audit fixture: live credentials + weak JWT, placeholder values, clean approval, prod credentials in dev-labeled file, no-content handling. All credentials are synthetic.",
-  "domain": "secrets-security",
+  "domain": "security",
   "evaluators_used": [
     "rules",
     "golden"

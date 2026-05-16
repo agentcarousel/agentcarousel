@@ -21,7 +21,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "GDPR/CCPA schema field classification fixture: mixed PII with hashed-email nuance, IP address context dependency, aggregate non-PII, biometric Article 9 special category, pseudonymous UUID linkability. Engineering guidance only, not legal advice.",
-  "domain": "privacy-compliance",
+  "domain": "compliance",
   "evaluators_used": [
     "rules",
     "golden"

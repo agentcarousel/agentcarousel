@@ -22,7 +22,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "GitHub Actions CI/CD workflow generation and audit fixture: push+PR workflow with pinned actions and minimal permissions, mutable supply-chain tag detection, pwn-request rejection (pull_request_target + fork checkout), secret echo prevention, matrix build with fail-fast disabled, and no-requirements clarification. All workflows are synthetic.",
-  "domain": "ci-cd-security",
+  "domain": "devops",
   "evaluators_used": [
     "rules",
     "golden"

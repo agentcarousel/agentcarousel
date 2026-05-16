@@ -22,7 +22,7 @@
   "created_at": "2026-05-16T00:00:00Z",
   "data_handling": "synthetic-only",
   "description": "SQL migration safety advisor fixture: DROP TABLE irreversibility, NOT NULL without DEFAULT locking risk on large tables, clean migration approval, CREATE INDEX without CONCURRENTLY ShareLock, column rename application impact, and no-content error handling. All SQL is synthetic against fictional tables.",
-  "domain": "database-safety",
+  "domain": "data",
   "evaluators_used": [
     "rules",
     "golden"
