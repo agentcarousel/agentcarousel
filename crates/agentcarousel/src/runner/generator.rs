@@ -16,10 +16,15 @@ pub enum GeneratorProvider {
     OpenAi,
     Anthropic,
     OpenRouter,
+    /// Arbitrary HTTP endpoint; set `--generator-endpoint <URL>` to use.
+    Custom,
 }
 
 impl GeneratorProvider {
     pub fn from_model(model: &str) -> Self {
+        if model == "custom" {
+            return Self::Custom;
+        }
         let normalized = model.to_ascii_lowercase();
         if normalized.starts_with("openrouter/") {
             return Self::OpenRouter;
@@ -46,7 +51,7 @@ impl GeneratorProvider {
         Self::Gemini
     }
 
-    fn key_candidates(self) -> &'static [&'static str] {
+    pub fn key_candidates(self) -> &'static [&'static str] {
         match self {
             Self::Gemini => &[
                 "AGENTCAROUSEL_GENERATOR_KEY",
@@ -77,6 +82,7 @@ impl GeneratorProvider {
                 "AGENTCAROUSEL_JUDGE_KEY",
                 "agentcarousel_JUDGE_KEY",
             ],
+            Self::Custom => &[],
         }
     }
 }
@@ -97,10 +103,17 @@ pub async fn generate_case_output(
         .as_ref()
         .ok_or_else(|| "generator model is not configured".to_string())?;
     let provider = GeneratorProvider::from_model(model);
-    let key = resolve_generator_key(provider)?;
     let prompt = build_generation_prompt(case);
     let max_tokens = config.generator_max_tokens;
 
+    if let GeneratorProvider::Custom = provider {
+        let endpoint = config.generator_endpoint.as_deref().ok_or_else(|| {
+            "--generator-endpoint <URL> is required when --generator-model is 'custom'".to_string()
+        })?;
+        return call_custom_endpoint(endpoint, case, config.timeout_secs, max_tokens).await;
+    }
+
+    let key = resolve_generator_key(provider)?;
     match provider {
         GeneratorProvider::Gemini => generate_with_gemini(&key, model, &prompt, max_tokens).await,
         GeneratorProvider::OpenAi => generate_with_openai(&key, model, &prompt, max_tokens).await,
@@ -110,7 +123,65 @@ pub async fn generate_case_output(
         GeneratorProvider::OpenRouter => {
             generate_with_openrouter(&key, model, &prompt, max_tokens).await
         }
+        GeneratorProvider::Custom => unreachable!(),
     }
+}
+
+pub async fn call_custom_endpoint(
+    endpoint: &str,
+    case: &Case,
+    timeout_secs: u64,
+    max_tokens: Option<u32>,
+) -> Result<GenerationResult, String> {
+    let messages: Vec<serde_json::Value> = case
+        .input
+        .messages
+        .iter()
+        .map(|m| {
+            let role = match m.role {
+                Role::User => "user",
+                Role::Assistant => "assistant",
+                Role::System => "system",
+                Role::Tool => "tool",
+            };
+            serde_json::json!({"role": role, "content": m.content})
+        })
+        .collect();
+    let body = serde_json::json!({
+        "messages": messages,
+        "max_tokens": max_tokens.unwrap_or(2048),
+    });
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = client
+        .post(endpoint)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("custom endpoint request failed: {e}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        return Err(format!("custom endpoint returned {status}: {body_text}"));
+    }
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("custom endpoint response parse failed: {e}"))?;
+    let output = json["choices"][0]["message"]["content"]
+        .as_str()
+        .or_else(|| json["output"].as_str())
+        .ok_or_else(|| {
+            "custom endpoint response missing 'choices[0].message.content' or 'output'".to_string()
+        })?
+        .to_string();
+    Ok(GenerationResult {
+        output,
+        tokens_in: None,
+        tokens_out: None,
+    })
 }
 
 fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, String> {

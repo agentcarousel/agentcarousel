@@ -1,9 +1,3 @@
-//! Command-line interface built with [`clap`]: parse flags, load merged configuration from TOML
-//! and environment, and dispatch to validate / test / eval / report / init / bundle / publish /
-//! export / trust-check.
-//!
-//! The primary entrypoint for a binary is [`run`], which returns a process exit code.
-//! [`Cli`] and [`GlobalOptions`] are public for testing or custom front-ends.
 
 mod bundle;
 mod completions;
@@ -16,6 +10,7 @@ mod lint;
 mod publish;
 mod registry_client;
 mod report;
+mod stats;
 mod test;
 mod trust_check;
 mod update;
@@ -98,6 +93,8 @@ enum Command {
     Doctor(doctor::DoctorArgs),
     /// Check fixture quality beyond schema: smoke coverage, rubric weights, descriptions.
     Lint(lint::LintArgs),
+    /// Show historical pass-rate trends, flakiness, and latency from run history.
+    Stats(stats::StatsArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -145,6 +142,7 @@ fn help_template() -> String {
     let lint = c("lint");
     let init = c("init");
     let report = c("report");
+    let stats = c("stats");
     let export = c("export");
     let bundle = c("bundle");
     let publish = c("publish");
@@ -171,6 +169,7 @@ Usage:
 
 {re}:
   {report}       Inspect persisted runs: list, show details, or diff two runs
+  {stats}        Pass-rate trends, case flakiness, and latency across run history
   {export}       Export run(s) as signed evidence tarballs
 
 {bu}:
@@ -208,6 +207,7 @@ pub fn run() -> i32 {
         Command::Publish(a) => a.config.as_deref(),
         Command::TrustCheck(a) => a.config.as_deref(),
         Command::Doctor(a) => a.config.as_deref(),
+        Command::Stats(a) => a.config.as_deref(),
         _ => None,
     };
 
@@ -239,6 +239,7 @@ pub fn run() -> i32 {
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Lint(args) => lint::run_lint(args, &globals),
+        Command::Stats(args) => stats::run_stats(args, &config, &globals),
     }
 }
 
@@ -250,8 +251,6 @@ fn apply_color_settings(config: &config::ResolvedConfig, no_color: bool) {
     match config.output.color.as_str() {
         "always" => console::set_colors_enabled(true),
         "never" => console::set_colors_enabled(false),
-        // "auto" and any other value: leave console on its default (TTY detection).
-        "auto" => {}
         _ => {}
     }
 }
@@ -291,7 +290,6 @@ fn init_scaffold(name: &str) -> Result<std::path::PathBuf, String> {
     Ok(out_path)
 }
 
-// In-crate copy for `cargo package`; keep aligned with `templates/fixture-skeleton.yaml` at repo root.
 const FIXTURE_TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/templates/fixture-skeleton.yaml"

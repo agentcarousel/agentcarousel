@@ -398,6 +398,15 @@ pub fn print_terminal(run: &Run) {
         println!("  Effectiveness score: {:.2} / 1.00", mean);
     }
 
+    if let (Some(p50), Some(p95), Some(p99)) =
+        (s.latency_p50_ms, s.latency_p95_ms, s.latency_p99_ms)
+    {
+        println!(
+            "  Latency p50/p95/p99  {:.0}ms / {:.0}ms / {:.0}ms",
+            p50, p95, p99
+        );
+    }
+
     if s.tokens_in.is_some() || s.tokens_out.is_some() {
         let ti = s.tokens_in.unwrap_or(0);
         let to = s.tokens_out.unwrap_or(0);
