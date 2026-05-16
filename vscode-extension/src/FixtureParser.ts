@@ -18,8 +18,8 @@ function scanCaseLines(raw: string): Map<string, CaseLines> {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Case start: "  - id: <value>" (2-space indent before dash, at top of cases list)
-    const caseMatch = line.match(/^\s+-\s+id:\s+["']?(.+?)["']?\s*$/);
+    // Case start: "  - id: <value>" (exactly 2-space indent before dash, at cases list level)
+    const caseMatch = line.match(/^  -\s+id:\s+["']?(.+?)["']?\s*$/);
     if (caseMatch) {
       currentId = caseMatch[1].trim();
       map.set(currentId, { start: i });
@@ -83,7 +83,11 @@ export function parseFixtureFile(filePath: string): FixtureFile | null {
         tags: Array.isArray(c['tags']) ? (c['tags'] as string[]) : undefined,
         timeout_secs: typeof c['timeout_secs'] === 'number' ? c['timeout_secs'] : undefined,
         seed: typeof c['seed'] === 'number' ? c['seed'] : undefined,
-        input: (c['input'] as FixtureCase['input']) ?? { messages: [] },
+        input: {
+          messages: ((c['input'] as any)?.messages as FixtureCase['input']['messages']) ?? [],
+          context: (c['input'] as any)?.context,
+          env_overrides: (c['input'] as any)?.env_overrides,
+        },
         expected: (c['expected'] as FixtureCase['expected']) ?? {},
         evaluator_config: c['evaluator_config'] as FixtureCase['evaluator_config'],
         lineNumber:          lines?.start,
