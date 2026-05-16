@@ -41,8 +41,6 @@
 //! [`FixtureFile`]: crate::core::FixtureFile
 //! [`tokio`]: https://docs.rs/tokio
 
-mod hex_util;
-
 pub mod cli;
 pub mod core;
 pub mod evaluators;
