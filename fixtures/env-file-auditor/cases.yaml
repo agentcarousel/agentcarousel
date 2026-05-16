@@ -36,7 +36,7 @@ cases:
             Audit this .env file for security issues:
 
             DATABASE_URL=postgres://dbadmin:Tr0ub4dor&3@prod.db.example.com:5432/appdb
-            STRIPE_SECRET_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc
+            STRIPE_SECRET_KEY=sk_live_XXXXXXXXXXXXXXXXXXXXXXXXXXXX
             JWT_SECRET=mysecret
             NODE_ENV=development
             PORT=3000
@@ -233,7 +233,7 @@ cases:
             S3_BUCKET=mycompany-prod-user-uploads
             AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
             AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-            STRIPE_SECRET_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc
+            STRIPE_SECRET_KEY=sk_live_XXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     expected:
       tool_sequence: []

@@ -66,11 +66,23 @@ fn init_creates_fixture_with_sanitized_name() {
         .success();
 
     let cases_path = workspace.path().join("fixtures/sample-agent/cases.yaml");
-    assert!(cases_path.exists(), "expected fixtures/sample-agent/cases.yaml to exist");
+    assert!(
+        cases_path.exists(),
+        "expected fixtures/sample-agent/cases.yaml to exist"
+    );
     let contents = fs::read_to_string(&cases_path).expect("read generated fixture");
     assert!(contents.contains("skill_or_agent: sample-agent"));
 
-    assert!(workspace.path().join("fixtures/sample-agent/prompt.md").exists());
-    assert!(workspace.path().join("fixtures/sample-agent/bundle.manifest.json").exists());
-    assert!(workspace.path().join("fixtures/sample-agent/golden").is_dir());
+    assert!(workspace
+        .path()
+        .join("fixtures/sample-agent/prompt.md")
+        .exists());
+    assert!(workspace
+        .path()
+        .join("fixtures/sample-agent/bundle.manifest.json")
+        .exists());
+    assert!(workspace
+        .path()
+        .join("fixtures/sample-agent/golden")
+        .is_dir());
 }
