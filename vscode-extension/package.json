@@ -2,7 +2,7 @@
   "name": "agentcarousel-fixture-navigator",
   "displayName": "AgentCarousel Fixtures",
   "description": "Quality Assurance and Trust for Autonomous AI — navigate, inspect, and understand your AgentCarousel fixture files with a rich, human-readable interface right inside your editor.",
-  "version": "0.2.0",
+  "version": "0.3.3",
   "publisher": "agentcarousel",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -33,6 +33,7 @@
     "vscode": "^1.85.0"
   },
   "activationEvents": [
+    "onView:agentcarousel-fixtures",
     "workspaceContains:fixtures/**/*.yaml"
   ],
   "main": "./out/extension.js",
@@ -62,7 +63,7 @@
     "viewsWelcome": [
       {
         "view": "agentcarousel-fixtures",
-        "contents": "No fixture files found.\n\nAgentCarousel fixtures live in `fixtures/skills/**/*.yaml`. Open a workspace that contains them, or adjust your glob pattern.\n\n[Configure Fixture Glob](command:agentcarousel.configureGlob)\n\n[Learn more at agentcarousel.com](https://agentcarousel.com)"
+        "contents": "No fixture files found.\n\nAgentCarousel fixtures live in `fixtures/**/*.yaml`. Open a workspace that contains them, or change the fixture file pattern.\n\n[Change Fixture File Pattern](command:agentcarousel.configureGlob)\n\n[Learn more at agentcarousel.com](https://agentcarousel.com)"
       }
     ],
     "commands": [
@@ -84,7 +85,31 @@
       },
       {
         "command": "agentcarousel.configureGlob",
-        "title": "Configure Fixture Glob",
+        "title": "Change Fixture File Pattern",
+        "category": "AgentCarousel"
+      },
+      {
+        "command": "agentcarousel.lintFixtures",
+        "title": "Lint Fixtures",
+        "icon": "$(warning)",
+        "category": "AgentCarousel"
+      },
+      {
+        "command": "agentcarousel.runDoctor",
+        "title": "Run Doctor",
+        "icon": "$(pulse)",
+        "category": "AgentCarousel"
+      },
+      {
+        "command": "agentcarousel.showRunHistory",
+        "title": "Show Run History",
+        "icon": "$(history)",
+        "category": "AgentCarousel"
+      },
+      {
+        "command": "agentcarousel.showStats",
+        "title": "Show Stats",
+        "icon": "$(graph)",
         "category": "AgentCarousel"
       }
     ],
@@ -102,9 +127,15 @@
       "properties": {
         "agentcarousel.fixtureGlob": {
           "type": "string",
-          "default": "fixtures/skills/**/*.yaml",
+          "default": "fixtures/**/*.yaml",
           "description": "Glob pattern for fixture YAML files (relative to workspace root).",
           "order": 1
+        },
+        "agentcarousel.agcPath": {
+          "type": "string",
+          "default": "agc",
+          "description": "Path to the agc (agentcarousel) CLI binary. Defaults to 'agc' on PATH.",
+          "order": 2
         }
       }
     }

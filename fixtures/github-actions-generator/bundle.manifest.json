@@ -33,7 +33,7 @@
       "sha256": "662ddb6062df80f208235ccaf513c08be1cd00a772e9ab80f5a1ce37696fba59"
     },
     {
-      "path": "golden/push-pr-workflow.yml",
+      "path": "golden/push-pr-workflow.txt",
       "sha256": "d97cda6ad8fe073f7ae1a181d32418f4131a155185a7f18c732e404d7adb50d9"
     }
   ],

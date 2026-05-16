@@ -1,7 +1,7 @@
 export type CertTrack = 'none' | 'candidate' | 'stable' | 'trusted';
 export type RiskTier = 'low' | 'medium' | 'high';
 export type DataHandling = 'synthetic-only' | 'no-pii' | 'pii-reviewed';
-export type EvaluatorKind = 'rules' | 'golden' | 'judge' | 'process';
+export type EvaluatorKind = 'rules' | 'golden' | 'judge' | 'process' | 'all';
 
 export interface OutputCheck {
   kind: 'contains' | 'not_contains' | 'regex' | 'equals' | 'json_path';
@@ -16,10 +16,11 @@ export interface RubricItem {
 }
 
 export type EvaluatorConfig =
-  | { evaluator: 'rules' }
-  | { evaluator: 'golden'; golden_path: string; golden_threshold: number }
-  | { evaluator: 'judge'; judge_prompt: string }
-  | { evaluator: 'process'; process_cmd: string[] };
+  | { evaluator: 'rules'; effectiveness_threshold?: number }
+  | { evaluator: 'golden'; golden_path: string; golden_threshold: number; effectiveness_threshold?: number }
+  | { evaluator: 'judge'; judge_prompt: string; effectiveness_threshold?: number }
+  | { evaluator: 'process'; process_cmd: string[]; effectiveness_threshold?: number }
+  | { evaluator: 'all'; effectiveness_threshold?: number };
 
 export interface InputMessage {
   role: string;
@@ -78,6 +79,6 @@ export function resolveEvaluatorKind(c: FixtureCase, defaults?: FixtureFile['def
     return c.evaluator_config.evaluator as EvaluatorKind;
   }
   const d = defaults?.evaluator;
-  if (d === 'golden' || d === 'judge' || d === 'process') return d;
+  if (d === 'golden' || d === 'judge' || d === 'process' || d === 'all') return d;
   return 'rules';
 }

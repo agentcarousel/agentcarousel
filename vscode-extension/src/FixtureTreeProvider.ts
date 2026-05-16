@@ -35,6 +35,7 @@ const EVALUATOR_ICONS: Record<EvaluatorKind, string> = {
   golden: '$(star-full)',
   judge: '$(comment-discussion)',
   process: '$(terminal)',
+  all: '$(layers)',
 };
 
 const EVALUATOR_LABELS: Record<EvaluatorKind, string> = {
@@ -42,6 +43,7 @@ const EVALUATOR_LABELS: Record<EvaluatorKind, string> = {
   golden: 'golden',
   judge: 'judge',
   process: 'process',
+  all: 'all',
 };
 
 // ── Provider ─────────────────────────────────────────────────────────────────
@@ -57,18 +59,17 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
   }
 
   refresh(): void {
-    this.loadFixtures();
-    this._onDidChange.fire(undefined);
+    this.loadFixtures().then(() => this._onDidChange.fire(undefined));
   }
 
   private async loadFixtures(): Promise<void> {
     const config = vscode.workspace.getConfiguration('agentcarousel');
-    const glob = config.get<string>('fixtureGlob') ?? 'fixtures/skills/**/*.yaml';
+    const glob = config.get<string>('fixtureGlob') ?? 'fixtures/**/*.yaml';
     const uris = await vscode.workspace.findFiles(glob);
     this.fixtures = uris
       .map((u) => parseFixtureFile(u.fsPath))
       .filter((f): f is FixtureFile => f !== null)
-      .sort((a, b) => path.basename(a.filePath).localeCompare(path.basename(b.filePath)));
+      .sort((a, b) => a.skill_or_agent.localeCompare(b.skill_or_agent));
   }
 
   getTreeItem(element: FixtureTreeItem): vscode.TreeItem {
@@ -92,12 +93,11 @@ export class FixtureTreeProvider implements vscode.TreeDataProvider<FixtureTreeI
   // ── File node ──────────────────────────────────────────────────────────────
 
   private buildFileItem(f: FixtureFile): FixtureTreeItem {
-    const basename = path.basename(f.filePath);
     const trackBadge = f.certification_track ? f.certification_track : 'none';
     const tierBadge = f.risk_tier ?? '—';
     const item = new FixtureTreeItem(
       'file',
-      basename,
+      f.skill_or_agent,
       vscode.TreeItemCollapsibleState.Collapsed,
       f,
     );

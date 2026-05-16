@@ -7,6 +7,10 @@ export class CaseDetailPanel {
   static readonly viewType = 'agentcarousel.caseDetail';
   private static panels = new Map<string, CaseDetailPanel>();
 
+  private static panelKey(fixtureCase: FixtureCase, fixture: FixtureFile): string {
+    return `${fixture.filePath}::${fixtureCase.id}`;
+  }
+
   private readonly panel: vscode.WebviewPanel;
   private disposables: vscode.Disposable[] = [];
 
@@ -32,7 +36,8 @@ export class CaseDetailPanel {
   }
 
   static show(context: vscode.ExtensionContext, fixtureCase: FixtureCase, fixture: FixtureFile): void {
-    const existing = CaseDetailPanel.panels.get(fixtureCase.id);
+    const key = CaseDetailPanel.panelKey(fixtureCase, fixture);
+    const existing = CaseDetailPanel.panels.get(key);
     if (existing) {
       existing.panel.reveal();
       existing.fixtureCase = fixtureCase;
@@ -52,8 +57,8 @@ export class CaseDetailPanel {
       { enableScripts: true, retainContextWhenHidden: true },
     );
     const instance = new CaseDetailPanel(panel, fixtureCase, fixture, context);
-    CaseDetailPanel.panels.set(fixtureCase.id, instance);
-    panel.onDidDispose(() => CaseDetailPanel.panels.delete(fixtureCase.id));
+    CaseDetailPanel.panels.set(key, instance);
+    panel.onDidDispose(() => CaseDetailPanel.panels.delete(key));
   }
 
   private render(): void {
@@ -251,6 +256,7 @@ function buildEvaluatorSection(c: FixtureCase, kind: string): string {
     <div class="eval-card">
       <div class="eval-kind-row">
         <span class="kind-badge kind-${esc(kind)}">${esc(kind)}</span>
+        ${cfg?.effectiveness_threshold != null ? `<span class="threshold-badge">threshold ${Math.round(cfg.effectiveness_threshold * 100)}%</span>` : ''}
       </div>
       ${detail}
     </div>
@@ -473,6 +479,18 @@ const CSS = `
   .kind-golden       { background: rgba(245,158,11,0.18);  color: #fbbf24; }
   .kind-judge        { background: rgba(139,92,246,0.18);  color: #a78bfa; }
   .kind-process      { background: rgba(59,130,246,0.18);  color: #60a5fa; }
+  .kind-all          { background: rgba(20,184,166,0.18);  color: #2dd4bf; }
+  .threshold-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 0.78em;
+    font-weight: 600;
+    background: rgba(99,102,241,0.15);
+    color: #818cf8;
+    border: 1px solid rgba(99,102,241,0.25);
+    margin-left: 6px;
+  }
 
   /* ── Rubric ──────────────────────────────────────────────────────── */
   .rubric-grid { display: flex; flex-direction: column; gap: 10px; }
