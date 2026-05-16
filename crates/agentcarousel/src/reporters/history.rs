@@ -76,6 +76,22 @@ pub fn list_runs(limit: usize) -> Result<Vec<RunListing>, HistoryError> {
     Ok(results)
 }
 
+pub fn list_full_runs(limit: usize) -> Result<Vec<Run>, HistoryError> {
+    let conn = open_connection()?;
+    ensure_runs_table(&conn)?;
+    let mut stmt = conn
+        .prepare("SELECT run_json FROM runs ORDER BY started_at DESC LIMIT ?1")
+        .map_err(|source| HistoryError::QueryError { source })?;
+    let rows = stmt
+        .query_map([limit as i64], |row| row.get::<_, String>(0))
+        .map_err(|source| HistoryError::QueryError { source })?;
+    rows.flatten()
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })
+        })
+        .collect()
+}
+
 pub fn fetch_run(run_id: &str) -> Result<Run, HistoryError> {
     let conn = open_connection()?;
     ensure_runs_table(&conn)?;

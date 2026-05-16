@@ -11,7 +11,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tar::Builder;
 
-// In-crate copy for `cargo package`; keep aligned with repo `fixtures/schemas/skill-definition.schema.json`.
 const SKILL_DEFINITION_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/schemas/skill-definition.schema.json"
@@ -117,7 +116,6 @@ fn export_last_n(n: usize, out_dir: Option<&Path>) -> Result<Vec<PathBuf>, Strin
 
 pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<PathBuf, String> {
     let run = fetch_run(run_id).map_err(|err| err.to_string())?;
-    // Stage export files in a temp directory before archiving.
     let root = std::env::temp_dir().join(format!("agentcarousel-evidence-{run_id}"));
     if root.exists() {
         fs::remove_dir_all(&root).map_err(|err| err.to_string())?;

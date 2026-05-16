@@ -213,7 +213,6 @@ pub fn load_config(path_override: Option<&Path>) -> Result<ResolvedConfig, Confi
 }
 
 pub fn config_hash(config: &ResolvedConfig) -> String {
-    // Hash resolved config to keep run records reproducible.
     let payload = serde_json::to_vec(config).unwrap_or_else(|_| b"{}".to_vec());
     let mut hasher = Sha256::new();
     hasher.update(payload);
@@ -221,7 +220,6 @@ pub fn config_hash(config: &ResolvedConfig) -> String {
 }
 
 pub fn resolve_schema_path(config: &ResolvedConfig) -> PathBuf {
-    // Resolve schema file from configured schema directory.
     config
         .validate
         .schema_dir
@@ -261,7 +259,6 @@ fn resolve_config_path(path_override: Option<&Path>) -> Result<Option<PathBuf>, 
     }
 
     let home = env::var("HOME").map_err(|_| ConfigError::MissingHome)?;
-    // XDG config path fallback.
     let xdg = PathBuf::from(home).join(".config/agentcarousel/config.toml");
     if xdg.exists() {
         return Ok(Some(xdg));

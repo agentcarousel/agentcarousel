@@ -27,7 +27,7 @@ use agentcarousel_evaluators::{
 use agentcarousel_fixtures::MockEngine;
 use chrono::Utc;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -47,16 +47,54 @@ pub enum GenerationMode {
     Live,
 }
 
+/// FIFO-bounded cache for judge `EvalScores` — prevents unbounded growth during `--runs N` evals.
+struct BoundedCache {
+    map: HashMap<String, EvalScores>,
+    order: VecDeque<String>,
+    capacity: usize,
+}
+
+impl BoundedCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&EvalScores> {
+        self.map.get(key)
+    }
+
+    fn insert(&mut self, key: String, value: EvalScores) {
+        if self.map.contains_key(&key) {
+            return;
+        }
+        if self.map.len() >= self.capacity {
+            if let Some(oldest) = self.order.pop_front() {
+                self.map.remove(&oldest);
+            }
+        }
+        self.order.push_back(key.clone());
+        self.map.insert(key, value);
+    }
+}
+
 /// Tunables for [`run_fixtures`] (concurrency, timeouts, mocks directory, offline mode, etc.).
 #[derive(Debug, Clone)]
 pub struct RunnerConfig {
     pub concurrency: usize,
     pub timeout_secs: u64,
+    /// Cancel the entire run after this many seconds (all cases). `None` means no global limit.
+    pub run_timeout_secs: Option<u64>,
     pub offline: bool,
     pub mock_dir: PathBuf,
     pub generation_mode: GenerationMode,
     pub generator_model: Option<String>,
     pub generator_max_tokens: Option<u32>,
+    /// Base URL for `--generator-model custom` calls.
+    pub generator_endpoint: Option<String>,
     pub fail_fast: bool,
     pub mock_strict: bool,
     pub command: String,
@@ -82,6 +120,8 @@ pub struct EvalConfig {
     pub policy_version: Option<String>,
     /// Case-level progress bar on stderr (indicatif).
     pub progress: bool,
+    /// When true, write actual case output to golden files instead of failing on mismatch.
+    pub update_golden: bool,
 }
 
 /// Execute all cases from the given fixtures using [`RunnerConfig`] and return a completed [`Run`].
@@ -97,10 +137,23 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
     let skill_or_agent = skill_display_label(&fixtures);
     let cases = flatten_cases(fixtures);
 
-    let results = if config.fail_fast {
-        run_sequential(cases, &mock_engine, &config).await
+    let execute = async {
+        if config.fail_fast {
+            run_sequential(cases, &mock_engine, &config).await
+        } else {
+            run_parallel(cases, &mock_engine, &config).await
+        }
+    };
+    let results = if let Some(secs) = config.run_timeout_secs {
+        match tokio::time::timeout(Duration::from_secs(secs), execute).await {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("run timed out after {secs}s");
+                vec![]
+            }
+        }
     } else {
-        run_parallel(cases, &mock_engine, &config).await
+        execute.await
     };
 
     let summary = build_summary(&results);
@@ -143,9 +196,21 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
     let mock_engine = MockEngine::load_dir(&config.runner.mock_dir).unwrap_or_default();
     let skill_or_agent = skill_display_label(&fixtures);
     let cases = flatten_cases(fixtures);
-    let judge_cache = Arc::new(Mutex::new(HashMap::new()));
+    let judge_cache = Arc::new(Mutex::new(BoundedCache::new(1000)));
 
-    let results = run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
+    let run_timeout = config.runner.run_timeout_secs;
+    let execute = run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache);
+    let results = if let Some(secs) = run_timeout {
+        match tokio::time::timeout(Duration::from_secs(secs), execute).await {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("eval timed out after {secs}s");
+                vec![]
+            }
+        }
+    } else {
+        execute.await
+    };
     let summary = build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
 
@@ -290,7 +355,7 @@ async fn run_eval_cases(
     mock_engine: &MockEngine,
     config: &EvalConfig,
     run_id: &agentcarousel_core::RunId,
-    judge_cache: Arc<Mutex<HashMap<String, EvalScores>>>,
+    judge_cache: Arc<Mutex<BoundedCache>>,
 ) -> Vec<CaseResult> {
     let progress_bar: Option<ProgressBar> = if config.progress && !cases.is_empty() {
         let pb = ProgressBar::new(cases.len() as u64);
@@ -346,7 +411,7 @@ async fn run_case_eval(
     mock_engine: &MockEngine,
     config: &EvalConfig,
     run_id: &agentcarousel_core::RunId,
-    judge_cache: Arc<Mutex<HashMap<String, EvalScores>>>,
+    judge_cache: Arc<Mutex<BoundedCache>>,
 ) -> CaseResult {
     let runs = std::cmp::max(1, config.runs);
     let mut per_run_results = Vec::new();
@@ -398,12 +463,16 @@ async fn evaluate_case_result(
     result: &CaseResult,
     config: &EvalConfig,
     run_id: &agentcarousel_core::RunId,
-    judge_cache: &Arc<Mutex<HashMap<String, EvalScores>>>,
+    judge_cache: &Arc<Mutex<BoundedCache>>,
 ) -> Result<EvalScores, EvaluatorError> {
     let evaluator_id = resolve_evaluator_id(case, config);
     match evaluator_id.as_str() {
         "rules" => RulesEvaluator.evaluate(case, result),
-        "golden" => GoldenEvaluator::from_case(case)?.evaluate(case, result),
+        "golden" => {
+            let mut evaluator = GoldenEvaluator::from_case(case)?;
+            evaluator.update = config.update_golden;
+            evaluator.evaluate(case, result)
+        }
         "process" => ProcessEvaluator::from_case(case)?.evaluate(case, result),
         "judge" => {
             if !config.judge {
@@ -838,6 +907,15 @@ fn build_summary(results: &[CaseResult]) -> RunSummary {
         (None, None, None)
     };
 
+    let mut latencies: Vec<f64> = results
+        .iter()
+        .map(|r| r.metrics.total_latency_ms as f64)
+        .collect();
+    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let latency_p50_ms = percentile(&latencies, 50.0);
+    let latency_p95_ms = percentile(&latencies, 95.0);
+    let latency_p99_ms = percentile(&latencies, 99.0);
+
     RunSummary {
         total,
         passed,
@@ -854,5 +932,16 @@ fn build_summary(results: &[CaseResult]) -> RunSummary {
         tokens_in,
         tokens_out,
         mean_tokens_per_judged_case,
+        latency_p50_ms,
+        latency_p95_ms,
+        latency_p99_ms,
     }
+}
+
+fn percentile(sorted: &[f64], p: f64) -> Option<f64> {
+    if sorted.len() < 2 {
+        return None;
+    }
+    let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
+    Some(sorted[idx.min(sorted.len() - 1)])
 }

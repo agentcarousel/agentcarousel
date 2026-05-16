@@ -17,36 +17,6 @@ use super::fixture_utils::{
 };
 use super::GlobalOptions;
 
-const GENERATOR_GEMINI_KEY_ENV_CANDIDATES: [&str; 6] = [
-    "AGENTCAROUSEL_GENERATOR_KEY",
-    "agentcarousel_GENERATOR_KEY",
-    "GEMINI_API_KEY",
-    "GOOGLE_API_KEY",
-    "AGENTCAROUSEL_JUDGE_KEY",
-    "agentcarousel_JUDGE_KEY",
-];
-const GENERATOR_OPENAI_KEY_ENV_CANDIDATES: [&str; 5] = [
-    "AGENTCAROUSEL_GENERATOR_KEY",
-    "agentcarousel_GENERATOR_KEY",
-    "OPENAI_API_KEY",
-    "AGENTCAROUSEL_JUDGE_KEY",
-    "agentcarousel_JUDGE_KEY",
-];
-const GENERATOR_ANTHROPIC_KEY_ENV_CANDIDATES: [&str; 5] = [
-    "AGENTCAROUSEL_GENERATOR_KEY",
-    "agentcarousel_GENERATOR_KEY",
-    "ANTHROPIC_API_KEY",
-    "AGENTCAROUSEL_JUDGE_KEY",
-    "agentcarousel_JUDGE_KEY",
-];
-const GENERATOR_OPENROUTER_KEY_ENV_CANDIDATES: [&str; 5] = [
-    "OPENROUTER_API_KEY",
-    "AGENTCAROUSEL_GENERATOR_KEY",
-    "agentcarousel_GENERATOR_KEY",
-    "AGENTCAROUSEL_JUDGE_KEY",
-    "agentcarousel_JUDGE_KEY",
-];
-
 #[derive(Debug, Clone, ValueEnum)]
 enum EvalExecutionMode {
     Mock,
@@ -68,8 +38,10 @@ pub struct EvalArgs {
     /// Override the run id stored in the history DB for this run.
     #[arg(long)]
     pub run_id: Option<String>,
+    /// Number of times to run each case (use >1 for flakiness detection).
     #[arg(short = 'n', long, default_value_t = 1)]
     runs: u32,
+    /// Random seed for mock generation (0 = deterministic default).
     #[arg(short = 's', long, default_value_t = 0)]
     seed: u64,
     /// `rules` | `golden` | `process` | `judge` | `all` (default `rules` uses config; `all` uses each case’s `evaluator_config` in YAML).
@@ -83,18 +55,25 @@ pub struct EvalArgs {
     /// Useless unless the active mode can select judge: **`--evaluator judge`** (all cases judged) or **`--evaluator all`** (only cases with `evaluator: judge` in YAML).
     #[arg(short = 'j', long)]
     judge: bool,
+    /// Model to use for judge scoring (overrides config `judge.model`).
     #[arg(short = 'J', long)]
     judge_model: Option<String>,
+    /// `mock` (default) or `live` — whether to call a real generator API.
     #[arg(short = 'x', long, value_enum, default_value_t = EvalExecutionMode::Mock)]
     execution_mode: EvalExecutionMode,
+    /// Generator model name (overrides config `generator.model`).
     #[arg(short = 'm', long)]
     model: Option<String>,
+    /// Omit `max_tokens` from generator requests (unsupported for Anthropic models).
     #[arg(short = 'M', long)]
     disable_max_tokens: bool,
+    /// Maximum number of cases to run in parallel.
     #[arg(short = 'c', long)]
     concurrency: Option<usize>,
+    /// Per-case timeout in seconds.
     #[arg(short = 't', long)]
     timeout: Option<u64>,
+    /// Output format: `human` (default), `json`, or `junit`.
     #[arg(short = 'f', long)]
     format: Option<String>,
     /// Glob matched against full case ids (`skill/case-id`). Example: `my-skill/judge-*` to run only judge-named cases; combine with `--evaluator all --judge`.
@@ -103,10 +82,13 @@ pub struct EvalArgs {
     /// Comma-separated tags; keep only cases having any listed tag. Tag judge-only rows (e.g. `judge`) and pass `--filter-tags judge` to skip rules/golden cases.
     #[arg(long = "filter-tags", value_name = "TAG", value_delimiter = ',')]
     filter_tags: Option<Vec<String>>,
+    /// Certification context for audit metadata: `local`, `msp`, or `ci`.
     #[arg(short = 'C', long)]
     certification_context: Option<CliCertificationContext>,
+    /// Carousel iteration number stamped into the run record for multi-iteration sweeps.
     #[arg(short = 'i', long)]
     carousel_iteration: Option<u32>,
+    /// Policy version string stamped into the run record (e.g. `v1.2`).
     #[arg(short = 'p', long)]
     policy_version: Option<String>,
     /// Show a case-level progress bar on stderr (default: on for non-JSON/JUnit output when stderr is a TTY; use with `--format json` so only stderr shows progress).
@@ -115,6 +97,15 @@ pub struct EvalArgs {
     /// Never show the eval case progress bar.
     #[arg(short = 'N', long, action = ArgAction::SetTrue)]
     no_progress: bool,
+    /// Cancel the entire run after N seconds (per-case --timeout still applies per case).
+    #[arg(long)]
+    timeout_run: Option<u64>,
+    /// When set with --evaluator golden, write actual outputs to golden files instead of failing.
+    #[arg(long)]
+    update_golden: bool,
+    /// Base URL for a custom agent endpoint (required when --model is 'custom').
+    #[arg(long)]
+    generator_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -136,7 +127,6 @@ impl From<CliCertificationContext> for CertificationContext {
 
 pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     if globals.verbose >= 2 {
-        // Enable deeper evaluator diagnostics for this invocation.
         std::env::set_var("AGENTCAROUSEL_DEBUG_JUDGE", "1");
     }
 
@@ -215,9 +205,6 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         );
     }
 
-    // Live provider-backed evals are rate-limited and can return 429/503 under burst load.
-    // Unless the user explicitly overrides concurrency, default live runs to serialized
-    // execution to reduce transient provider errors.
     let concurrency = if matches!(generation_mode, GenerationMode::Live)
         && args.concurrency.is_none()
         && config.runner.concurrency.is_none()
@@ -247,6 +234,7 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
     let runner = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
+        run_timeout_secs: args.timeout_run,
         offline: if matches!(generation_mode, GenerationMode::Live) {
             false
         } else {
@@ -260,6 +248,7 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
         } else {
             config.generator.max_tokens
         },
+        generator_endpoint: args.generator_endpoint.clone(),
         fail_fast: false,
         mock_strict: std::env::var("agentcarousel_MOCK_STRICT").ok().as_deref() == Some("1"),
         command: "eval".to_string(),
@@ -289,6 +278,7 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
         carousel_iteration: args.carousel_iteration,
         policy_version: args.policy_version,
         progress: show_progress,
+        update_golden: args.update_golden,
     };
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -315,7 +305,6 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
     if !globals.quiet && format_str != "json" && format_str != "junit" {
         print_postflight_hints(&run);
     }
-    // Full human terminal output already includes run id + next step in the footer.
     if globals.quiet || format_str == "json" || format_str == "junit" {
         print_eval_saved_run_hint(
             &run,
@@ -401,8 +390,6 @@ fn is_judge_selected(args: &EvalArgs, fixtures: &[agentcarousel_core::FixtureFil
     if args.evaluator != "all" {
         return false;
     }
-    // For --evaluator all, detect judge per-case from fixture metadata so we can
-    // enforce --judge/key requirements before runtime execution starts.
     fixtures
         .iter()
         .flat_map(|fixture| fixture.cases.iter())
@@ -421,16 +408,12 @@ fn resolve_judge_key(provider: JudgeProvider) -> Option<String> {
 }
 
 fn generator_key_candidates(provider: GeneratorProvider) -> &'static [&'static str] {
-    match provider {
-        GeneratorProvider::Gemini => &GENERATOR_GEMINI_KEY_ENV_CANDIDATES,
-        GeneratorProvider::OpenAi => &GENERATOR_OPENAI_KEY_ENV_CANDIDATES,
-        GeneratorProvider::Anthropic => &GENERATOR_ANTHROPIC_KEY_ENV_CANDIDATES,
-        GeneratorProvider::OpenRouter => &GENERATOR_OPENROUTER_KEY_ENV_CANDIDATES,
-    }
+    provider.key_candidates()
 }
 
 fn resolve_generator_key(provider: GeneratorProvider) -> Option<String> {
-    generator_key_candidates(provider)
+    provider
+        .key_candidates()
         .iter()
         .find_map(|key| std::env::var(key).ok())
 }

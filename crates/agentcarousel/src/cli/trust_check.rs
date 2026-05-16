@@ -2,6 +2,7 @@ use clap::{Parser, ValueEnum};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tempfile::NamedTempFile;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
@@ -118,7 +119,7 @@ fn trust_check(args: TrustCheckArgs, config: &ResolvedConfig) -> Result<(), Trus
                 )
             })
             .and_then(resolve_pubkey_path)?;
-        verify_attestation(&args.minisign_bin, attestation, &pubkey)?;
+        verify_attestation(&args.minisign_bin, attestation, pubkey.path())?;
     }
 
     Ok(())
@@ -211,7 +212,21 @@ fn print_summary(payload: &Value, bundle_id: &str, state: TrustTier) {
     }
 }
 
-fn resolve_pubkey_path(input: &str) -> Result<PathBuf, TrustCheckError> {
+enum PubkeyHandle {
+    UserPath(PathBuf),
+    TempFile(NamedTempFile),
+}
+
+impl PubkeyHandle {
+    fn path(&self) -> &Path {
+        match self {
+            PubkeyHandle::UserPath(p) => p.as_path(),
+            PubkeyHandle::TempFile(f) => f.path(),
+        }
+    }
+}
+
+fn resolve_pubkey_path(input: &str) -> Result<PubkeyHandle, TrustCheckError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err(TrustCheckError::Runtime(
@@ -225,14 +240,19 @@ fn resolve_pubkey_path(input: &str) -> Result<PathBuf, TrustCheckError> {
             .map_err(|err| {
                 TrustCheckError::Runtime(format!("failed to read pubkey response body: {err}"))
             })?;
-        let tmp_path =
-            std::env::temp_dir().join(format!("agentcarousel-minisign-{}.pub", ulid::Ulid::new()));
-        std::fs::write(&tmp_path, body).map_err(|err| {
+        let mut tmp = tempfile::Builder::new()
+            .prefix("agentcarousel-minisign-")
+            .suffix(".pub")
+            .tempfile()
+            .map_err(|err| {
+                TrustCheckError::Runtime(format!("failed to create temp pubkey: {err}"))
+            })?;
+        std::io::Write::write_all(&mut tmp, body.as_bytes()).map_err(|err| {
             TrustCheckError::Runtime(format!("failed to write temp pubkey: {err}"))
         })?;
-        return Ok(tmp_path);
+        return Ok(PubkeyHandle::TempFile(tmp));
     }
-    Ok(PathBuf::from(trimmed))
+    Ok(PubkeyHandle::UserPath(PathBuf::from(trimmed)))
 }
 
 fn verify_attestation(

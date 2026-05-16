@@ -277,6 +277,9 @@ pub struct RunSummary {
     pub tokens_in: Option<u64>,
     pub tokens_out: Option<u64>,
     pub mean_tokens_per_judged_case: Option<u64>,
+    pub latency_p50_ms: Option<f64>,
+    pub latency_p95_ms: Option<f64>,
+    pub latency_p99_ms: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

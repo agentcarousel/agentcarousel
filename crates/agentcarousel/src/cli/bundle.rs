@@ -206,7 +206,6 @@ fn pack_bundle(dir: &Path, out: Option<&Path>) -> Result<PathBuf, String> {
     let dir = dir.canonicalize().map_err(|err| err.to_string())?;
     let manifest_path = dir.join("bundle.manifest.json");
     if manifest_path.exists() {
-        // Update sha256 entries so bundle contents are self-consistent.
         update_manifest_hashes(&manifest_path, &dir)?;
     } else {
         return Err("bundle.manifest.json not found".to_string());
