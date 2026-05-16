@@ -3,8 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-const EMBEDDED_SCHEMA: &str =
-    include_str!("../../../../schemas/skill-definition.schema.json");
+const EMBEDDED_SCHEMA: &str = include_str!("../../../../schemas/skill-definition.schema.json");
 
 #[derive(Debug, Clone)]
 pub enum SchemaLocation {
