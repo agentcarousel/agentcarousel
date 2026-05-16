@@ -5,7 +5,7 @@ offline = true           # Run strictly without network requests
 mock_dir = "mocks"       # Directory for HTTP mock definitions
 
 [validate]
-schema_dir = "fixtures/schemas"   # Path to custom JSON schemas
+schema_dir = "schemas"   # Path to custom JSON schemas
 strict = true            # Enable strict schema checking
 
 [eval]

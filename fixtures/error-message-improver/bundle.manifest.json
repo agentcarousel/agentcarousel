@@ -1,0 +1,53 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/error-message-improver",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "error-message-improver/positive-null-pointer-with-context",
+    "error-message-improver/positive-econnrefused",
+    "error-message-improver/positive-already-good-message",
+    "error-message-improver/positive-403-permission",
+    "error-message-improver/positive-database-deadlock"
+  ],
+  "certification_cases": [
+    "error-message-improver/positive-null-pointer-with-context",
+    "error-message-improver/positive-econnrefused",
+    "error-message-improver/positive-already-good-message"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "Error message clarity improvement fixture: null pointer with context, ECONNREFUSED, already-good approval, 403 permission, database deadlock. Tests user-language translation and restraint (no rewriting good messages).",
+  "domain": "developer-experience",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "8917d1131b6e7f1baecdfe3022599bb6df6732b6ef0b60d3a914fc1cdd527d60"
+    },
+    {
+      "path": "golden/null-pointer-invoice.txt",
+      "sha256": "c55828170058b3bb6dc482e7fd64ef5968d258541dee59ea8cdec7a899fb32a3"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/error-message-improver` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "low",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "error-message-improver",
+  "source_skill_path": "agentcarousel/skills/error-message-improver/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

@@ -4,7 +4,7 @@
 # and replace every placeholder marked with <ANGLE_BRACKETS>.
 #
 # Schema reference: https://agentcarousel.com/schemas/fixture/v1.json
-# Local schema:     fixtures/schemas/skill-definition.schema.json
+# Local schema:     schemas/skill-definition.schema.json
 # Process guide:    docs/fixture-development-process.md
 # Versioning:       bundle_id / bundle_version in this file; see docs/fixture-format.md
 # Tag examples:     docs/fixture-tag-examples.md

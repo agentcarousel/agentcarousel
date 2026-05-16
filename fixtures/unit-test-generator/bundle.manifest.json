@@ -1,0 +1,53 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/unit-test-generator",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "unit-test-generator/positive-pure-function-boundaries",
+    "unit-test-generator/positive-async-with-mocks",
+    "unit-test-generator/positive-class-with-state",
+    "unit-test-generator/edge-case-no-unnecessary-mocks",
+    "unit-test-generator/edge-case-untestable-side-effect"
+  ],
+  "certification_cases": [
+    "unit-test-generator/positive-pure-function-boundaries",
+    "unit-test-generator/positive-async-with-mocks",
+    "unit-test-generator/edge-case-no-unnecessary-mocks"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "Unit test generation fixture: pure function boundary cases (pytest), async function with mocks (Jest), class with state transitions, no-unnecessary-mocks discipline, and stdout-only function testability guidance.",
+  "domain": "testing-quality",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "53126bc2ab1c12999d53f8c5041bbaf67f3dd5b2d8c8e0a79d1e312e8c815f08"
+    },
+    {
+      "path": "golden/clamp-tests.py",
+      "sha256": "85c09e5a2bbfd6e032bf48c215d392373eb22686cae30588d2c84696844f6a8d"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/unit-test-generator` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "low",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "unit-test-generator",
+  "source_skill_path": "agentcarousel/skills/unit-test-generator/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

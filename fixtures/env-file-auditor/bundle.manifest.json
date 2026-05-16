@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/env-file-auditor",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "env-file-auditor/positive-live-credentials-weak-secret",
+    "env-file-auditor/positive-placeholder-values",
+    "env-file-auditor/positive-clean-approval",
+    "env-file-auditor/edge-case-env-purpose-mismatch",
+    "env-file-auditor/failure-mode-no-content"
+  ],
+  "certification_cases": [
+    "env-file-auditor/positive-live-credentials-weak-secret",
+    "env-file-auditor/positive-placeholder-values",
+    "env-file-auditor/positive-clean-approval",
+    "env-file-auditor/edge-case-env-purpose-mismatch"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": ".env file secret and misconfiguration audit fixture: live credentials + weak JWT, placeholder values, clean approval, prod credentials in dev-labeled file, no-content handling. All credentials are synthetic.",
+  "domain": "secrets-security",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "2b2ad1d4d03a4e4ead7bf3a99b50dbac77e8e6027294a758b43b1fb7f3ea2a8c"
+    },
+    {
+      "path": "golden/clean-approval.txt",
+      "sha256": "04c61262dc7b267171184fd3aec07e2e824a36c7aa862a36c6b6a855723a72b4"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [
+    "env-file-auditor/failure-mode-no-content"
+  ],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/env-file-auditor` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "medium",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "env-file-auditor",
+  "source_skill_path": "agentcarousel/skills/env-file-auditor/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

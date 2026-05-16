@@ -141,7 +141,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/bundles/customer-support",
+            "fixtures/customer-support",
             "--url",
             "https://registry.example.test",
             "--dry-run",
@@ -201,7 +201,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/bundles/customer-support",
+            "fixtures/customer-support",
             "--url",
             "https://registry.example.test",
             "--dry-run",
@@ -256,7 +256,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/bundles/customer-support",
+            "fixtures/customer-support",
             "--url",
             "https://registry.example.test",
             "--dry-run",
@@ -287,7 +287,7 @@ fn publish_rejects_all_runs_with_single_evidence_path() {
         .current_dir(&root)
         .args([
             "publish",
-            "fixtures/bundles/customer-support",
+            "fixtures/customer-support",
             "--url",
             "https://registry.example.test",
             "--all-runs",
@@ -321,7 +321,7 @@ fn publish_fails_fast_when_token_missing() {
         .current_dir(&root)
         .args([
             "publish",
-            "fixtures/bundles/customer-support",
+            "fixtures/customer-support",
             "--url",
             "https://registry.example.test",
         ])
@@ -359,7 +359,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/bundles/customer-support",
+            "fixtures/customer-support",
             "--url",
             "https://registry.example.test",
             "--dry-run",

@@ -20,7 +20,7 @@ fn eval_live_requires_generator_key() {
         .env_remove("AGENTCAROUSEL_JUDGE_KEY")
         .args([
             "eval",
-            "fixtures/examples/example-skill.yaml",
+            "examples/example-skill.yaml",
             "--execution-mode",
             "live",
             "--model",

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/accessibility-auditor",
+  "bundle_version": "1.0.0",
+  "case_count": 5,
+  "case_ids": [
+    "accessibility-auditor/positive-missing-alt-and-div-button",
+    "accessibility-auditor/positive-form-missing-label",
+    "accessibility-auditor/negative-decorative-image-correct",
+    "accessibility-auditor/positive-icon-button-no-label",
+    "accessibility-auditor/positive-heading-hierarchy"
+  ],
+  "certification_cases": [
+    "accessibility-auditor/positive-missing-alt-and-div-button",
+    "accessibility-auditor/positive-form-missing-label",
+    "accessibility-auditor/negative-decorative-image-correct",
+    "accessibility-auditor/positive-icon-button-no-label"
+  ],
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "description": "WCAG 2.1 accessibility audit fixture: missing alt + div-as-button, form without label, decorative-image false-positive avoidance, icon button without accessible name, heading hierarchy skip. Code-level audit only; contrast ratio requires rendered output.",
+  "domain": "frontend-accessibility",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "fixtures": [
+    {
+      "path": "cases.yaml",
+      "sha256": "f4b920e29c5bbedd1bd30ee5a71c55fee6f74b9deed956f9d5b9fe7ef69bca20"
+    },
+    {
+      "path": "golden/product-card-findings.txt",
+      "sha256": "6b2246e803f31d2afa2611e4918cadfe09d57c2c3b38a3d257cdd9cf64eadc41"
+    }
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "negative_cases": [
+    "accessibility-auditor/negative-decorative-image-correct"
+  ],
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/accessibility-auditor` after file changes"
+  ],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "risk_tier": "low",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "accessibility-auditor",
+  "source_skill_path": "agentcarousel/skills/accessibility-auditor/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z"
+}

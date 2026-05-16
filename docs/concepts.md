@@ -9,7 +9,7 @@ A **fixture** is a YAML file that describes a skill or agent under test. It cont
 Examples:
 
 - `fixtures/skills/example-skill.yaml` — valid skill with two **smoke**-tagged cases.
-- `fixtures/examples/invalid-skill.yaml` — intentionally fails (wrong naming rules) on `validate`.
+- `examples/invalid-skill.yaml` — intentionally fails (wrong naming rules) on `validate`.
 
 ## Case tags
 

@@ -2,7 +2,7 @@
 
 This document describes the YAML/TOML fixture format consumed by
 `agentcarousel`. The authoritative schema is
-`fixtures/schemas/skill-definition.schema.json`.
+`schemas/skill-definition.schema.json`.
 
 Use **`bundle_id`** and **`bundle_version`** (semver recommended) at the top level of the fixture for certification bundles; treat **major** bumps as breaking for anyone pinning a bundle.
 
@@ -99,4 +99,4 @@ Prefer tags in all new fixtures and examples.
 - Template: `templates/fixture-skeleton.yaml`
 - Intake: open a GitHub issue using the checklist in [CONTRIBUTING.md](https://github.com/agentcarousel/agentcarousel/blob/main/CONTRIBUTING.md) before large additions
 - Tag examples: [`docs/fixture-tag-examples.md`](fixture-tag-examples.md)
-- Example fixtures: `fixtures/examples/`
+- Example fixtures: `examples/`

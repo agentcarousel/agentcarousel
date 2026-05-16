@@ -22,7 +22,7 @@ pub fn validate_fixture_value(
     schema_location: SchemaLocation,
 ) -> Result<Vec<SchemaValidationIssue>, SchemaValidationIssue> {
     let schema_path = match schema_location {
-        SchemaLocation::Default => PathBuf::from("fixtures/schemas/skill-definition.schema.json"),
+        SchemaLocation::Default => PathBuf::from("schemas/skill-definition.schema.json"),
         SchemaLocation::Path(path) => path,
     };
 

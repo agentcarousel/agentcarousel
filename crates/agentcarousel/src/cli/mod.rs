@@ -156,8 +156,8 @@ fn help_template() -> String {
 
 Usage:
   agc [OPTIONS] <COMMAND>
-  agc validate fixtures/skills/customer-support.yaml
-  agc test fixtures/skills/customer-support.yaml --filter-tags smoke
+  agc validate fixtures/customer-support/cases.yaml
+  agc test fixtures/customer-support/cases.yaml --filter-tags smoke
 
 {fw}:
   {validate}     Validate YAML/TOML fixtures against the schema (no execution); scans `.` by default
@@ -261,8 +261,12 @@ fn run_init(args: InitArgs) -> i32 {
     }
 
     match init_scaffold(&args.name) {
-        Ok(path) => {
-            println!("created {}", path.display());
+        Ok(dir) => {
+            println!("created {}/", dir.display());
+            println!("  cases.yaml        — test cases");
+            println!("  prompt.md         — system prompt");
+            println!("  bundle.manifest.json — bundle metadata");
+            println!("  golden/           — golden output files");
             exit_codes::ExitCode::Ok.as_i32()
         }
         Err(err) => {
@@ -274,24 +278,41 @@ fn run_init(args: InitArgs) -> i32 {
 
 fn init_scaffold(name: &str) -> Result<std::path::PathBuf, String> {
     let safe_name = sanitize_fixture_name(name)?;
-    let rendered = FIXTURE_TEMPLATE.replace("<skill-or-agent-id>", &safe_name);
+    let skill_dir = std::path::Path::new("fixtures").join(&safe_name);
 
-    let fixtures_dir = std::path::Path::new("fixtures");
-    std::fs::create_dir_all(fixtures_dir)
-        .map_err(|err| format!("failed to create fixtures dir: {err}"))?;
-
-    let out_path = fixtures_dir.join(format!("{safe_name}.yaml"));
-    if out_path.exists() {
-        return Err(format!("fixture already exists: {}", out_path.display()));
+    if skill_dir.exists() {
+        return Err(format!("fixture already exists: {}", skill_dir.display()));
     }
 
-    std::fs::write(&out_path, rendered).map_err(|err| format!("failed to write fixture: {err}"))?;
-    Ok(out_path)
+    let golden_dir = skill_dir.join("golden");
+    std::fs::create_dir_all(&golden_dir)
+        .map_err(|err| format!("failed to create {}: {err}", golden_dir.display()))?;
+
+    let cases = FIXTURE_TEMPLATE.replace("<skill-or-agent-id>", &safe_name);
+    std::fs::write(skill_dir.join("cases.yaml"), cases)
+        .map_err(|err| format!("failed to write cases.yaml: {err}"))?;
+
+    let prompt = format!("You are a {safe_name} skill. Describe what this skill does and what constraints it should follow.\n");
+    std::fs::write(skill_dir.join("prompt.md"), prompt)
+        .map_err(|err| format!("failed to write prompt.md: {err}"))?;
+
+    let manifest = BUNDLE_MANIFEST_TEMPLATE
+        .replace("<skill-or-agent-id>", &safe_name)
+        .replace("<org>", "agentcarousel");
+    std::fs::write(skill_dir.join("bundle.manifest.json"), manifest)
+        .map_err(|err| format!("failed to write bundle.manifest.json: {err}"))?;
+
+    Ok(skill_dir)
 }
 
 const FIXTURE_TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/templates/fixture-skeleton.yaml"
+));
+
+const BUNDLE_MANIFEST_TEMPLATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/bundle-manifest-skeleton.json"
 ));
 
 fn sanitize_fixture_name(name: &str) -> Result<String, String> {
