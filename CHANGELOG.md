@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4 - May 2026
+
+### Bug fixes
+
+- Fix `cargo publish` failure: schema file (`skill-definition.schema.json`) copied into crate directory (`crates/agentcarousel/schemas/`); both `include_str!` paths in `schema.rs` and `export.rs` updated to reference the in-crate copy. The workspace-relative paths (`../../schemas/`) were unreachable from the `cargo package` tarball.
+
 ## 0.5.3 - May 2026
 
 ### Features
