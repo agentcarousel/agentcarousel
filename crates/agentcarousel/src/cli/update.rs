@@ -141,7 +141,7 @@ fn verify_checksum(data: &[u8], asset_name: &str, sums: &str) -> Result<(), Stri
 
     let mut hasher = Sha256::new();
     hasher.update(data);
-    let got = crate::hex_util::hex_lower(hasher.finalize().as_ref());
+    let got = crate::core::hex_lower(hasher.finalize().as_ref());
 
     if got != expected {
         return Err(format!(
