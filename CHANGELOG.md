@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.5 - May 2026
+
+### Features
+
+- Registry listing: `GET /v1/bundles` endpoint added to `agentcarousel-registry`; returns all bundles with `bundle_id`, `bundle_version`, `trust_state`, `description`, and `domain` derived from stored manifest JSON.
+- `agentcarousel-www` agent index is now dynamic: `pilotAgents` hardcoded list replaced with live `listBundles()` fetch from the registry API. Any published bundle appears on `/agents` automatically without a code deploy.
+
 ## 0.5.4 - May 2026
 
 ### Bug fixes
