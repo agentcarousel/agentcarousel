@@ -1,6 +1,6 @@
 # AgentCarousel
 
-**Unit tests for AI agents.** Define behavior in YAML, run offline tests, export signed evidence bundles your reviewers will accept.
+**Unit tests for AI agents.** Determine trust before you deploy - run behavioral tests in CI, score with an LLM judge, and export signed evidence your auditors accept.
 
 [![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
 [![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
@@ -9,12 +9,14 @@
 
 <img width="692" height="414" alt="demo" src="https://github.com/user-attachments/assets/c55df92c-fa4a-44b6-a381-23fe0329a5c4" />
 
+AgentCarousel delivers a repeatable, automated way to assess AI agent efficacy and behavior — establishing the trust required before deployment. Tests run deterministically in CI, semantic scoring comes from an LLM-as-a-judge, and results can be certified by a domain expert with a signed attestation.
+
 ## Why agentcarousel
 
-- **Deterministic by default** - Offline runs with mocks mean same inputs → same outputs, every time.
-- **Built for evidence** - Every run produces a signed artifact (`.tar.gz` + `minisign` attestation) you can hand to an auditor, a reviewer, or your customer's security team.
-- **Live evals when you want them** - plug in OpenAI, Anthropic, Gemini, or OpenRouter as generator and judge, then diff runs to catch regressions.
-- **Compliance-aware fixtures** - Risk tier, data handling, and certification track: the metadata your governance program already tracks, baked into the test format.
+- **Behavioral certainty before deployment** — Declarative YAML fixtures pin what your agent should and shouldn't say. Same inputs, same outputs, every time — without touching a live API.
+- **Evidence that stands up to scrutiny** — Every run exports a signed bundle (`.tar.gz` + minisign attestation) a domain expert can certify — ready for auditors, procurement teams, and government regulators.
+- **Semantic scoring, not just pattern matching** — An LLM-as-a-judge evaluates outputs with contextual understanding, catching regressions.
+- **Built for regulated environments** — Risk tier, data handling, and certification track are first-class fixtures. Integrates into CI and produces governance artifacts for your compliance program.
 
 ## Install
 
@@ -32,138 +34,99 @@ cargo install agentcarousel
 ## Quickstart
 
 ```bash
-# Scaffold a skill fixture (creates fixtures/my-skill/ directory)
-agentcarousel init --skill my-skill
-agentcarousel init --agent my-agent
+# Scaffold a skill fixture
+agentcarousel init my-skill
 
-# Run it offline (no API keys needed)
-agentcarousel test fixtures/my-skill/cases.yaml --offline true
+# Run (mock mode by default, no API keys needed)
+agentcarousel test fixtures/my-skill/cases.yaml
 
 # Validate fixture schema and rules
 agentcarousel validate fixtures/regex-builder/cases.yaml
 
-# Evaluate (mock by default)
+# Evaluate fixtures
 agentcarousel eval fixtures/regex-builder/cases.yaml
 
-# Export evidence bundle
-agentcarousel export <RUN-ID>
-```
-
-## Example fixture — `regex-builder`
-
-```yaml
-schema_version: 1
-skill_or_agent: regex-builder
-
-cases:
-  - id: regex-builder/positive-semver
-    tags: [smoke, happy-path]
-    input:
-      messages:
-        - role: user
-          content: |
-            Build a regex for semantic version strings.
-            Must match: 1.2.3 | 0.0.1 | 1.0.0-alpha | 2.0.0-rc.1
-            Must NOT match: 1.2 | .1.2.3 | 1.a.3
-            Anchor the pattern to match the full string.
-    expected:
-      output:
-        - kind: regex
-          value: '\\d+\\.\\d+\\.\\d+'
-        - kind: regex
-          value: '(?i)(anchor|full.*string|\^|\$)'
-        - kind: not_contains
-          value: '(a+)+'
+# Export the last evaluation as an evidence tarball
+agentcarousel export -l
 ```
 
 See [`fixtures/regex-builder/`](fixtures/regex-builder/) for the full fixture with all cases, golden outputs, and bundle manifest.
 
-## Live Eval with LLM-as-a-judge
+## Live Eval with LLM-as-a-Judge
 
 ```bash
-export GEMINI_API_KEY=gemini_key
-export OPENROUTER_API_KEY=or_key
-export ANTHROPIC_API_KEY=claude_api_key
-export OPENAI_API_KEY=openai_key
+# Generator LLM key (the model being tested)
+export GEMINI_API_KEY=your_key        # or OPENAI_API_KEY / OPENROUTER_API_KEY
 
-# Run all cases, judge-backed cases use the judge
-agentcarousel eval fixtures/ \
+# Judge LLM key (the model being judge)
+export ANTHROPIC_API_KEY=your_key     # or bring your own provider
+
+# Run skill fixtures for regex-builder against live APIs with LLM judge
+agentcarousel eval fixtures/regex-builder/ \
   --execution-mode live \
   --evaluator all --judge \
   --model gemini-2.5-flash \
   --judge-model claude-haiku-4-5-20251001 \
   --runs 1
-
-# Narrow to specific cases by id glob or tag
-agentcarousel eval fixtures/ \
-  --evaluator all --judge \
-  --filter "customer-support/judge-*" \
-  --filter-tags certification
 ```
 
-`--evaluator all` uses each case's declared evaluator; `--evaluator judge` forces every case through the judge regardless. Use `--filter` (glob on `skill/case-id`) or `--filter-tags` (comma-separated) to scope runs.
+**Execution modes** — `--execution-mode live` hits real LLM APIs. Omit it (or pass `mock`) for deterministic offline runs.
+
+**Evaluators** — `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. `--evaluator mock` skips LLM calls entirely.
+
+**Filters** — `--filter` on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`)
 
 ## Reports
 
 ```bash
-# List recent runs (newest first)
+# List recent runs
 agentcarousel report list
 
-# Show a run (human-readable, same formatting as eval/test output)
+# Inspect a run
 agentcarousel report show <RUN-ID>
 
-# Also accepts a path to run.json or an evidence directory
-agentcarousel report show ./evidence/my-export/
-
-# Diff two runs to surface regressions
-agentcarousel report diff <RUN-ID-A> <RUN-ID-B>
-
-# JSON output for scripting
-agentcarousel report list --json
-agentcarousel report show <RUN-ID> --json
+# Export as a signed evidence bundle
+agentcarousel export <RUN-ID>
 ```
 
-## Configuration (`agentcarousel.toml`)
+## Configuration
 
-Copy `agentcarousel.example.toml` to `agentcarousel.toml` and customize as needed.
+Copy [`agentcarousel.example.toml`](agentcarousel.example.toml) to `agentcarousel.toml`. All configuration options are documented in the example file.
 
-Per-case effectiveness thresholds override the global `--effectiveness-threshold` flag via the `evaluator_config.effectiveness_threshold` field in YAML.
+## Bundles
 
-## Bundle workflows
+A bundle is a signed, distributable archive of a skill's fixture, cases, and evidence.
 
 ```bash
-# Create a distributable bundle archive
+# Pack a bundle
 agentcarousel bundle pack fixtures/regex-builder
 
-# Verify bundle integrity and structure
+# Verify bundle integrity
 agentcarousel bundle verify fixtures/customer-support
 agentcarousel bundle verify my-bundle.tar.gz
 
-# Pull bundle manifest + artifacts from the registry
+# Pull from registry
 agentcarousel bundle pull customer-support-1.0.0 --url "https://api.agentcarousel.com"
-```
 
-## Publish to registry
+# Publish to registry
+agentcarousel publish fixtures/customer-support --url "https://api.agentcarousel.com"
 
-```bash
-# Publish bundle + evidence in one flow
-agentcarousel publish fixtures/customer-support \
-  --url "https://api.agentcarousel.com"
-
-# Publish multiple matching local runs (newest first)
+# Publish multiple runs
 agentcarousel publish fixtures/customer-support \
   --url "https://api.agentcarousel.com" \
   --all-runs --limit 5
 ```
 
-## Trust checks
+## Trust Checks
+
+Trust checks query a skill's registry state for use in CI gates and governed workflows — verify a deployed agent is certified and untampered before it runs.
 
 ```bash
-# Registry trust-state check
+# Check trust state from registry
 agentcarousel trust-check customer-support@1.0.0 \
   --url "https://api.agentcarousel.com"
 
-# Optional offline attestation verification
+# Verify with local attestation
 agentcarousel trust-check customer-support@1.0.0 \
   --url "https://api.agentcarousel.com" \
   --attestation ./attestation-customer-support-1.0.0.json \
