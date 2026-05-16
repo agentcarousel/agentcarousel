@@ -1,0 +1,374 @@
+# agentcarousel fixture — unit-test-generator
+# Certification Tier: Candidate
+# Source skill: unit test generation agent for given functions and classes
+# Golden files:  fixtures/golden/unit-test-generator/
+# Bundle:        fixtures/bundles/unit-test-generator/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: unit-test-generator
+
+bundle_id: agentcarousel/unit-test-generator
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: low
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [testing, developer-tools, quality, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Pure function with boundary conditions (smoke + certification) ─────
+  - id: unit-test-generator/positive-pure-function-boundaries
+    description: >
+      Agent generates pytest tests for a clamp() function that has a happy path,
+      four boundary conditions, and an error path. Pass requires tests covering all
+      boundary values and a pytest.raises assertion for the invalid-range error case.
+    tags: [smoke, happy-path, testing, certification]
+    seed: 8001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate pytest unit tests for this function. Cover the happy path,
+            all boundary conditions, and the error case.
+
+            ```python
+            def clamp(value: float, min_val: float, max_val: float) -> float:
+                """Return value clamped to [min_val, max_val]. Raises ValueError if min_val > max_val."""
+                if min_val > max_val:
+                    raise ValueError(f"min_val ({min_val}) must be <= max_val ({max_val})")
+                return max(min_val, min(max_val, value))
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(def test_|@pytest\.mark)'
+        - kind: regex
+          value: '(?i)(pytest\.raises|raises.*ValueError|assertRaises)'
+        - kind: regex
+          value: '(?i)(min_val|max_val|boundary|edge)'
+        - kind: not_contains
+          value: "mock"
+        - kind: not_contains
+          value: "patch"
+
+      rubric:
+        - id: happy-path-covered
+          description: >
+            Tests include at least one case where value is in range and passes through
+            unchanged (e.g. clamp(5, 0, 10) == 5).
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(clamp\(5|clamp\(0\.5|in.range|within.*range|return.*value)'
+
+        - id: boundary-conditions-covered
+          description: >
+            Tests cover: value == min_val, value == max_val, value < min_val (clamped up),
+            value > max_val (clamped down). A perfect score includes all four cases.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(min_val|max_val|below.*min|above.*max|clamp.*low|clamp.*high)'
+
+        - id: error-case-covered
+          description: >
+            Tests use pytest.raises(ValueError) to assert the error when min_val > max_val.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(pytest\.raises\(ValueError\)|raises.*ValueError|ValueError)'
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/unit-test-generator/clamp-tests.py
+      golden_threshold: 0.70
+      effectiveness_threshold: 0.6
+
+  # ── Case 2: Async side-effectful function — must mock dependencies ────────────
+  - id: unit-test-generator/positive-async-with-mocks
+    description: >
+      Agent generates Jest tests for an async function that writes to a database and
+      sends an email. Both dependencies must be mocked — the tests must not require
+      a real database or send real emails. Pass requires jest.fn() or jest.spyOn()
+      on both dependencies, and assertions on return value not just mock call counts.
+    tags: [happy-path, testing, certification]
+    seed: 8002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate Jest unit tests for this function. Mock all external dependencies
+            so tests run without a real database or email service.
+
+            ```typescript
+            async function registerUser(
+              db: Database,
+              emailService: EmailService,
+              userData: { email: string; name: string }
+            ): Promise<{ id: string; email: string }> {
+              const existing = await db.findByEmail(userData.email);
+              if (existing) {
+                throw new Error(`User with email ${userData.email} already exists`);
+              }
+              const user = await db.insert('users', userData);
+              await emailService.sendWelcome(user.email, user.name);
+              return { id: user.id, email: user.email };
+            }
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(jest\.fn|jest\.spyOn|mock|stub)'
+        - kind: regex
+          value: '(?i)(findByEmail|insert|sendWelcome)'
+        - kind: regex
+          value: '(?i)(already exists|duplicate|existing.*user)'
+        - kind: not_contains
+          value: "real database"
+        - kind: not_contains
+          value: "actual email"
+
+      rubric:
+        - id: db-mocked
+          description: >
+            db.findByEmail and db.insert are mocked with jest.fn() or equivalent.
+            Tests do not require a real database connection.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(jest\.fn\(\)|mockResolvedValue|mockReturnValue|findByEmail.*mock|mock.*findByEmail)'
+
+        - id: email-service-mocked
+          description: >
+            emailService.sendWelcome is mocked. Tests do not trigger real email delivery.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(sendWelcome.*mock|mock.*sendWelcome|jest\.fn|emailService.*fn)'
+
+        - id: duplicate-email-case-tested
+          description: >
+            Tests include a case where findByEmail returns an existing user and assert
+            that the error is thrown and db.insert is NOT called.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(already exists|duplicate|existing.*user|throws.*Error|rejects)'
+
+        - id: return-value-asserted
+          description: >
+            Happy-path test asserts on the returned { id, email } object — not just
+            that the function completed without error.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(toEqual|toBe|expect.*id|expect.*email|return.*value)'
+
+  # ── Case 3: Class with internal state ────────────────────────────────────────
+  - id: unit-test-generator/positive-class-with-state
+    description: >
+      Agent generates tests for a Counter class with increment, decrement, and reset
+      methods. Tests must cover state transitions across multiple method calls, not
+      just single-operation checks. Pass requires at least one multi-step sequence test.
+    tags: [happy-path, testing]
+    seed: 8003
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate Jest tests for this class. Include tests that verify state
+            changes across multiple method calls.
+
+            ```typescript
+            class Counter {
+              private count: number;
+
+              constructor(initialValue: number = 0) {
+                if (initialValue < 0) throw new RangeError('Initial value must be non-negative');
+                this.count = initialValue;
+              }
+
+              increment(by: number = 1): void { this.count += by; }
+              decrement(by: number = 1): void { this.count -= by; }
+              reset(): void { this.count = 0; }
+              getValue(): number { return this.count; }
+            }
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(increment|decrement|reset|getValue)'
+        - kind: regex
+          value: '(?i)(RangeError|negative|initialValue)'
+        - kind: regex
+          value: '(?i)(sequence|multiple.*call|after.*increment|then.*decrement|chain)'
+
+      rubric:
+        - id: state-transition-tested
+          description: >
+            At least one test calls multiple methods in sequence and asserts the final
+            state (e.g. increment, increment, decrement, expect getValue() == 1).
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(increment.*decrement|decrement.*increment|multiple|sequence|chain|then)'
+
+        - id: constructor-error-tested
+          description: >
+            Tests assert RangeError is thrown when initialValue is negative.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(RangeError|negative|throw|toThrow|expect.*throw)'
+
+        - id: reset-tested
+          description: >
+            Tests verify reset() returns the counter to zero regardless of prior state.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(reset|getValue.*0|count.*zero|after.*reset)'
+
+  # ── Case 4: Function that should not be mocked (pure computation) ─────────────
+  - id: unit-test-generator/edge-case-no-unnecessary-mocks
+    description: >
+      Agent generates tests for a pure string-formatting function. It has no external
+      dependencies and should be tested directly without mocks. Pass requires tests
+      with direct assertions and zero use of jest.fn(), mock(), or patch.
+    tags: [edge-case, testing, certification]
+    seed: 8004
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate pytest tests for this pure function. Do not mock anything.
+
+            ```python
+            def format_currency(amount: float, currency: str = "USD", locale: str = "en-US") -> str:
+                """Format a monetary amount as a currency string.
+
+                >>> format_currency(1234.5)
+                '$1,234.50'
+                >>> format_currency(9.99, "EUR")
+                '€9.99'
+                >>> format_currency(-50.0)
+                '-$50.00'
+                """
+                symbols = {"USD": "$", "EUR": "€", "GBP": "£"}
+                symbol = symbols.get(currency, currency)
+                sign = "-" if amount < 0 else ""
+                formatted = f"{abs(amount):,.2f}"
+                return f"{sign}{symbol}{formatted}"
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(def test_|assert)'
+        - kind: regex
+          value: '(?i)(format_currency|1234\.50|9\.99|50\.00)'
+        - kind: not_contains
+          value: "mock"
+        - kind: not_contains
+          value: "patch"
+        - kind: not_contains
+          value: "MagicMock"
+
+      rubric:
+        - id: no-unnecessary-mocks
+          description: >
+            Tests contain no mock, patch, or MagicMock usage — the function is pure
+            and needs no isolation.
+          weight: 0.35
+          auto_check:
+            kind: not_contains
+            value: "mock"
+
+        - id: multiple-currencies-tested
+          description: >
+            Tests cover at least USD and EUR currency formatting, verifying correct
+            symbol selection.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(EUR|€|GBP|£|USD|\$.*format)'
+
+        - id: negative-amount-tested
+          description: >
+            Tests include a negative amount to verify sign handling.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(-50|-\$|-.*amount|negative)'
+
+  # ── Case 5: Function with no testable behavior — agent identifies limit ───────
+  - id: unit-test-generator/edge-case-untestable-side-effect
+    description: >
+      Agent is asked to generate tests for a function whose only behavior is writing
+      to stdout (print/console.log). Agent must flag that the function as written is
+      not unit-testable without refactoring, and suggest how to refactor for testability
+      before generating a test.
+    tags: [edge-case, testing]
+    seed: 8005
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate unit tests for this function:
+
+            ```python
+            def print_report(data: list[dict]) -> None:
+                print(f"Report — {len(data)} records")
+                for item in data:
+                    print(f"  {item['name']}: {item['value']}")
+                print("--- end of report ---")
+            ```
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(capsys|capfd|mock.*print|patch.*print|stdout|redirect|return.*string|refactor)'
+
+      rubric:
+        - id: testability-addressed
+          description: >
+            Agent either: (a) uses pytest capsys/capfd to capture stdout, (b) patches
+            the print builtin, or (c) recommends refactoring the function to return
+            a string instead of printing — and explains why.
+          weight: 0.60
+          auto_check:
+            kind: regex
+            value: '(?i)(capsys|capfd|patch.*print|mock.*print|stdout|return.*string|refactor)'
+
+        - id: content-assertions-present
+          description: >
+            Tests assert on the actual output content (report line count, item names)
+            not just that print was called.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(assert.*Report|assert.*record|captured|out\.read|assert.*print)'

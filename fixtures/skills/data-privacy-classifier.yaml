@@ -1,0 +1,343 @@
+# agentcarousel fixture — data-privacy-classifier
+# Certification Tier: Candidate
+# Source skill: database schema PII/GDPR/CCPA sensitivity classification agent
+# Golden files:  fixtures/golden/data-privacy-classifier/
+# Bundle:        fixtures/bundles/data-privacy-classifier/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: data-privacy-classifier
+
+bundle_id: agentcarousel/data-privacy-classifier
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: medium
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [privacy, gdpr, ccpa, compliance, data-engineering, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Mixed schema with hashed email nuance (smoke + certification) ──────
+  - id: data-privacy-classifier/positive-mixed-schema-pii
+    description: >
+      Schema mixes obvious PII (name, email, date_of_birth), a pseudonymous field
+      (MD5-hashed email), and non-PII aggregates (total_orders, country_code at field
+      level). Agent must classify each correctly — especially the hashed email as
+      pseudonymous-but-not-anonymous under GDPR Recital 26.
+    tags: [smoke, happy-path, privacy, certification]
+    seed: 7001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Classify each field in this table for GDPR/CCPA sensitivity:
+
+            Table: users
+            - id: UUID
+            - full_name: VARCHAR(255)
+            - email: VARCHAR(255)
+            - email_hash: VARCHAR(64)  -- MD5(email)
+            - date_of_birth: DATE
+            - country_code: CHAR(2)
+            - account_created_at: TIMESTAMP
+            - total_orders: INTEGER
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(full_name.*PII|full_name.*personal|name.*identif)'
+        - kind: regex
+          value: '(?i)(email_hash.*pseudonym|hash.*not.*anonymous|MD5.*re.identif|hash.*still.*PII)'
+        - kind: regex
+          value: '(?i)(total_orders.*not.*PII|total_orders.*aggregate|non.personal|not.*personal.*data)'
+
+      rubric:
+        - id: obvious-pii-classified
+          description: >
+            full_name, email, and date_of_birth are classified as personal data (PII)
+            requiring protection (encryption, access control, retention limits).
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(full_name.*PII|email.*personal|date_of_birth.*PII|DOB.*personal)'
+
+        - id: hashed-email-nuance-correct
+          description: >
+            email_hash is classified as pseudonymous personal data — not anonymous —
+            because MD5 is reversible via rainbow tables or brute force for common emails.
+            A perfect score cites GDPR Recital 26 or explains the re-identification risk.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(pseudonym|not.*anonymous|re.identif|rainbow.*table|MD5.*reverse|GDPR.*Recital|still.*personal)'
+
+        - id: aggregate-non-pii-correct
+          description: >
+            total_orders is correctly classified as non-PII at the field level — it
+            is a count, not an identifier. country_code alone is not personal data.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(total_orders.*not|aggregate.*not|count.*not.*personal|non.personal|not.*identif)'
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/data-privacy-classifier/mixed-schema-classification.txt
+      golden_threshold: 0.65
+      effectiveness_threshold: 0.6
+
+  # ── Case 2: IP address — borderline GDPR personal data ───────────────────────
+  - id: data-privacy-classifier/edge-case-ip-address
+    description: >
+      IP address field in a request log table. Under GDPR, dynamic IP addresses are
+      personal data when an ISP can link them to a subscriber. Agent must not give
+      a blanket yes/no — it must address the context dependency and recommend
+      privacy-preserving logging alternatives.
+    tags: [edge-case, privacy, certification]
+    seed: 7002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Is this field personal data under GDPR?
+
+            Table: request_logs
+            - id: BIGINT
+            - ip_address: VARCHAR(45)   -- IPv4 and IPv6 of incoming web requests
+            - user_agent: TEXT
+            - path: TEXT
+            - response_code: SMALLINT
+            - requested_at: TIMESTAMP
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(personal data|GDPR|identif|potentially|context.dependent|dynamic.*IP|ISP|subscriber)'
+        - kind: regex
+          value: '(?i)(truncat|last.*octet|anonymiz|mask|privacy.*log|pseudonymiz)'
+        - kind: not_contains
+          value: "IP addresses are never personal data"
+        - kind: not_contains
+          value: "IP addresses are always personal data"
+
+      rubric:
+        - id: context-dependency-addressed
+          description: >
+            Agent explains that IP address classification under GDPR depends on context:
+            dynamic IPs assigned by ISPs are personal data when the ISP can link them
+            to a subscriber. Static/server IPs are typically not personal data.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(context|dynamic.*IP|ISP.*link|subscriber|static.*IP|depends)'
+
+        - id: no-blanket-answer
+          description: >
+            Agent does not answer with a simple yes or no — it qualifies the answer
+            based on the IP type and the ability to link to a natural person.
+          weight: 0.25
+          auto_check:
+            kind: not_contains
+            value: "IP addresses are never"
+
+        - id: mitigation-recommended
+          description: >
+            Agent recommends truncating the last octet (IPv4) or last 80 bits (IPv6)
+            for anonymization, or using a privacy-preserving logging approach.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(truncat.*octet|last.*octet|anonymiz|mask.*IP|privacy.*log|/24|/48)'
+
+  # ── Case 3: Aggregate-only schema — correctly non-PII ────────────────────────
+  - id: data-privacy-classifier/positive-aggregate-non-pii
+    description: >
+      Schema contains only aggregate statistics and categorical labels — no individual
+      identifiers. Agent must correctly identify this as non-PII and approve it
+      without inventing privacy concerns.
+    tags: [happy-path, privacy, certification]
+    seed: 7003
+    timeout_secs: 30
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Classify this table for GDPR/CCPA sensitivity:
+
+            Table: product_sales_summary
+            - product_id: INT
+            - category: VARCHAR(50)
+            - region: VARCHAR(50)
+            - total_units_sold: INT
+            - total_revenue: DECIMAL(12,2)
+            - avg_order_value: DECIMAL(10,2)
+            - period_month: DATE
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(not.*personal|non.PII|no.*personal.*data|aggregate|statistical|no.*identif)'
+        - kind: not_contains
+          value: "encrypt"
+        - kind: not_contains
+          value: "GDPR concern"
+        - kind: not_contains
+          value: "personal data"
+
+      rubric:
+        - id: non-pii-correctly-identified
+          description: >
+            Agent correctly identifies this as aggregate/statistical data with no
+            personal identifiers. No GDPR/CCPA obligations apply to this table.
+          weight: 0.65
+          auto_check:
+            kind: regex
+            value: '(?i)(not.*personal|aggregate|statistical|no.*personal|non.PII)'
+
+        - id: no-fabricated-privacy-concerns
+          description: >
+            Agent does not invent privacy concerns for product_id, category, or region
+            (none of these identify a natural person at this aggregation level).
+          weight: 0.35
+          auto_check:
+            kind: not_contains
+            value: "personal data"
+
+  # ── Case 4: Biometric field — highest sensitivity ─────────────────────────────
+  - id: data-privacy-classifier/positive-biometric-high-sensitivity
+    description: >
+      Schema contains a biometric hash field. Under GDPR Article 9, biometric data
+      processed for unique identification is special category data requiring explicit
+      consent and stricter controls. Agent must flag this at the highest sensitivity
+      tier and recommend Article 9 safeguards.
+    tags: [happy-path, privacy, certification]
+    seed: 7004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Classify these fields for GDPR sensitivity:
+
+            Table: employee_access
+            - employee_id: UUID
+            - fingerprint_template: BYTEA   -- biometric hash used for door access
+            - face_encoding: BYTEA          -- 128-dimensional face embedding
+            - access_level: SMALLINT
+            - last_access: TIMESTAMP
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(biometric|Article 9|special.*category|sensitive.*data|highest.*sensitiv)'
+        - kind: regex
+          value: '(?i)(explicit.*consent|data.*protection.*officer|DPO|DPIA|impact.*assessment)'
+
+      rubric:
+        - id: special-category-identified
+          description: >
+            Agent identifies fingerprint_template and face_encoding as biometric personal
+            data — special category under GDPR Article 9 — requiring explicit consent or
+            a legal basis beyond legitimate interest.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(biometric|Article 9|special.*category|sensitive.*category)'
+
+        - id: article9-safeguards-recommended
+          description: >
+            Agent recommends Article 9 safeguards: explicit consent, DPIA (Data Protection
+            Impact Assessment), encryption, strict access logging, and minimal retention.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(explicit.*consent|DPIA|data.*protection.*impact|DPO|encryption|minimal.*retention)'
+
+        - id: severity-tiered-above-standard-pii
+          description: >
+            Agent distinguishes biometric data as higher risk than standard PII like
+            name/email — biometric data cannot be changed if compromised.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(cannot.*change|irreversible|higher.*risk|cannot.*reset|permanent)'
+
+  # ── Case 5: Pseudonymous tokens — not fully anonymous ────────────────────────
+  - id: data-privacy-classifier/edge-case-pseudonymous-tokens
+    description: >
+      Schema stores session tokens and user UUIDs that link to a separate users table.
+      Agent must classify UUIDs as pseudonymous PII (linkable to a person via join)
+      and session tokens as pseudonymous PII subject to retention limits — not as
+      anonymous data.
+    tags: [edge-case, privacy, certification]
+    seed: 7005
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Our DBA says these fields are "just tokens" and not personal data.
+            Is that correct under GDPR?
+
+            Table: sessions
+            - session_token: VARCHAR(64)   -- random hex token
+            - user_uuid: UUID              -- foreign key to users.id
+            - created_at: TIMESTAMP
+            - expires_at: TIMESTAMP
+            - ip_address: INET
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(pseudonym|not.*anonymous|linkable|foreign.*key|join.*users|re.identif)'
+        - kind: regex
+          value: '(?i)(user_uuid.*PII|UUID.*personal|link.*person|session.*personal|retention)'
+        - kind: not_contains
+          value: "just tokens, not personal data"
+        - kind: not_contains
+          value: "tokens are anonymous"
+
+      rubric:
+        - id: uuid-linkability-explained
+          description: >
+            Agent explains that user_uuid is a foreign key to the users table —
+            it is pseudonymous personal data (linkable to a natural person via a join),
+            not anonymous data. The DBA's claim is incorrect.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(pseudonym|linkable|foreign.*key|user_uuid.*personal|UUID.*identif|join.*users)'
+
+        - id: dba-claim-corrected
+          description: >
+            Agent explicitly states the DBA's characterization ("just tokens, not personal
+            data") is incorrect under GDPR and explains why.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(incorrect|not.*correct|DBA.*wrong|not.*anonymous|pseudonym.*not.*anon)'
+
+        - id: retention-recommendation
+          description: >
+            Agent recommends appropriate retention limits for session data (e.g. delete
+            expired sessions, do not retain indefinitely).
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(retention|delete.*expired|purge|retention.*limit|not.*indefinitely)'

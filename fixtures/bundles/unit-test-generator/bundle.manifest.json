@@ -1,0 +1,53 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/unit-test-generator",
+  "bundle_version": "1.0.0",
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "unit-test-generator",
+  "source_skill_path": "agentcarousel/skills/unit-test-generator/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z",
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/unit-test-generator` after file changes"
+  ],
+  "risk_tier": "low",
+  "case_count": 5,
+  "case_ids": [
+    "unit-test-generator/positive-pure-function-boundaries",
+    "unit-test-generator/positive-async-with-mocks",
+    "unit-test-generator/positive-class-with-state",
+    "unit-test-generator/edge-case-no-unnecessary-mocks",
+    "unit-test-generator/edge-case-untestable-side-effect"
+  ],
+  "certification_cases": [
+    "unit-test-generator/positive-pure-function-boundaries",
+    "unit-test-generator/positive-async-with-mocks",
+    "unit-test-generator/edge-case-no-unnecessary-mocks"
+  ],
+  "description": "Unit test generation fixture: pure function boundary cases (pytest), async function with mocks (Jest), class with state transitions, no-unnecessary-mocks discipline, and stdout-only function testability guidance.",
+  "domain": "testing-quality",
+  "negative_cases": [],
+  "fixtures": [
+    {
+      "path": "../../skills/unit-test-generator.yaml",
+      "sha256": "placeholder"
+    },
+    {
+      "path": "../../golden/unit-test-generator/clamp-tests.py",
+      "sha256": "placeholder"
+    }
+  ]
+}

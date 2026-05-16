@@ -1,0 +1,15 @@
+Found 2 accessibility violations:
+
+1. Missing alt attribute on <img> (WCAG 1.1.1 — Non-text Content)
+   The product image has no alt attribute. Screen readers will read the src URL
+   or announce "image" with no context.
+   Fix: Add alt={product.name} for an informative image, or alt="" if purely decorative.
+
+2. <div> with onClick used as interactive element (WCAG 2.1.1, 4.1.2)
+   The card wrapper uses onClick but is a <div> — not focusable by keyboard and not
+   announced as interactive by screen readers.
+   Fix: Replace with <button> or <a href>, or add role="button" tabIndex={0} and
+   an onKeyDown handler that triggers on Enter/Space.
+
+No issues found with:
+- <button>Add to cart</button>: native button element with visible text label. Correct.

@@ -1,0 +1,327 @@
+# agentcarousel fixture — error-message-improver
+# Certification Tier: Candidate
+# Source skill: error message clarity and actionability improvement agent
+# Golden files:  fixtures/golden/error-message-improver/
+# Bundle:        fixtures/bundles/error-message-improver/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: error-message-improver
+
+bundle_id: agentcarousel/error-message-improver
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: low
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 45
+  tags: [dx, developer-experience, ux, errors, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Null pointer with user context (smoke + certification) ────────────
+  - id: error-message-improver/positive-null-pointer-with-context
+    description: >
+      Raw null-reference error surfaces to users when they access a deleted invoice.
+      Agent must produce a user-facing message that explains what happened in user
+      terms, gives a next step, and contains none of the internal exception language.
+    tags: [smoke, happy-path, dx, errors, certification]
+    seed: 1001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error message that appears in our web app:
+
+            Current message: "Error: Cannot read properties of null (reading 'id')"
+
+            Context: This error occurs when a user navigates to /invoices/:id for an
+            invoice that has been deleted. The app crashes and shows the raw JS error.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(invoice|not found|deleted|no longer|removed)'
+        - kind: regex
+          value: '(?i)(return|go back|contact|list|dashboard|try again)'
+        - kind: not_contains
+          value: "null"
+        - kind: not_contains
+          value: "Cannot read properties"
+        - kind: not_contains
+          value: "reading 'id'"
+
+      rubric:
+        - id: user-language-used
+          description: >
+            Improved message explains the situation in user terms ("invoice not found"
+            or "this invoice has been deleted") without any internal error language.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(invoice.*not found|invoice.*deleted|no longer.*available|invoice.*removed)'
+
+        - id: action-provided
+          description: >
+            Message gives the user a concrete next step: return to invoice list,
+            contact support, or check if the invoice was archived.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(return.*list|go back|contact.*support|invoice.*list|check.*archive)'
+
+        - id: no-internal-detail
+          description: >
+            Improved message contains no stack trace language, no variable names,
+            no null/undefined references.
+          weight: 0.25
+          auto_check:
+            kind: not_contains
+            value: "null"
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/golden/error-message-improver/null-pointer-invoice.txt
+      golden_threshold: 0.65
+      effectiveness_threshold: 0.6
+
+  # ── Case 2: Cryptic ECONNREFUSED ─────────────────────────────────────────────
+  - id: error-message-improver/positive-econnrefused
+    description: >
+      ECONNREFUSED shown to a developer in a CLI tool. Agent must produce an improved
+      message that identifies what connection failed, lists likely causes, and suggests
+      diagnostic steps — without losing the port number or host.
+    tags: [happy-path, dx, errors, certification]
+    seed: 1002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error message shown in our CLI tool when the local dev server
+            is not running:
+
+            Current message: "Error: connect ECONNREFUSED 127.0.0.1:5432"
+
+            Context: The CLI connects to a PostgreSQL database on the developer's machine.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(postgres|database|5432|connection.*refused|refused.*connection)'
+        - kind: regex
+          value: '(?i)(running|started|start.*postgres|pg.*start|service|docker)'
+        - kind: not_contains
+          value: "ECONNREFUSED"
+        - kind: not_contains
+          value: "connect ECONN"
+
+      rubric:
+        - id: connection-target-named
+          description: >
+            Improved message identifies PostgreSQL on port 5432 as what failed — not
+            just "connection refused."
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(postgres|database.*5432|5432.*postgres|PostgreSQL)'
+
+        - id: likely-causes-listed
+          description: >
+            Message lists probable causes: database not running, wrong port, Docker
+            container stopped. A perfect score covers at least two.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(not running|not started|docker.*stop|service.*stop|start.*postgres|pg.*not)'
+
+        - id: diagnostic-step-given
+          description: >
+            Message suggests a diagnostic action: run `pg_isready`, `docker ps`,
+            or `brew services list`.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(pg_isready|docker ps|brew services|systemctl|service.*status|check.*running)'
+
+  # ── Case 3: Already-good message — do not over-engineer ──────────────────────
+  - id: error-message-improver/positive-already-good-message
+    description: >
+      The existing error message is already clear, actionable, and appropriately
+      concise. Agent must recognize it is good and not produce a longer or more
+      complex version. Pass requires approval language and no rewrite.
+    tags: [happy-path, dx, errors, certification]
+    seed: 1003
+    timeout_secs: 25
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error message if needed:
+
+            Current message: "Your session has expired. Please sign in again to continue."
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(clear|good|already|effective|concise|no change|works well|well.written|approve)'
+        - kind: not_contains
+          value: "Here's an improved version"
+        - kind: not_contains
+          value: "Here is a better"
+        - kind: not_contains
+          value: "Improved message:"
+
+      rubric:
+        - id: good-message-approved
+          description: >
+            Agent recognizes the existing message is clear and actionable without
+            rewriting it. A perfect score explains briefly why it works (states what
+            happened + what to do).
+          weight: 0.70
+          auto_check:
+            kind: regex
+            value: '(?i)(already clear|no change needed|effective|good message|works well|concise)'
+
+        - id: no-unnecessary-rewrite
+          description: >
+            Agent does not produce a replacement message — only approval with optional
+            brief rationale.
+          weight: 0.30
+          auto_check:
+            kind: not_contains
+            value: "Improved:"
+
+  # ── Case 4: 403 permission denied ────────────────────────────────────────────
+  - id: error-message-improver/positive-403-permission
+    description: >
+      Bare HTTP 403 shown to a user who lacks permission to view a resource. Agent
+      must produce a message that explains lack of access (not "forbidden"), tells
+      the user who to contact, and does not reveal internal permission model details.
+    tags: [happy-path, dx, errors]
+    seed: 1004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error shown when a user tries to access a report they don't
+            have permission to view:
+
+            Current message: "403 Forbidden"
+
+            Context: Reports require the 'analyst' role. Users can request access
+            from their team admin.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: "(?i)(don't have.*access|not.*permission|access.*denied|permission.*view)"
+        - kind: regex
+          value: '(?i)(admin|request.*access|contact.*admin|team.*admin)'
+        - kind: not_contains
+          value: "403"
+        - kind: not_contains
+          value: "Forbidden"
+        - kind: not_contains
+          value: "analyst role"
+
+      rubric:
+        - id: user-language
+          description: >
+            "403 Forbidden" replaced with plain-language explanation of lack of access.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: "(?i)(don't have.*access|no.*permission|not.*authorized|access.*required)"
+
+        - id: contact-path-given
+          description: >
+            Message tells the user to contact their team admin or request access —
+            a concrete next step.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(contact.*admin|request.*access|ask.*admin|team.*admin)'
+
+        - id: role-not-exposed
+          description: >
+            Internal role name ('analyst') is not exposed in the user-facing message.
+          weight: 0.20
+          auto_check:
+            kind: not_contains
+            value: "analyst"
+
+  # ── Case 5: Database deadlock ─────────────────────────────────────────────────
+  - id: error-message-improver/positive-database-deadlock
+    description: >
+      Raw database deadlock error surfaces in a transactional web endpoint. Agent
+      must produce a message that tells the user to retry the operation and that
+      their data was not changed — without exposing transaction or lock terminology.
+    tags: [edge-case, dx, errors]
+    seed: 1005
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error shown when a checkout fails due to a database deadlock:
+
+            Current message: "ERROR: deadlock detected DETAIL: Process 17284 waits for ShareLock on transaction 9103; blocked by process 17285."
+
+            Context: Two users simultaneously checkout the last item in stock. One
+            transaction wins; the other gets the deadlock. The losing transaction is
+            rolled back automatically — no data is corrupted.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(try again|retry|please.*try|attempt again)'
+        - kind: regex
+          value: '(?i)(not.*charged|no.*change|not.*processed|unchanged|safe|order.*not placed)'
+        - kind: not_contains
+          value: "deadlock"
+        - kind: not_contains
+          value: "ShareLock"
+        - kind: not_contains
+          value: "Process 17284"
+
+      rubric:
+        - id: retry-instruction-given
+          description: >
+            Message tells the user to try again — the appropriate recovery action for
+            a rolled-back deadlock.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(try again|retry|please.*try|attempt again)'
+
+        - id: no-data-corruption-reassured
+          description: >
+            Message reassures the user that no charge was applied and their data
+            was not changed.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(not.*charged|no.*change|not.*processed|order.*not.*placed|safe)'
+
+        - id: no-internal-terms
+          description: >
+            "Deadlock," "ShareLock," "transaction," and process IDs do not appear.
+          weight: 0.25
+          auto_check:
+            kind: not_contains
+            value: "deadlock"

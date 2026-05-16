@@ -1,0 +1,21 @@
+Field classification for Table: users
+
+HIGH sensitivity — Personal Data (GDPR Art. 4, CCPA §1798.140):
+- full_name: Direct identifier. Requires encryption at rest, access control, retention policy.
+- email: Direct identifier and contact channel. Same protections as full_name.
+- date_of_birth: Quasi-identifier; combined with other fields, narrows to an individual.
+
+MEDIUM sensitivity — Pseudonymous Personal Data (GDPR Recital 26):
+- email_hash: MD5(email) is NOT anonymous. MD5 is cryptographically broken for this purpose —
+  common email addresses are trivially reversible via rainbow tables or brute force. This field
+  must be treated as pseudonymous personal data, not anonymous data.
+  Recommendation: replace with a keyed HMAC (HMAC-SHA256 with a secret key) if a
+  pseudonymous identifier is needed, or drop the field if only de-duplication was the goal.
+- id (UUID): Pseudonymous — links all user activity. Subject to right-to-erasure requests.
+
+LOW sensitivity — Non-Personal or Marginal:
+- country_code: Not personal data at this field level (two-letter country code).
+- account_created_at: Timestamp alone does not identify a person.
+- total_orders: Aggregate count. Not personal data.
+
+Note: This classification is for engineering guidance, not legal advice.

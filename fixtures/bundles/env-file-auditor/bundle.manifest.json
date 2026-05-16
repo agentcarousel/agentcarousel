@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/env-file-auditor",
+  "bundle_version": "1.0.0",
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "env-file-auditor",
+  "source_skill_path": "agentcarousel/skills/env-file-auditor/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z",
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/env-file-auditor` after file changes"
+  ],
+  "risk_tier": "medium",
+  "case_count": 5,
+  "case_ids": [
+    "env-file-auditor/positive-live-credentials-weak-secret",
+    "env-file-auditor/positive-placeholder-values",
+    "env-file-auditor/positive-clean-approval",
+    "env-file-auditor/edge-case-env-purpose-mismatch",
+    "env-file-auditor/failure-mode-no-content"
+  ],
+  "certification_cases": [
+    "env-file-auditor/positive-live-credentials-weak-secret",
+    "env-file-auditor/positive-placeholder-values",
+    "env-file-auditor/positive-clean-approval",
+    "env-file-auditor/edge-case-env-purpose-mismatch"
+  ],
+  "description": ".env file secret and misconfiguration audit fixture: live credentials + weak JWT, placeholder values, clean approval, prod credentials in dev-labeled file, no-content handling. All credentials are synthetic.",
+  "domain": "secrets-security",
+  "negative_cases": [
+    "env-file-auditor/failure-mode-no-content"
+  ],
+  "fixtures": [
+    {
+      "path": "../../skills/env-file-auditor.yaml",
+      "sha256": "placeholder"
+    },
+    {
+      "path": "../../golden/env-file-auditor/clean-approval.txt",
+      "sha256": "placeholder"
+    }
+  ]
+}

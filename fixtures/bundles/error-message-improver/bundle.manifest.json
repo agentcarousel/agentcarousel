@@ -1,0 +1,53 @@
+{
+  "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
+  "bundle_id": "agentcarousel/error-message-improver",
+  "bundle_version": "1.0.0",
+  "certification_track": "candidate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "data_handling": "synthetic-only",
+  "evaluators_used": [
+    "rules",
+    "golden"
+  ],
+  "judge_evaluator": false,
+  "min_agentcarousel_version": "0.2.0",
+  "mocks": [],
+  "owners": [
+    "@agentcarousel"
+  ],
+  "policy_version": "msp-policy-2026-05",
+  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "skill_or_agent": "error-message-improver",
+  "source_skill_path": "agentcarousel/skills/error-message-improver/SKILL.md",
+  "updated_at": "2026-05-16T00:00:00Z",
+  "notes": [
+    "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/error-message-improver` after file changes"
+  ],
+  "risk_tier": "low",
+  "case_count": 5,
+  "case_ids": [
+    "error-message-improver/positive-null-pointer-with-context",
+    "error-message-improver/positive-econnrefused",
+    "error-message-improver/positive-already-good-message",
+    "error-message-improver/positive-403-permission",
+    "error-message-improver/positive-database-deadlock"
+  ],
+  "certification_cases": [
+    "error-message-improver/positive-null-pointer-with-context",
+    "error-message-improver/positive-econnrefused",
+    "error-message-improver/positive-already-good-message"
+  ],
+  "description": "Error message clarity improvement fixture: null pointer with context, ECONNREFUSED, already-good approval, 403 permission, database deadlock. Tests user-language translation and restraint (no rewriting good messages).",
+  "domain": "developer-experience",
+  "negative_cases": [],
+  "fixtures": [
+    {
+      "path": "../../skills/error-message-improver.yaml",
+      "sha256": "placeholder"
+    },
+    {
+      "path": "../../golden/error-message-improver/null-pointer-invoice.txt",
+      "sha256": "placeholder"
+    }
+  ]
+}

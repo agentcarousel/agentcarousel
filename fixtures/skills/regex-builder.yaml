@@ -1,0 +1,318 @@
+# agentcarousel fixture — regex-builder
+# Certification Tier: Candidate
+# Source skill: regex pattern construction from English descriptions agent
+# Bundle:        fixtures/bundles/regex-builder/bundle.manifest.json
+
+schema_version: 1
+skill_or_agent: regex-builder
+
+bundle_id: agentcarousel/regex-builder
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: low
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 45
+  tags: [developer-tools, regex, patterns, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ── Case 1: Semantic version string (smoke + certification) ───────────────────
+  - id: regex-builder/positive-semver
+    description: >
+      Agent constructs a regex for semantic version strings (major.minor.patch with
+      optional pre-release and build metadata). Must match all provided positive
+      examples and reject provided negative examples. Must address anchoring.
+    tags: [smoke, happy-path, regex, certification]
+    seed: 6001
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex for semantic version strings.
+
+            Must match: 1.2.3 | 0.0.1 | 10.20.300 | 1.0.0-alpha | 2.0.0-rc.1 | 1.2.3+build.42
+            Must NOT match: 1.2 | .1.2.3 | 1.2.3. | 1.a.3
+
+            The pattern should be anchored so it matches the full string.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '\\d\+\\.\\d\+\\.\\d\+'
+        - kind: regex
+          value: '(?i)(\^|\$|\\A|\\Z|anchor|full.*string|start.*end)'
+
+      rubric:
+        - id: core-semver-pattern
+          description: >
+            Pattern contains \d+\.\d+\.\d+ (or [0-9]+\.[0-9]+\.[0-9]+) as the core
+            version structure.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '\\d\+\\.\\d\+\\.\\d\+|\\[0-9\]\+\\.\\[0-9\]\+\\.\\[0-9\]\+'
+
+        - id: anchoring-addressed
+          description: >
+            Pattern includes ^ and $ anchors (or \A/\Z), or agent explicitly explains
+            anchoring is needed and why.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(\^|\\A|anchor|start.*string|full.*match)'
+
+        - id: pre-release-handled
+          description: >
+            Pattern handles optional pre-release suffix (-alpha, -rc.1) with a
+            non-capturing group or optional clause.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(-[a-z]|\.\*pre|optional.*pre.release|\?\|\\-)'
+
+        - id: positive-examples-explained
+          description: >
+            Agent walks through at least one positive and one negative example
+            against the pattern to demonstrate correctness.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(matches|would match|does not match|fails|1\.2\.3.*match)'
+
+  # ── Case 2: Email with ReDoS avoidance ───────────────────────────────────────
+  - id: regex-builder/positive-email-redos-safe
+    description: >
+      Agent builds an email validation regex for use in a web server (user-supplied
+      input). Must produce a pattern without catastrophic backtracking potential
+      (no nested quantifiers like (a+)+). Agent should recommend a simple linear-time
+      pattern rather than a RFC 5321-complete but unsafe one.
+    tags: [happy-path, regex, security, certification]
+    seed: 6002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex to validate email addresses for user input in a web server.
+            Security note: the pattern will run on untrusted user-supplied strings,
+            so it must not be vulnerable to ReDoS (catastrophic backtracking).
+
+            Must match: user@example.com | first.last@company.co.uk | user+tag@mail.example.org
+            Must NOT match: @example.com | user@ | user@.com | plaintext
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(@|at.*sign|local.*part|domain)'
+        - kind: not_contains
+          value: "(a+)+"
+        - kind: not_contains
+          value: "(.+)+"
+        - kind: not_contains
+          value: "(.*)*"
+
+      rubric:
+        - id: no-catastrophic-backtracking
+          description: >
+            Pattern does not contain nested quantifiers ((a+)+, (.*)*, (.+)+) that
+            enable catastrophic backtracking. A perfect score uses a simple linear
+            [^@]+@[^@]+ style pattern or equivalent.
+          weight: 0.50
+          auto_check:
+            kind: not_contains
+            value: "(a+)+"
+
+        - id: redos-risk-acknowledged
+          description: >
+            Agent explains why a full RFC-compliant email regex is a ReDoS risk
+            and explicitly recommends the simpler safe pattern for server use.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(ReDoS|catastrophic|backtrack|exponential|simple.*safe|linear.*time)'
+
+        - id: basic-structure-validated
+          description: >
+            Pattern requires at least one character before @, the @ sign, and at
+            least one character after with a dot in the domain.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(@|local.*domain|before.*@|after.*@|\[^@\]\+)'
+
+  # ── Case 3: IPv4 address ──────────────────────────────────────────────────────
+  - id: regex-builder/positive-ipv4
+    description: >
+      Agent builds a regex that matches valid IPv4 addresses (octets 0–255) and
+      rejects invalid ones (octet > 255, trailing dot, wrong number of octets).
+      Must explain why a naive \d{1,3} pattern is insufficient.
+    tags: [happy-path, regex, certification]
+    seed: 6003
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex that matches valid IPv4 addresses.
+
+            Must match: 192.168.1.1 | 0.0.0.0 | 255.255.255.255 | 10.0.0.1
+            Must NOT match: 256.0.0.1 | 192.168.1 | 192.168.1.1.5 | 192.168.01.1 (leading zeros)
+
+            Explain why \d{1,3} alone is not sufficient.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(255|25[0-5]|2[0-4]|octet|0-255)'
+        - kind: regex
+          value: '(?i)(\\d\{1,3\}.*insufficient|naive|not enough|leading.*zero|256|exceed)'
+
+      rubric:
+        - id: octet-range-enforced
+          description: >
+            Pattern enforces 0–255 per octet, not just 1–3 digits. A valid approach
+            uses alternation like (25[0-5]|2[0-4]\d|[01]?\d\d?).
+          weight: 0.45
+          auto_check:
+            kind: regex
+            value: '(?i)(25\[0-5\]|2\[0-4\]|octet.*range|0.*255)'
+
+        - id: naive-pattern-explained
+          description: >
+            Agent explains that \d{1,3} matches 999 or 256 — invalid octets —
+            and that proper range enforcement requires alternation.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(\\d\{1,3\}.*256|\\d\{1,3\}.*insufficient|naive.*match.*invalid|999|256.*match)'
+
+        - id: four-octet-structure
+          description: >
+            Pattern requires exactly four dot-separated octets (not three or five).
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(four.*octet|\\..*\\..*\\.|\{3\}.*dot|exactly.*four)'
+
+  # ── Case 4: Credit card number masking ───────────────────────────────────────
+  - id: regex-builder/positive-credit-card-masking
+    description: >
+      Agent builds a regex to find credit card numbers in text for masking/redaction.
+      Must handle common formats (with spaces or dashes). Agent must NOT produce a
+      pattern that itself looks like a test payload for credit card extraction.
+    tags: [edge-case, regex, security]
+    seed: 6004
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex to detect and mask credit card numbers in support ticket text.
+            Cards may appear with spaces or dashes between groups.
+
+            Must match: 4111 1111 1111 1111 | 4111-1111-1111-1111 | 4111111111111111
+            Must NOT match: 411111 (too short) | 41111111111111111 (too long) | phone numbers like 555-1234-5678
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(\d{4}|four.*digit|16.*digit|Luhn|group)'
+        - kind: regex
+          value: '(?i)(mask|redact|replac|XXXX|\*{4})'
+        - kind: not_contains
+          value: "4111111111111111"
+
+      rubric:
+        - id: sixteen-digit-structure
+          description: >
+            Pattern matches 16 digits optionally separated by spaces or dashes in groups
+            of four. Rejects too-short or too-long numbers.
+          weight: 0.45
+          auto_check:
+            kind: regex
+            value: '(?i)(\\d\{4\}|4.*groups|16.*digit|\[- \])'
+
+        - id: masking-guidance-given
+          description: >
+            Agent explains how to use the pattern for replacement/masking (e.g. replace
+            with XXXX-XXXX-XXXX-NNNN keeping last four digits).
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(mask|redact|replac|XXXX|\*{4}|last.*four|keep.*last)'
+
+        - id: false-positive-consideration
+          description: >
+            Agent notes that 16-digit patterns can match phone numbers or other numbers
+            and recommends additional context checks (preceded by "card", "CC", etc.) or
+            Luhn algorithm validation for high precision.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(false.*positive|Luhn|phone.*number|context|additional.*check|precision)'
+
+  # ── Case 5: Already-correct pattern — approve with caveats ───────────────────
+  - id: regex-builder/edge-case-existing-pattern-review
+    description: >
+      User provides an existing regex and asks if it is correct. The pattern is
+      functionally correct but uses a style that could be simplified. Agent must
+      approve it as correct while noting the simplification opportunity — not
+      reject it as wrong.
+    tags: [edge-case, regex]
+    seed: 6005
+    timeout_secs: 25
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Is this regex correct for matching US ZIP codes (5 digits or ZIP+4)?
+
+            Pattern: ^\d{5}(-\d{4})?$
+
+            Must match: 12345 | 12345-6789
+            Must NOT match: 1234 | 123456 | 12345-678 | 12345-67890
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(correct|valid|works|right|good|accurate)'
+        - kind: not_contains
+          value: "incorrect"
+        - kind: not_contains
+          value: "wrong pattern"
+        - kind: not_contains
+          value: "does not work"
+
+      rubric:
+        - id: correctness-confirmed
+          description: >
+            Agent confirms the pattern is correct for the stated requirements.
+            It handles both 5-digit and ZIP+4 formats with proper anchoring.
+          weight: 0.60
+          auto_check:
+            kind: regex
+            value: '(?i)(correct|works|valid|right|accurate|good pattern)'
+
+        - id: positive-negative-verified
+          description: >
+            Agent walks through at least one positive and one negative example to
+            demonstrate the pattern behaves as expected.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(12345.*match|12345-6789.*match|1234.*not|123456.*not|match.*12345)'
