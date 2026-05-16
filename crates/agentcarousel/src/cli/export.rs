@@ -13,7 +13,7 @@ use tar::Builder;
 
 const SKILL_DEFINITION_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../schemas/skill-definition.schema.json"
+    "/schemas/skill-definition.schema.json"
 ));
 
 use super::exit_codes::ExitCode;
