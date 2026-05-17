@@ -25,18 +25,18 @@ pub enum ConfigError {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ResolvedConfig {
-    pub runner: RunnerConfig,
-    pub validate: ValidateConfig,
-    pub eval: EvalConfig,
-    pub generator: GeneratorConfig,
-    pub judge: JudgeConfig,
-    pub report: ReportConfig,
-    pub output: OutputConfig,
-    pub msp: MspConfig,
+    pub runner: RunnerSettings,
+    pub validate: ValidateSettings,
+    pub eval: EvalSettings,
+    pub generator: GeneratorSettings,
+    pub judge: JudgeSettings,
+    pub report: ReportSettings,
+    pub output: OutputSettings,
+    pub msp: MspSettings,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct RunnerConfig {
+pub struct RunnerSettings {
     pub concurrency: Option<usize>,
     pub timeout_secs: u64,
     pub offline: bool,
@@ -44,44 +44,44 @@ pub struct RunnerConfig {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ValidateConfig {
+pub struct ValidateSettings {
     pub schema_dir: PathBuf,
     pub strict: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct EvalConfig {
+pub struct EvalSettings {
     pub default_evaluator: String,
     pub effectiveness_threshold: f32,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct GeneratorConfig {
+pub struct GeneratorSettings {
     pub model: String,
     pub max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct JudgeConfig {
+pub struct JudgeSettings {
     pub model: String,
     pub max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ReportConfig {
+pub struct ReportSettings {
     pub history_db: Option<PathBuf>,
     pub regression_threshold: f32,
     pub max_history_runs: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct OutputConfig {
+pub struct OutputSettings {
     pub color: String,
     pub format: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct MspConfig {
+pub struct MspSettings {
     pub registry_endpoint: Option<String>,
     pub auto_upload_on_eval: bool,
     pub bundle_sync_on_pull: bool,
@@ -90,38 +90,38 @@ pub struct MspConfig {
 impl Default for ResolvedConfig {
     fn default() -> Self {
         Self {
-            runner: RunnerConfig {
+            runner: RunnerSettings {
                 concurrency: None,
                 timeout_secs: 30,
                 offline: true,
                 mock_dir: PathBuf::from("mocks"),
             },
-            validate: ValidateConfig {
+            validate: ValidateSettings {
                 schema_dir: PathBuf::from("schemas"),
                 strict: false,
             },
-            eval: EvalConfig {
+            eval: EvalSettings {
                 default_evaluator: "rules".to_string(),
                 effectiveness_threshold: 0.7,
             },
-            generator: GeneratorConfig {
+            generator: GeneratorSettings {
                 model: "claude-3-5-sonnet".to_string(),
                 max_tokens: Some(1024),
             },
-            judge: JudgeConfig {
+            judge: JudgeSettings {
                 model: "gemini-2.5-flash".to_string(),
                 max_tokens: Some(1536),
             },
-            report: ReportConfig {
+            report: ReportSettings {
                 history_db: None,
                 regression_threshold: 0.05,
                 max_history_runs: Some(500),
             },
-            output: OutputConfig {
+            output: OutputSettings {
                 color: "auto".to_string(),
                 format: "human".to_string(),
             },
-            msp: MspConfig {
+            msp: MspSettings {
                 registry_endpoint: None,
                 auto_upload_on_eval: false,
                 bundle_sync_on_pull: true,
@@ -132,18 +132,18 @@ impl Default for ResolvedConfig {
 
 #[derive(Debug, Deserialize)]
 struct FileConfig {
-    runner: Option<FileRunnerConfig>,
-    validate: Option<FileValidateConfig>,
-    eval: Option<FileEvalConfig>,
-    generator: Option<FileGeneratorConfig>,
-    judge: Option<FileJudgeConfig>,
-    report: Option<FileReportConfig>,
-    output: Option<FileOutputConfig>,
-    msp: Option<FileMspConfig>,
+    runner: Option<FileRunnerSettings>,
+    validate: Option<FileValidateSettings>,
+    eval: Option<FileEvalSettings>,
+    generator: Option<FileGeneratorSettings>,
+    judge: Option<FileJudgeSettings>,
+    report: Option<FileReportSettings>,
+    output: Option<FileOutputSettings>,
+    msp: Option<FileMspSettings>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileRunnerConfig {
+struct FileRunnerSettings {
     concurrency: Option<usize>,
     timeout_secs: Option<u64>,
     offline: Option<bool>,
@@ -151,44 +151,44 @@ struct FileRunnerConfig {
 }
 
 #[derive(Debug, Deserialize)]
-struct FileValidateConfig {
+struct FileValidateSettings {
     schema_dir: Option<PathBuf>,
     strict: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileEvalConfig {
+struct FileEvalSettings {
     default_evaluator: Option<String>,
     effectiveness_threshold: Option<f32>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileGeneratorConfig {
+struct FileGeneratorSettings {
     model: Option<String>,
     max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileJudgeConfig {
+struct FileJudgeSettings {
     model: Option<String>,
     max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileReportConfig {
+struct FileReportSettings {
     history_db: Option<PathBuf>,
     regression_threshold: Option<f32>,
     max_history_runs: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileOutputConfig {
+struct FileOutputSettings {
     color: Option<String>,
     format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct FileMspConfig {
+struct FileMspSettings {
     registry_endpoint: Option<String>,
     auto_upload_on_eval: Option<bool>,
     bundle_sync_on_pull: Option<bool>,
