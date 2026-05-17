@@ -13,6 +13,7 @@ use crate::core::hex_util::hex_lower;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
+use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
 use super::GlobalOptions;
 
@@ -58,25 +59,50 @@ enum BundleCommand {
     },
 }
 
-pub fn run_bundle(args: BundleArgs, config: &ResolvedConfig, _globals: &GlobalOptions) -> i32 {
+pub fn run_bundle(args: BundleArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     match args.command {
         BundleCommand::Pack { dir, out } => match pack_bundle(&dir, out.as_deref()) {
             Ok(path) => {
-                println!("created {}", path.display());
+                if globals.json {
+                    JsonOutput::ok(
+                        "bundle pack",
+                        serde_json::json!({ "path": path.display().to_string() }),
+                    )
+                    .print();
+                } else {
+                    println!("created {}", path.display());
+                }
                 ExitCode::Ok.as_i32()
             }
             Err(err) => {
-                eprintln!("error: {err}");
+                if globals.json {
+                    JsonOutput::err("bundle pack", JsonError::new("runtime_error", err)).print();
+                } else {
+                    eprintln!("error: {err}");
+                }
                 ExitCode::RuntimeError.as_i32()
             }
         },
         BundleCommand::Verify { path } => match verify_bundle(path.as_deref()) {
             Ok(resolved) => {
-                println!("bundle verify: OK ({})", resolved.display());
+                if globals.json {
+                    JsonOutput::ok(
+                        "bundle verify",
+                        serde_json::json!({ "path": resolved.display().to_string(), "ok": true }),
+                    )
+                    .print();
+                } else {
+                    println!("bundle verify: OK ({})", resolved.display());
+                }
                 ExitCode::Ok.as_i32()
             }
             Err(err) => {
-                eprintln!("error: {err}");
+                if globals.json {
+                    JsonOutput::err("bundle verify", JsonError::new("verification_failed", err))
+                        .print();
+                } else {
+                    eprintln!("error: {err}");
+                }
                 ExitCode::RuntimeError.as_i32()
             }
         },
@@ -93,11 +119,23 @@ pub fn run_bundle(args: BundleArgs, config: &ResolvedConfig, _globals: &GlobalOp
             config,
         ) {
             Ok(dir) => {
-                println!("bundle pull: wrote {}", dir.display());
+                if globals.json {
+                    JsonOutput::ok(
+                        "bundle pull",
+                        serde_json::json!({ "path": dir.display().to_string() }),
+                    )
+                    .print();
+                } else {
+                    println!("bundle pull: wrote {}", dir.display());
+                }
                 ExitCode::Ok.as_i32()
             }
             Err(err) => {
-                eprintln!("error: {err}");
+                if globals.json {
+                    JsonOutput::err("bundle pull", JsonError::new("runtime_error", err)).print();
+                } else {
+                    eprintln!("error: {err}");
+                }
                 ExitCode::RuntimeError.as_i32()
             }
         },

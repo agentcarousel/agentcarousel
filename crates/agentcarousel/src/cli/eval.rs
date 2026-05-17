@@ -15,6 +15,7 @@ use super::exit_codes::ExitCode;
 use super::fixture_utils::{
     apply_case_filter, apply_tag_filter, collect_fixture_paths, default_concurrency,
 };
+use super::output::JsonOutput;
 use super::GlobalOptions;
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -290,26 +291,32 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
 
     let _ = persist_run(&run);
     let format_str = format.as_str();
-    match format_str {
-        "json" => print_json(&run),
-        "junit" => print_junit(&run),
-        _ => {
-            if globals.quiet {
-                agentcarousel_reporters::print_terminal_summary(&run);
-            } else {
-                print_terminal(&run);
+
+    if globals.json {
+        let value = serde_json::to_value(&run).unwrap_or(serde_json::Value::Null);
+        JsonOutput::ok("eval", value).print();
+    } else {
+        match format_str {
+            "json" => print_json(&run),
+            "junit" => print_junit(&run),
+            _ => {
+                if globals.quiet {
+                    agentcarousel_reporters::print_terminal_summary(&run);
+                } else {
+                    print_terminal(&run);
+                }
             }
         }
-    }
 
-    if !globals.quiet && format_str != "json" && format_str != "junit" {
-        print_postflight_hints(&run);
-    }
-    if globals.quiet || format_str == "json" || format_str == "junit" {
-        print_eval_saved_run_hint(
-            &run,
-            globals.quiet || format_str == "json" || format_str == "junit",
-        );
+        if !globals.quiet && format_str != "json" && format_str != "junit" {
+            print_postflight_hints(&run);
+        }
+        if globals.quiet || format_str == "json" || format_str == "junit" {
+            print_eval_saved_run_hint(
+                &run,
+                globals.quiet || format_str == "json" || format_str == "junit",
+            );
+        }
     }
 
     if has_eval_failures(&run, config.eval.effectiveness_threshold) {

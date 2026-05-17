@@ -10,6 +10,7 @@ use super::exit_codes::ExitCode;
 use super::fixture_utils::{
     apply_case_filter, apply_tag_filter, collect_fixture_paths, default_concurrency,
 };
+use super::output::JsonOutput;
 use super::GlobalOptions;
 
 /// Run fixtures with mock generation (no API keys required).
@@ -129,24 +130,32 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
     let run = runtime.block_on(run_fixtures(fixtures, runner_config));
 
     let _ = persist_run(&run);
-    match format.as_str() {
-        "json" => print_json(&run),
-        "junit" => print_junit(&run),
-        _ => {
-            if globals.quiet {
-                agentcarousel_reporters::print_terminal_summary(&run);
-            } else {
-                print_terminal(&run);
-            }
-        }
-    }
 
-    if run.cases.iter().any(|case| {
+    let failed = run.cases.iter().any(|case| {
         matches!(
             case.status,
             CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
         )
-    }) {
+    });
+
+    if globals.json {
+        let value = serde_json::to_value(&run).unwrap_or(serde_json::Value::Null);
+        JsonOutput::ok("test", value).print();
+    } else {
+        match format.as_str() {
+            "json" => print_json(&run),
+            "junit" => print_junit(&run),
+            _ => {
+                if globals.quiet {
+                    agentcarousel_reporters::print_terminal_summary(&run);
+                } else {
+                    print_terminal(&run);
+                }
+            }
+        }
+    }
+
+    if failed {
         ExitCode::Failed.as_i32()
     } else {
         ExitCode::Ok.as_i32()

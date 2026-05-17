@@ -15,14 +15,14 @@ fn bundle_verify_ok_prints_for_bundle_directory() {
     let assert = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["bundle", "verify", "fixtures/customer-support"])
+        .args(["bundle", "verify", "--json", "fixtures/customer-support"])
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-    assert!(
-        stdout.contains("bundle verify: OK"),
-        "expected success banner on stdout, got: {stdout:?}"
-    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("expected valid JSON on stdout");
+    assert_eq!(parsed["ok"], true, "expected ok:true, got: {stdout:?}");
+    assert_eq!(parsed["command"], "bundle verify");
 }
 
 #[test]
@@ -34,15 +34,15 @@ fn bundle_verify_ok_when_passing_bundle_manifest_json() {
         .args([
             "bundle",
             "verify",
+            "--json",
             "fixtures/customer-support/bundle.manifest.json",
         ])
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-    assert!(
-        stdout.contains("bundle verify: OK"),
-        "expected success banner on stdout, got: {stdout:?}"
-    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("expected valid JSON on stdout");
+    assert_eq!(parsed["ok"], true, "expected ok:true, got: {stdout:?}");
 }
 
 #[test]

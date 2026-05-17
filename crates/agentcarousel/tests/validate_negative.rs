@@ -44,12 +44,7 @@ fn validate_json_includes_atf_summary() {
     let out = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args([
-            "validate",
-            "fixtures/regex-builder/cases.yaml",
-            "--format",
-            "json",
-        ])
+        .args(["validate", "--json", "fixtures/regex-builder/cases.yaml"])
         .output()
         .expect("run validate");
     assert!(
@@ -59,8 +54,12 @@ fn validate_json_includes_atf_summary() {
     );
     let body = String::from_utf8_lossy(&out.stdout);
     let v: serde_json::Value = serde_json::from_str(body.trim()).expect("json");
-    assert!(v.get("messages").is_some());
-    let summary = v.get("atf_summary").expect("atf_summary");
+    // envelope: { ok, command, data: { messages, atf_summary } }
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["command"], "validate");
+    let data = &v["data"];
+    assert!(data.get("messages").is_some(), "missing data.messages");
+    let summary = data.get("atf_summary").expect("data.atf_summary");
     assert!(
         summary
             .get("fixture_files_loaded")

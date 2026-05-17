@@ -6,7 +6,9 @@ use tempfile::NamedTempFile;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
+use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
+use super::GlobalOptions;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum TrustTier {
@@ -57,22 +59,53 @@ pub struct TrustCheckArgs {
     minisign_bin: String,
 }
 
-pub fn run_trust_check(args: TrustCheckArgs, config: &ResolvedConfig) -> i32 {
-    match trust_check(args, config) {
-        Ok(()) => ExitCode::Ok.as_i32(),
+pub fn run_trust_check(
+    args: TrustCheckArgs,
+    config: &ResolvedConfig,
+    globals: &GlobalOptions,
+) -> i32 {
+    match trust_check(&args, config, globals.json) {
+        Ok(payload) => {
+            if globals.json {
+                JsonOutput::ok("trust-check", payload).print();
+            }
+            ExitCode::Ok.as_i32()
+        }
         Err(TrustCheckError::BelowThreshold { current, required }) => {
-            eprintln!(
-                "error: trust state below required threshold (current: {:?}, required: {:?})",
-                current, required
-            );
+            if globals.json {
+                JsonOutput::err(
+                    "trust-check",
+                    JsonError::new(
+                        "below_threshold",
+                        format!(
+                            "trust state below required threshold (current: {:?}, required: {:?})",
+                            current, required
+                        ),
+                    ),
+                )
+                .print();
+            } else {
+                eprintln!(
+                    "error: trust state below required threshold (current: {:?}, required: {:?})",
+                    current, required
+                );
+            }
             ExitCode::Failed.as_i32()
         }
         Err(TrustCheckError::SignatureInvalid(msg)) => {
-            eprintln!("error: attestation signature invalid: {msg}");
+            if globals.json {
+                JsonOutput::err("trust-check", JsonError::new("signature_invalid", msg)).print();
+            } else {
+                eprintln!("error: attestation signature invalid: {msg}");
+            }
             ExitCode::Failed.as_i32()
         }
         Err(TrustCheckError::Runtime(msg)) => {
-            eprintln!("error: {msg}");
+            if globals.json {
+                JsonOutput::err("trust-check", JsonError::new("runtime_error", msg)).print();
+            } else {
+                eprintln!("error: {msg}");
+            }
             ExitCode::RuntimeError.as_i32()
         }
     }
@@ -88,7 +121,11 @@ enum TrustCheckError {
     Runtime(String),
 }
 
-fn trust_check(args: TrustCheckArgs, config: &ResolvedConfig) -> Result<(), TrustCheckError> {
+fn trust_check(
+    args: &TrustCheckArgs,
+    config: &ResolvedConfig,
+    json: bool,
+) -> Result<Value, TrustCheckError> {
     let endpoint = resolve_registry_url(args.url.as_deref(), config)
         .map_err(|err| TrustCheckError::Runtime(err.to_string()))?;
     let registry_bundle_id = compute_registry_bundle_id(&args.target)
@@ -100,7 +137,9 @@ fn trust_check(args: TrustCheckArgs, config: &ResolvedConfig) -> Result<(), Trus
         .map_err(TrustCheckError::Runtime)?;
     let current = trust_tier_from_payload(&payload)?;
 
-    print_summary(&payload, &registry_bundle_id, current);
+    if !json {
+        print_summary(&payload, &registry_bundle_id, current);
+    }
 
     if current < args.min_trust {
         return Err(TrustCheckError::BelowThreshold {
@@ -122,7 +161,7 @@ fn trust_check(args: TrustCheckArgs, config: &ResolvedConfig) -> Result<(), Trus
         verify_attestation(&args.minisign_bin, attestation, pubkey.path())?;
     }
 
-    Ok(())
+    Ok(payload)
 }
 
 fn compute_registry_bundle_id(target: &str) -> Result<String, String> {

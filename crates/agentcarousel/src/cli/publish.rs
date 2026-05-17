@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
 use super::export::export_run_artifact;
+use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
+use super::GlobalOptions;
 
 /// Publish a bundle to registry (register + submit run evidence).
 #[derive(Debug, Parser)]
@@ -46,17 +48,25 @@ struct BundleManifestMeta {
     skill_or_agent: Option<String>,
 }
 
-pub fn run_publish(args: PublishArgs, config: &ResolvedConfig) -> i32 {
+pub fn run_publish(args: PublishArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     match publish_bundle(args, config) {
         Ok(payload) => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
-            );
+            if globals.json {
+                JsonOutput::ok("publish", payload).print();
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+                );
+            }
             ExitCode::Ok.as_i32()
         }
         Err(err) => {
-            eprintln!("error: {err}");
+            if globals.json {
+                JsonOutput::err("publish", JsonError::new("runtime_error", err)).print();
+            } else {
+                eprintln!("error: {err}");
+            }
             ExitCode::RuntimeError.as_i32()
         }
     }

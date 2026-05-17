@@ -49,10 +49,12 @@ fn trust_check_fails_without_registry_url() {
         .args(["trust-check", "customer-support@1.0.0"])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        stderr.contains("registry URL is required"),
-        "expected missing URL guidance, got: {stderr:?}"
+        combined.contains("registry URL is required"),
+        "expected missing URL guidance, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 }
 
@@ -76,10 +78,12 @@ fn trust_check_parses_bundle_version_and_enforces_threshold() {
         ])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        stderr.contains("below required threshold"),
-        "expected threshold failure, got: {stderr:?}"
+        combined.contains("below required threshold"),
+        "expected threshold failure, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 
     let first_line = rx.recv().expect("request first line");
@@ -117,9 +121,11 @@ fn trust_check_reports_missing_minisign_binary() {
         ])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        stderr.contains("failed to run `definitely-not-a-real-minisign-binary`"),
-        "expected minisign error, got: {stderr:?}"
+        combined.contains("failed to run `definitely-not-a-real-minisign-binary`"),
+        "expected minisign error, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 }

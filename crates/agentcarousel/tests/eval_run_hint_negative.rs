@@ -10,8 +10,9 @@ fn workspace_root() -> PathBuf {
 }
 
 #[test]
-fn eval_json_writes_run_id_hint_to_stderr() {
+fn eval_json_includes_run_id_in_envelope() {
     let root = workspace_root();
+    // stdout is piped (not a TTY) → globals.json is auto-true → JSON envelope on stdout
     let assert = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
@@ -20,20 +21,18 @@ fn eval_json_writes_run_id_hint_to_stderr() {
             "examples/example-skill.yaml",
             "--execution-mode",
             "mock",
-            "--format",
-            "json",
             "--filter",
             "example-skill/positive",
         ])
         .assert()
         .success();
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("expected valid JSON envelope on stdout");
+    assert_eq!(parsed["ok"], true, "expected ok:true, got: {stdout:?}");
+    // run ID lives in data.id
     assert!(
-        stderr.contains("run id:"),
-        "expected run id hint on stderr for json format, got stderr={stderr:?}"
-    );
-    assert!(
-        stderr.contains("report show"),
-        "expected report command hint on stderr, got stderr={stderr:?}"
+        parsed["data"]["id"].is_string(),
+        "expected data.id in envelope, got: {stdout:?}"
     );
 }
