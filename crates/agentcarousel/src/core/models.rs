@@ -3,6 +3,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use thiserror::Error;
+use ulid::Ulid;
+
+#[derive(Debug, Error)]
+pub enum CoreError {
+    #[error("invalid fixture: {0}")]
+    InvalidFixture(String),
+}
+
+pub fn new_run_id() -> RunId {
+    RunId(Ulid::new().to_string())
+}
 
 /// Opaque identifier for a single **run** (persisted history, exports, registry).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
