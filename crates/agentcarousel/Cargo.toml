@@ -1,6 +1,6 @@
 [package]
 name = "agentcarousel"
-version = "0.5.6"
+version = "0.5.7"
 edition = "2021"
 rust-version = "1.95"
 description = "Unit tests for AI agents. Run behavioral tests in CI, score with an LLM judge, and export signed evidence your auditors accept."
