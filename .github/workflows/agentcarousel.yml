@@ -40,9 +40,9 @@ jobs:
         run: cargo build --release -p agentcarousel
       - name: Validate
         run: |
-          ./target/release/agentcarousel validate fixtures/ --format json | tee validate-report.json
+          ./target/release/agentcarousel validate fixtures/ --json | tee validate-report.json
       - name: Optional jq smoke on ATF summary
-        run: jq -e '.atf_summary.fixture_files_loaded > 0' validate-report.json
+        run: jq -e '.data.atf_summary.fixture_files_loaded > 0' validate-report.json
       - name: Upload validate report
         uses: actions/upload-artifact@v4
         with:
@@ -80,8 +80,7 @@ jobs:
         run: |
           ./target/release/agentcarousel test ${{ matrix.paths }} \
             --filter-tags smoke \
-            --offline true \
-            --format json | tee "test-results-${{ matrix.name }}.json"
+            --offline true | tee "test-results-${{ matrix.name }}.json"
       - name: Upload test results (JSON)
         uses: actions/upload-artifact@v4
         with:
@@ -110,7 +109,6 @@ jobs:
             --evaluator all \
             --runs 5 \
             --judge \
-            --format json \
             > eval-results.json
       - name: Upload eval artifact
         uses: actions/upload-artifact@v4
@@ -119,8 +117,8 @@ jobs:
           path: eval-results.json
       - name: Regression check
         run: |
-          PREV=$(./target/release/agentcarousel report list --limit 2 --json | jq -r '.[1].id // empty')
+          PREV=$(./target/release/agentcarousel report list --limit 2 --json | jq -r '.data.runs[1].id // empty')
           if [ -n "$PREV" ]; then
-            CURR=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.[0].id')
+            CURR=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.data.runs[0].id')
             ./target/release/agentcarousel report diff "$PREV" "$CURR"
           fi
