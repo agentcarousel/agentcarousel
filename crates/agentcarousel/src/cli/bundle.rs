@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use tar::Builder;
 use ulid::Ulid;
 
-use crate::core::hex_lower;
+use crate::core::hex_util::hex_lower;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;

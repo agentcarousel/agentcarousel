@@ -1,4 +1,4 @@
-use crate::core::hex_lower;
+use crate::core::hex_util::hex_lower;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::env;
