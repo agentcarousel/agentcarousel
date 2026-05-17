@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.7 - May 2026
+
+### Refactors
+
+- Unified LLM provider HTTP layer: Gemini, OpenAI, Anthropic, and OpenRouter calls consolidated into `providers/` module; `evaluators/judge.rs` and `runner/generator.rs` both delegate to a single `call_provider_blocking()` path. Removes the `openrouter-rs` dependency.
+- `core/error.rs` and `core/ids.rs` merged into `core/models.rs`; two micro-files eliminated with zero API change.
+- `cli/mod.rs` split: `InitArgs`, `run_init`, scaffold templates, and `sanitize_fixture_name` extracted to `cli/init.rs`; `ExitCode` enum to `cli/exit_codes.rs`. `cli/mod.rs` now contains only routing logic.
+- `runner/mod.rs` (948 lines) split into `runner/orchestration.rs` (execution flow) and `runner/aggregation.rs` (metrics and summary building); `runner/mod.rs` retains only public types and entry points.
+
 ## 0.5.6 - May 2026
 
 ### Chores
