@@ -8,6 +8,7 @@ mod export;
 mod fixture_utils;
 mod init;
 mod lint;
+mod output;
 mod publish;
 mod registry_client;
 mod report;
@@ -20,6 +21,7 @@ mod validate;
 use clap::builder::styling::{AnsiColor, Color, Effects, RgbColor, Style, Styles};
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_complete::CompleteEnv;
+use std::io::IsTerminal;
 
 use config::{apply_history_db_env, load_config};
 
@@ -56,14 +58,18 @@ pub struct Cli {
     quiet: bool,
     #[arg(short = 'v', long, action = ArgAction::Count, global = true, help = "Increase output verbosity")]
     verbose: u8,
+    /// Emit structured JSON to stdout (auto-enabled when stdout is not a TTY).
+    #[arg(long, global = true, help = "Emit structured JSON output")]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
 
-/// Options propagated from [`Cli`] into subcommands (quiet, verbose level).
+/// Options propagated from [`Cli`] into subcommands.
 pub struct GlobalOptions {
     pub quiet: bool,
     pub verbose: u8,
+    pub json: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -184,8 +190,17 @@ Use "agc <COMMAND> --help" for more information about a command.
 /// (`0` = success; non-zero for validation, config, or runtime failures).
 pub fn run() -> i32 {
     CompleteEnv::with_factory(cli_command).complete();
+
+    let stdout_is_tty = std::io::stdout().is_terminal();
+    if !stdout_is_tty && std::env::args().len() == 1 {
+        print_compact_help();
+        return exit_codes::ExitCode::Ok.as_i32();
+    }
+
     let matches = cli_command().get_matches();
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+
+    let json_mode = cli.json || !stdout_is_tty;
 
     let config_path: Option<&std::path::Path> = match &cli.command {
         Command::Validate(a) => a.config.as_deref(),
@@ -203,33 +218,61 @@ pub fn run() -> i32 {
     let config = match load_config(config_path) {
         Ok(config) => config,
         Err(err) => {
-            eprintln!("error: {err}");
+            if json_mode {
+                output::JsonOutput::err(
+                    "config",
+                    output::JsonError::new("config_error", err.to_string()),
+                )
+                .print();
+            } else {
+                eprintln!("error: {err}");
+            }
             return exit_codes::ExitCode::ConfigError.as_i32();
         }
     };
 
     apply_history_db_env(&config);
-    apply_color_settings(&config, cli.no_color);
+    if json_mode {
+        console::set_colors_enabled(false);
+    } else {
+        apply_color_settings(&config, cli.no_color);
+    }
     let globals = GlobalOptions {
         quiet: cli.quiet,
         verbose: cli.verbose,
+        json: json_mode,
     };
     match cli.command {
         Command::Validate(args) => validate::run_validate(args, &config, &globals),
         Command::Test(args) => test::run_test(args, &config, &globals),
         Command::Eval(args) => eval::run_eval_command(args, &config, &globals),
-        Command::Report(args) => report::run_report(args, &config),
+        Command::Report(args) => report::run_report(args, &config, &globals),
         Command::Init(args) => init::run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
-        Command::Publish(args) => publish::run_publish(args, &config),
-        Command::Export(args) => export::run_export(args),
-        Command::TrustCheck(args) => trust_check::run_trust_check(args, &config),
+        Command::Publish(args) => publish::run_publish(args, &config, &globals),
+        Command::Export(args) => export::run_export(args, &globals),
+        Command::TrustCheck(args) => trust_check::run_trust_check(args, &config, &globals),
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Lint(args) => lint::run_lint(args, &globals),
         Command::Stats(args) => stats::run_stats(args, &config, &globals),
     }
+}
+
+fn print_compact_help() {
+    println!(
+        "agc {} — AI agent behavioral testing\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!("COMMANDS: validate test eval lint init report stats export bundle publish trust-check compare generate dashboard doctor completions update\n");
+    println!("QUICK START:");
+    println!("  agc init --skill my-skill");
+    println!("  agc test fixtures/my-skill/");
+    println!("  agc eval fixtures/my-skill/ --judge --model gemini-2.5-flash\n");
+    println!("FLAGS (global): --json --quiet -v --no-color --config <path>\n");
+    println!("Full help: agc <command> --help");
+    println!("Docs: https://agentcarousel.com/docs");
 }
 
 fn apply_color_settings(config: &config::ResolvedConfig, no_color: bool) {

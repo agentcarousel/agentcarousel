@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
+use super::output::{JsonError, JsonOutput};
+use super::GlobalOptions;
 
 /// List/show/diff runs in the local history DB (same DB as test/eval; see config).
 #[derive(Debug, Parser)]
@@ -39,10 +41,10 @@ enum ReportCommand {
     Diff { run_id_a: String, run_id_b: String },
 }
 
-pub fn run_report(args: ReportArgs, config: &ResolvedConfig) -> i32 {
+pub fn run_report(args: ReportArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     match args.command {
-        ReportCommand::List { limit, json } => report_list(limit, json),
-        ReportCommand::Show { run_id, json } => report_show(&run_id, json),
+        ReportCommand::List { limit, json } => report_list(limit, json || globals.json),
+        ReportCommand::Show { run_id, json } => report_show(&run_id, json, globals.json),
         ReportCommand::Diff { run_id_a, run_id_b } => {
             report_diff(&run_id_a, &run_id_b, config.report.regression_threshold)
         }
@@ -53,16 +55,22 @@ fn report_list(limit: usize, json: bool) -> i32 {
     match list_runs(limit) {
         Ok(runs) => {
             if json {
-                let payload =
-                    serde_json::to_string_pretty(&runs).unwrap_or_else(|_| "[]".to_string());
-                println!("{payload}");
+                JsonOutput::ok("report list", serde_json::json!({ "runs": runs })).print();
             } else {
                 print_list(&runs);
             }
             ExitCode::Ok.as_i32()
         }
         Err(err) => {
-            eprintln!("error: {err}");
+            if json {
+                JsonOutput::err(
+                    "report list",
+                    JsonError::new("runtime_error", err.to_string()),
+                )
+                .print();
+            } else {
+                eprintln!("error: {err}");
+            }
             ExitCode::RuntimeError.as_i32()
         }
     }
@@ -90,10 +98,13 @@ fn load_run_for_show(run_ref: &str) -> Result<Run, String> {
     }
 }
 
-fn report_show(run_id: &str, json: bool) -> i32 {
+fn report_show(run_id: &str, json: bool, envelope: bool) -> i32 {
     match load_run_for_show(run_id) {
         Ok(run) => {
-            if json {
+            if envelope {
+                let value = serde_json::to_value(&run).unwrap_or(serde_json::Value::Null);
+                JsonOutput::ok("report show", value).print();
+            } else if json {
                 print_json(&run);
             } else {
                 print_terminal(&run);
@@ -101,8 +112,18 @@ fn report_show(run_id: &str, json: bool) -> i32 {
             ExitCode::Ok.as_i32()
         }
         Err(err) => {
-            eprintln!("error: {err}");
-            ExitCode::RuntimeError.as_i32()
+            if envelope || json {
+                JsonOutput::err(
+                    "report show",
+                    JsonError::new("not_found", err.to_string()).with_suggestions(vec![
+                        "Run 'agc report list' to see available run IDs.".to_string(),
+                    ]),
+                )
+                .print();
+            } else {
+                eprintln!("error: {err}");
+            }
+            ExitCode::NotFound.as_i32()
         }
     }
 }

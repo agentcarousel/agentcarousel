@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use super::config::{resolve_schema_path, ResolvedConfig};
 use super::exit_codes::ExitCode;
 use super::fixture_utils::{collect_fixture_paths_with_ignore, is_kebab_case};
+use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
 
 const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
@@ -114,6 +115,30 @@ pub fn run_validate(args: ValidateArgs, config: &ResolvedConfig, globals: &Globa
     }
 
     let atf_summary = summarize_atf(&atf_rows);
+    if globals.json {
+        let messages = collect_messages(&reports);
+        let body = ValidateJsonBody {
+            messages,
+            atf_summary: &atf_summary,
+        };
+        if has_errors || (strict && has_warnings) {
+            JsonOutput::err(
+                "validate",
+                JsonError::new(
+                    "validation_failed",
+                    "One or more fixtures failed validation.",
+                )
+                .with_suggestions(vec![
+                    "Run 'agc validate --format human' for detailed output.".to_string(),
+                ]),
+            )
+            .print();
+            return ExitCode::ValidationFailed.as_i32();
+        }
+        JsonOutput::ok("validate", &body).print();
+        return ExitCode::Ok.as_i32();
+    }
+
     if !globals.quiet {
         output_reports(&format, &reports, &atf_summary);
     }

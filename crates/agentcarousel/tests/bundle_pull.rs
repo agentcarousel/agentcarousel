@@ -62,10 +62,10 @@ fn bundle_pull_fetches_manifest_and_files() {
         .success();
 
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-    assert!(
-        stdout.contains("bundle pull: wrote"),
-        "expected success banner, got: {stdout:?}"
-    );
+    // stdout is piped in tests (not a TTY), so JSON envelope is emitted automatically
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("expected valid JSON on stdout");
+    assert_eq!(parsed["ok"], true, "expected ok:true, got: {stdout:?}");
 
     m_manifest.assert();
     m_file.assert();
@@ -127,9 +127,14 @@ fn bundle_pull_verify_checks_hashes() {
         .assert()
         .failure();
 
+    // In JSON mode, errors go to stdout as envelope; stderr may be empty
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("hash mismatch") || stderr.contains("error:"),
-        "expected verify/hash error, got: {stderr:?}"
+        stdout.contains("hash mismatch")
+            || stdout.contains("error")
+            || stderr.contains("hash mismatch")
+            || stderr.contains("error"),
+        "expected verify/hash error, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 }

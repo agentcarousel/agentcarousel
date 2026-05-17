@@ -6,6 +6,7 @@ pub enum ExitCode {
     ValidationFailed = 2,
     ConfigError = 3,
     RuntimeError = 4,
+    NotFound = 5,
 }
 
 impl ExitCode {

@@ -296,10 +296,13 @@ fn publish_rejects_all_runs_with_single_evidence_path() {
         ])
         .assert()
         .failure();
+    // In JSON mode (stdout not a TTY in tests), errors go to stdout as JSON envelope
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        stderr.contains("cannot combine --all-runs with --evidence"),
-        "expected argument guidance, got: {stderr:?}"
+        combined.contains("cannot combine --all-runs with --evidence"),
+        "expected argument guidance, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 }
 
@@ -327,10 +330,12 @@ fn publish_fails_fast_when_token_missing() {
         ])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        stderr.contains("registry token missing"),
-        "expected missing token guidance, got: {stderr:?}"
+        combined.contains("registry token missing"),
+        "expected missing token guidance, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
     std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
 }
@@ -368,9 +373,11 @@ history_db = "{}"
         ])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        stderr.contains("no run found for bundle"),
-        "expected run selection error, got: {stderr:?}"
+        combined.contains("no run found for bundle"),
+        "expected run selection error, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 }

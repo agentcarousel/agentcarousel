@@ -17,6 +17,8 @@ const SKILL_DEFINITION_SCHEMA: &str = include_str!(concat!(
 ));
 
 use super::exit_codes::ExitCode;
+use super::output::{JsonError, JsonOutput};
+use super::GlobalOptions;
 /// Export run(s) as evidence .tar.gz (run.json + fingerprints per run).
 #[derive(Debug, Parser)]
 pub struct ExportArgs {
@@ -36,49 +38,114 @@ pub struct ExportArgs {
 
 const EXPORT_LAST_MAX: usize = 50;
 
-pub fn run_export(args: ExportArgs) -> i32 {
+pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
+    let json = globals.json;
     let run_id = args.run_id_positional.as_ref();
     match (run_id, args.last) {
         (Some(_), Some(_)) => {
-            eprintln!("error: specify either RUN_ID or --last N, not both");
+            if json {
+                JsonOutput::err(
+                    "export",
+                    JsonError::new(
+                        "invalid_args",
+                        "specify either RUN_ID or --last N, not both",
+                    ),
+                )
+                .print();
+            } else {
+                eprintln!("error: specify either RUN_ID or --last N, not both");
+            }
             ExitCode::RuntimeError.as_i32()
         }
         (None, None) => {
-            eprintln!(
-                "error: specify RUN_ID or --last N (e.g. export --last 5 --out-dir ./evidence)"
-            );
+            if json {
+                JsonOutput::err(
+                    "export",
+                    JsonError::new("invalid_args", "specify RUN_ID or --last N").with_suggestions(
+                        vec!["Example: agc export --last 5 --out-dir ./evidence".to_string()],
+                    ),
+                )
+                .print();
+            } else {
+                eprintln!(
+                    "error: specify RUN_ID or --last N (e.g. export --last 5 --out-dir ./evidence)"
+                );
+            }
             ExitCode::RuntimeError.as_i32()
         }
         (Some(run_id), None) => {
             if args.out_dir.is_some() {
-                eprintln!("error: --out-dir is only valid with --last");
+                if json {
+                    JsonOutput::err(
+                        "export",
+                        JsonError::new("invalid_args", "--out-dir is only valid with --last"),
+                    )
+                    .print();
+                } else {
+                    eprintln!("error: --out-dir is only valid with --last");
+                }
                 return ExitCode::RuntimeError.as_i32();
             }
             match export_run_artifact(run_id, args.out.as_deref()) {
                 Ok(path) => {
-                    println!("created {}", path.display());
+                    if json {
+                        JsonOutput::ok(
+                            "export",
+                            serde_json::json!({ "paths": [path.display().to_string()] }),
+                        )
+                        .print();
+                    } else {
+                        println!("created {}", path.display());
+                    }
                     ExitCode::Ok.as_i32()
                 }
                 Err(err) => {
-                    eprintln!("error: {err}");
+                    if json {
+                        JsonOutput::err("export", JsonError::new("runtime_error", err)).print();
+                    } else {
+                        eprintln!("error: {err}");
+                    }
                     ExitCode::RuntimeError.as_i32()
                 }
             }
         }
         (None, Some(n)) => {
             if args.out.is_some() {
-                eprintln!("error: with --last, use --out-dir for the output directory (not --out)");
+                if json {
+                    JsonOutput::err(
+                        "export",
+                        JsonError::new(
+                            "invalid_args",
+                            "with --last, use --out-dir for the output directory (not --out)",
+                        ),
+                    )
+                    .print();
+                } else {
+                    eprintln!(
+                        "error: with --last, use --out-dir for the output directory (not --out)"
+                    );
+                }
                 return ExitCode::RuntimeError.as_i32();
             }
             match export_last_n(n, args.out_dir.as_deref()) {
                 Ok(paths) => {
-                    for path in paths {
-                        println!("created {}", path.display());
+                    if json {
+                        let strs: Vec<String> =
+                            paths.iter().map(|p| p.display().to_string()).collect();
+                        JsonOutput::ok("export", serde_json::json!({ "paths": strs })).print();
+                    } else {
+                        for path in paths {
+                            println!("created {}", path.display());
+                        }
                     }
                     ExitCode::Ok.as_i32()
                 }
                 Err(err) => {
-                    eprintln!("error: {err}");
+                    if json {
+                        JsonOutput::err("export", JsonError::new("runtime_error", err)).print();
+                    } else {
+                        eprintln!("error: {err}");
+                    }
                     ExitCode::RuntimeError.as_i32()
                 }
             }

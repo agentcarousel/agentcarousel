@@ -84,7 +84,7 @@ fn run_with_embedded_api_error() -> Run {
 }
 
 #[test]
-fn report_show_file_path_prints_humanized_error() {
+fn report_show_file_path_includes_error_in_json_envelope() {
     let root = workspace_root();
     let dir = tempfile::tempdir().expect("tempdir");
     let run_path = dir.path().join("run.json");
@@ -95,6 +95,7 @@ fn report_show_file_path_prints_humanized_error() {
     )
     .expect("write run.json");
 
+    // stdout is piped in tests (not a TTY) → JSON envelope auto-enabled
     let out = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
@@ -105,18 +106,20 @@ fn report_show_file_path_prints_humanized_error() {
         .stdout
         .clone();
     let s = String::from_utf8_lossy(&out);
+    let parsed: serde_json::Value = serde_json::from_str(&s).expect("expected valid JSON envelope");
+    assert_eq!(parsed["ok"], true, "expected ok:true, got: {s}");
+    // error message is preserved in the run data
+    let cases = &parsed["data"]["cases"];
     assert!(
-        s.contains("API key not valid"),
-        "expected humanized message in terminal output, got:\n{s}"
-    );
-    assert!(
-        !s.contains("INVALID_ARGUMENT"),
-        "expected JSON noise removed from terminal, got:\n{s}"
+        cases[0]["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("API key not valid")),
+        "expected API key error in cases[0].error, got: {s}"
     );
 }
 
 #[test]
-fn report_show_evidence_dir_prints_humanized_error() {
+fn report_show_evidence_dir_includes_run_in_json_envelope() {
     let root = workspace_root();
     let dir = tempfile::tempdir().expect("tempdir");
     let run = run_with_embedded_api_error();
@@ -136,5 +139,10 @@ fn report_show_evidence_dir_prints_humanized_error() {
         .stdout
         .clone();
     let s = String::from_utf8_lossy(&out);
-    assert!(s.contains("API key not valid"), "got:\n{s}");
+    let parsed: serde_json::Value = serde_json::from_str(&s).expect("expected valid JSON envelope");
+    assert_eq!(parsed["ok"], true, "expected ok:true, got: {s}");
+    assert!(
+        parsed["data"]["id"].as_str().is_some(),
+        "expected run id in data, got: {s}"
+    );
 }

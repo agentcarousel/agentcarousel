@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
+use super::output::JsonOutput;
 use super::GlobalOptions;
 
 /// Show historical pass-rate trends, per-case flakiness, and latency from run history.
@@ -84,17 +85,14 @@ pub fn run_stats(args: StatsArgs, _config: &ResolvedConfig, globals: &GlobalOpti
 
     let latency_trend: Vec<f64> = runs.iter().map(|r| r.summary.mean_latency_ms).collect();
 
-    if args.format == "json" {
-        let output = serde_json::json!({
+    if globals.json || args.format == "json" {
+        let data = serde_json::json!({
             "run_count": runs.len(),
             "pass_rate_trend": pass_rates.iter().map(|(t, r)| serde_json::json!({"at": t, "pass_rate": r})).collect::<Vec<_>>(),
             "mean_latency_trend_ms": latency_trend,
             "flakiest_cases": flakiness.iter().take(10).map(|(id, f)| serde_json::json!({"case_id": id, "flakiness": f})).collect::<Vec<_>>(),
         });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        );
+        JsonOutput::ok("stats", data).print();
         return ExitCode::Ok.as_i32();
     }
 

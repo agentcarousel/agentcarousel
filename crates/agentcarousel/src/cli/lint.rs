@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use super::exit_codes::ExitCode;
 use super::fixture_utils::collect_fixture_paths_with_ignore;
+use super::output::JsonOutput;
 use super::GlobalOptions;
 
 const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
@@ -71,9 +72,27 @@ pub fn run_lint(args: LintArgs, globals: &GlobalOptions) -> i32 {
     }
 
     if !globals.quiet {
-        match args.format.as_str() {
-            "json" => output_json(&results),
-            _ => output_human(&results),
+        if globals.json || args.format == "json" {
+            let items: Vec<serde_json::Value> = results
+                .iter()
+                .map(|r| {
+                    let issues: Vec<serde_json::Value> = r
+                        .issues
+                        .iter()
+                        .map(|i| {
+                            serde_json::json!({
+                                "level": match i.level { Level::Error => "error", Level::Warn => "warn" },
+                                "message": i.message,
+                            })
+                        })
+                        .collect();
+                    serde_json::json!({ "path": r.path, "issues": issues })
+                })
+                .collect();
+            let data = serde_json::json!({ "files": items });
+            JsonOutput::ok("lint", data).print();
+        } else {
+            output_human(&results);
         }
     }
 
@@ -309,27 +328,4 @@ fn output_human(results: &[FileLint]) {
         println!("  {}", style("Lint: failed — fix errors above").red());
     }
     println!("  ──────────────────────────────────────────────────────");
-}
-
-fn output_json(results: &[FileLint]) {
-    let items: Vec<serde_json::Value> = results
-        .iter()
-        .map(|r| {
-            let issues: Vec<serde_json::Value> = r
-                .issues
-                .iter()
-                .map(|i| {
-                    serde_json::json!({
-                        "level": match i.level { Level::Error => "error", Level::Warn => "warn" },
-                        "message": i.message,
-                    })
-                })
-                .collect();
-            serde_json::json!({ "path": r.path, "issues": issues })
-        })
-        .collect();
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&serde_json::json!({ "files": items })).unwrap_or_default()
-    );
 }
