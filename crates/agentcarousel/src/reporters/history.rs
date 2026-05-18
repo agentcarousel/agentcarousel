@@ -92,6 +92,76 @@ pub fn list_full_runs(limit: usize) -> Result<Vec<Run>, HistoryError> {
         .collect()
 }
 
+/// Returns the most recent run for `skill_or_agent` that is older than `before_run_id`.
+pub fn find_previous_run(
+    skill_or_agent: &str,
+    before_run_id: &str,
+) -> Result<Option<Run>, HistoryError> {
+    let conn = open_connection()?;
+    ensure_runs_table(&conn)?;
+    let anchor_started_at: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM runs WHERE id = ?1",
+            [before_run_id],
+            |row| row.get(0),
+        )
+        .ok();
+    let Some(anchor) = anchor_started_at else {
+        return Ok(None);
+    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT run_json FROM runs WHERE started_at < ?1 ORDER BY started_at DESC LIMIT 20",
+        )
+        .map_err(|source| HistoryError::QueryError { source })?;
+    let rows = stmt
+        .query_map([&anchor], |row| row.get::<_, String>(0))
+        .map_err(|source| HistoryError::QueryError { source })?;
+    for json in rows.flatten() {
+        let run: Run =
+            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })?;
+        if run.skill_or_agent.as_deref() == Some(skill_or_agent) {
+            return Ok(Some(run));
+        }
+    }
+    Ok(None)
+}
+
+/// Stores a named tag pointing to `run_id` (upserts — last write wins).
+pub fn tag_run(name: &str, run_id: &str) -> Result<(), HistoryError> {
+    let conn = open_connection()?;
+    ensure_runs_table(&conn)?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS run_tags (name TEXT PRIMARY KEY, run_id TEXT NOT NULL)",
+        [],
+    )
+    .map_err(|source| HistoryError::QueryError { source })?;
+    conn.execute(
+        "INSERT OR REPLACE INTO run_tags (name, run_id) VALUES (?1, ?2)",
+        params![name, run_id],
+    )
+    .map_err(|source| HistoryError::QueryError { source })?;
+    Ok(())
+}
+
+/// Returns the run ID stored under `name`, or `None` if the tag does not exist.
+pub fn find_tagged_run(name: &str) -> Result<Option<String>, HistoryError> {
+    let conn = open_connection()?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS run_tags (name TEXT PRIMARY KEY, run_id TEXT NOT NULL)",
+        [],
+    )
+    .map_err(|source| HistoryError::QueryError { source })?;
+    let result = conn
+        .query_row(
+            "SELECT run_id FROM run_tags WHERE name = ?1",
+            [name],
+            |row| row.get::<_, String>(0),
+        )
+        .ok();
+    Ok(result)
+}
+
 pub fn fetch_run(run_id: &str) -> Result<Run, HistoryError> {
     let conn = open_connection()?;
     ensure_runs_table(&conn)?;
