@@ -7,6 +7,7 @@ mod eval;
 mod exit_codes;
 mod export;
 mod fixture_utils;
+mod generate;
 mod init;
 mod lint;
 mod output;
@@ -83,6 +84,8 @@ enum Command {
     Eval(eval::EvalArgs),
     /// Inspect persisted runs: list, show details, or diff two runs.
     Report(report::ReportArgs),
+    /// Generate fixture cases for a skill using an LLM.
+    Generate(generate::GenerateArgs),
     /// Scaffold a new skill or agent fixture template.
     Init(init::InitArgs),
     /// Pack, verify, or pull fixture bundles.
@@ -137,6 +140,7 @@ fn help_template() -> String {
     let validate = c("validate");
     let test = c("test");
     let eval = c("eval");
+    let generate = c("generate");
     let lint = c("lint");
     let init = c("init");
     let report = c("report");
@@ -163,6 +167,7 @@ Usage:
   {validate}     Validate YAML/TOML fixtures against the schema (no execution); scans `.` by default
   {test}         Run fixtures with mock generation (no API keys required)
   {eval}         Run evaluation with mock or live generation; optionally score with an LLM judge
+  {generate}     Generate fixture cases for a skill using an LLM
   {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
   {init}         Scaffold a new skill or agent fixture template
 
@@ -252,6 +257,7 @@ pub fn run() -> i32 {
         Command::Test(args) => test::run_test(args, &config, &globals),
         Command::Eval(args) => eval::run_eval_command(args, &config, &globals),
         Command::Report(args) => report::run_report(args, &config, &globals),
+        Command::Generate(args) => generate::run_generate(args, &globals),
         Command::Init(args) => init::run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
@@ -271,7 +277,7 @@ fn print_compact_help() {
         "agc {} — AI agent behavioral testing\n",
         env!("CARGO_PKG_VERSION")
     );
-    println!("COMMANDS: validate test eval lint init report stats export bundle publish trust-check compare generate dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");
