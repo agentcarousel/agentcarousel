@@ -632,3 +632,31 @@ pub fn generation_step_result(provider: GeneratorProvider, model: &str) -> serde
         "model": model
     })
 }
+
+/// Call an LLM with an arbitrary prompt. Uses the same provider detection and key
+/// resolution as `generate_case_output`. Intended for `agc generate` fixture synthesis.
+pub async fn call_llm(
+    model: &str,
+    prompt: &str,
+    max_tokens: Option<u32>,
+) -> Result<GenerationResult, String> {
+    let provider = GeneratorProvider::from_model(model);
+    if let GeneratorProvider::Custom = provider {
+        return Err(
+            "custom provider requires --generator-endpoint; not supported in agc generate"
+                .to_string(),
+        );
+    }
+    let key = resolve_generator_key(provider)?;
+    match provider {
+        GeneratorProvider::Gemini => generate_with_gemini(&key, model, prompt, max_tokens).await,
+        GeneratorProvider::OpenAi => generate_with_openai(&key, model, prompt, max_tokens).await,
+        GeneratorProvider::Anthropic => {
+            generate_with_anthropic(&key, model, prompt, max_tokens).await
+        }
+        GeneratorProvider::OpenRouter => {
+            generate_with_openrouter(&key, model, prompt, max_tokens).await
+        }
+        GeneratorProvider::Custom => unreachable!(),
+    }
+}

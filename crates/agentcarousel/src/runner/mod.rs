@@ -27,7 +27,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 pub use executor::run_case;
-pub use generator::GeneratorProvider;
+pub use generator::{call_llm, GeneratorProvider};
 pub use sandbox::SandboxError;
 pub use tracer::SecretScrubber;
 
