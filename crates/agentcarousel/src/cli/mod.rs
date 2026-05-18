@@ -1,4 +1,5 @@
 mod bundle;
+mod compare;
 mod completions;
 mod config;
 mod doctor;
@@ -102,6 +103,8 @@ enum Command {
     Lint(lint::LintArgs),
     /// Show historical pass-rate trends, flakiness, and latency from run history.
     Stats(stats::StatsArgs),
+    /// Compare two eval runs and gate on regressions.
+    Compare(compare::CompareArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -138,6 +141,7 @@ fn help_template() -> String {
     let init = c("init");
     let report = c("report");
     let stats = c("stats");
+    let compare = c("compare");
     let export = c("export");
     let bundle = c("bundle");
     let publish = c("publish");
@@ -165,6 +169,7 @@ Usage:
 {re}:
   {report}       Inspect persisted runs: list, show details, or diff two runs
   {stats}        Pass-rate trends, case flakiness, and latency across run history
+  {compare}      Compare two eval runs and gate on regressions (CI regression gate)
   {export}       Export run(s) as signed evidence tarballs
 
 {bu}:
@@ -257,6 +262,7 @@ pub fn run() -> i32 {
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Lint(args) => lint::run_lint(args, &globals),
         Command::Stats(args) => stats::run_stats(args, &config, &globals),
+        Command::Compare(args) => compare::run_compare(args, &globals),
     }
 }
 
