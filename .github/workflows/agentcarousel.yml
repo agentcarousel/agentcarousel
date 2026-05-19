@@ -54,38 +54,36 @@ jobs:
           ./target/release/agentcarousel bundle verify fixtures/customer-support/bundle.manifest.json
           ./target/release/agentcarousel bundle verify fixtures/code-reviewer
           ./target/release/agentcarousel bundle verify fixtures/code-reviewer/bundle.manifest.json
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentcarousel-linux
+          path: target/release/agentcarousel
+          retention-days: 1
 
   offline-fixtures:
-    name: Offline test (${{ matrix.name }})
+    name: Offline smoke tests
     runs-on: ubuntu-latest
     needs: [rust-ci, validate]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: smoke-two
-            paths: >-
-              fixtures/terraform-sentinel-scaffold/cases.yaml
-          - name: skills-smoke
-            paths: fixtures/
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-      - name: Build agentcarousel (release)
-        run: cargo build --release -p agentcarousel
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: agentcarousel-linux
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/agentcarousel
       - name: Run offline smoke tests
         run: |
-          ./target/release/agentcarousel test ${{ matrix.paths }} \
+          ./target/release/agentcarousel test fixtures/ \
             --filter-tags smoke \
-            --offline true | tee "test-results-${{ matrix.name }}.json"
+            --offline true | tee test-results-smoke.json
       - name: Upload test results (JSON)
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.name }}
-          path: test-results-${{ matrix.name }}.json
+          name: test-results-smoke
+          path: test-results-smoke.json
 
   eval-nightly:
     name: Eval harness (nightly, certification track)

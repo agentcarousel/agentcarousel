@@ -29,7 +29,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "412112f843c8dcc5d113b53430e2297064e0b502c7bb929a3fb2b416bb3afae6"
+      "sha256": "91e60708041261e07ca5e7c581d3d0a0c77396d6152ec6b2e222fafa8e0e51ba"
     },
     {
       "path": "golden/mixed-schema-classification.txt",

@@ -1,6 +1,6 @@
 # AgentCarousel
 
-**Unit tests for AI agents.** Determine trust before you deploy - run behavioral tests in CI, score with an LLM judge, and export signed evidence your auditors accept.
+**Unit tests for AI agents.** The only AI testing tool that produces evidence your auditors accept — run behavioral tests in CI, score with an LLM judge, gate on regressions, and export signed bundles ready for procurement teams and government regulators.
 
 [![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
 [![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
@@ -21,8 +21,11 @@ AgentCarousel delivers a repeatable, automated way to assess AI agent efficacy a
 ## Install
 
 ```bash
-# Linux install; for Windows, download .zip from Releases
+# Linux / macOS — slim binary (no dashboard)
 curl -fsSL https://install.agentcarousel.com | sh
+
+# Linux / macOS — full binary (includes web dashboard UI)
+curl -fsSL https://install.agentcarousel.com | sh -s -- --feature dashboard
 
 # Homebrew (macOS)
 brew tap agentcarousel/agentcarousel && brew install agentcarousel
@@ -31,26 +34,73 @@ brew tap agentcarousel/agentcarousel && brew install agentcarousel
 cargo install agentcarousel
 ```
 
+Two binary variants are available on every release:
+
+| Variant | Asset suffix | Includes |
+|---------|-------------|----------|
+| Slim (default) | *(none)* | All commands except `dashboard` |
+| Full | `-full` | Everything, including `agc dashboard` |
+
+Upgrade an existing installation to the full variant at any time:
+
+```bash
+agc update --feature dashboard
+```
+
 ## Quickstart
 
 ```bash
-# Scaffold a skill fixture
-agentcarousel init my-skill
+# 1. Scaffold a skill fixture
+agc init --skill my-skill
 
-# Run (mock mode by default, no API keys needed)
-agentcarousel test fixtures/my-skill/cases.yaml
+# 2. Generate cases with an LLM (no hand-writing required)
+agc generate --extend fixtures/my-skill/ --count 8
 
-# Validate fixture schema and rules
-agentcarousel validate fixtures/regex-builder/cases.yaml
+# 3. Run offline (mock mode, no API keys)
+agc test fixtures/my-skill/
 
-# Evaluate fixtures
-agentcarousel eval fixtures/regex-builder/cases.yaml
+# 4. Evaluate with live generation and an LLM judge
+agc eval fixtures/my-skill/ --execution-mode live --judge --model gemini-2.5-flash
 
-# Export the last evaluation as an evidence tarball
-agentcarousel export -l
+# 5. Export a signed evidence bundle
+agc export -l
 ```
 
-See [`fixtures/regex-builder/`](fixtures/regex-builder/) for the full fixture with all cases, golden outputs, and bundle manifest.
+See [`fixtures/regex-builder/`](fixtures/regex-builder/) for a complete fixture with all cases, golden outputs, and bundle manifest.
+
+## Generate Fixtures
+
+`agc generate` scaffolds validated YAML fixture cases using your configured generator LLM — no hand-writing required.
+
+```bash
+# From a skill name and description
+agc generate --skill customer-support \
+             --description "handles refund and cancellation requests" \
+             --count 8
+
+# From an existing system prompt file
+agc generate --from-prompt fixtures/customer-support/prompt.md --count 10
+
+# Extend an existing fixture (deduplicates against existing case IDs)
+agc generate --extend fixtures/customer-support/ --count 5
+
+# Preview without writing
+agc generate --skill my-skill --description "..." --dry-run
+
+# Machine-readable output (for agent workflows)
+agc generate --skill my-skill --description "..." --dry-run --json
+```
+
+Generated cases are validated against the fixture schema before being written. If the LLM output fails validation, the command retries once with the errors appended to the prompt. The meta-prompt lives at `templates/generate-prompt.md` — teams can customize it to specify what "good coverage" means for their domain.
+
+**Typical workflow:**
+
+```bash
+agc init --skill customer-support       # scaffold directory structure
+# edit fixtures/customer-support/prompt.md
+agc generate --extend fixtures/customer-support/ --count 8
+agc validate fixtures/customer-support/
+```
 
 ## Live Eval with LLM-as-a-Judge
 
@@ -58,11 +108,11 @@ See [`fixtures/regex-builder/`](fixtures/regex-builder/) for the full fixture wi
 # Generator LLM key (the model being tested)
 export GEMINI_API_KEY=your_key        # or OPENAI_API_KEY / OPENROUTER_API_KEY
 
-# Judge LLM key (the model being judge)
+# Judge LLM key (the model scoring outputs)
 export ANTHROPIC_API_KEY=your_key     # or bring your own provider
 
-# Run skill fixtures for regex-builder against live APIs with LLM judge
-agentcarousel eval fixtures/regex-builder/ \
+# Run skill fixtures against live APIs with LLM judge
+agc eval fixtures/regex-builder/ \
   --execution-mode live \
   --evaluator all --judge \
   --model gemini-2.5-flash \
@@ -76,18 +126,117 @@ agentcarousel eval fixtures/regex-builder/ \
 
 **Filters** — `--filter` on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`)
 
+## CI Regression Gate
+
+`agc compare` compares two eval runs and exits 1 when effectiveness regresses beyond a threshold — drop it into any CI pipeline as a binary pass/fail gate.
+
+```bash
+# Compare the latest run to an explicit baseline
+agc compare -l --baseline <run-id> --threshold 0.05
+
+# Auto-baseline: finds previous run for the same skill
+agc compare -l
+
+# Tag a run as a named baseline for CI reference
+agc compare tag <run-id> --name prod-baseline
+
+# JSON output for downstream tooling
+agc compare -l --baseline <run-id> --json
+```
+
+**GitHub Actions example:**
+
+```yaml
+- name: Eval
+  run: agc eval fixtures/ --judge --runs 3
+
+- name: Regression gate
+  run: agc compare -l --baseline ${{ vars.BASELINE_RUN_ID }} --threshold 0.05
+```
+
+Exit codes: `0` = no regression, `1` = regression exceeds threshold, `2` = error.
+
+## Dashboard
+
+`agc dashboard` serves a local web UI from the binary — zero config. Open `http://localhost:7421` after starting it. Available in the full binary variant.
+
+```bash
+agc dashboard                        # http://localhost:7421
+agc dashboard --port 8080            # custom port
+agc dashboard --db path/to/history.db
+```
+
+**Pages:**
+
+- **`/`** — Run history index with headline metrics (total runs, pass rate, mean effectiveness) and trend sparklines
+- **`/runs/:id`** — Run detail: per-case effectiveness, inline expansion with trace steps, rubric scores, and judge rationale
+- **`/compare?a=:id&b=:id`** — Side-by-side run comparison with delta badges and regression highlighting; deep-linkable URL
+- **`/review?run=:id`** — Judge review screen: annotate each LLM judge call as ✓ correct / ✗ wrong / ~ borderline; annotations persist to `reviews.jsonl` and are included in `agc export` evidence bundles
+
+Install the full variant to get dashboard access:
+
+```bash
+curl -fsSL https://install.agentcarousel.com | sh -s -- --feature dashboard
+# or upgrade in-place:
+agc update --feature dashboard
+```
+
 ## Reports
 
 ```bash
 # List recent runs
-agentcarousel report list
+agc report list
 
 # Inspect a run
-agentcarousel report show <RUN-ID>
+agc report show <RUN-ID>
 
 # Export as a signed evidence bundle
-agentcarousel export <RUN-ID>
+agc export <RUN-ID>
+agc export -l   # latest run
 ```
+
+## Agent Integration
+
+Every command emits structured JSON when `--json` is passed or stdout is not a TTY (piped to a file, another process, or an AI coding agent):
+
+```bash
+# Parse eval results in a pipeline
+agc eval fixtures/ --json | jq '.data.summary.pass_rate'
+
+# Machine-readable validate output
+agc validate fixtures/ --json | jq '.data.atf_summary'
+
+# Generate fixtures from an agent script
+agc generate --extend fixtures/my-skill/ --count 5 --json
+```
+
+**Success envelope:**
+```json
+{ "ok": true, "command": "eval", "data": { ... } }
+```
+
+**Error envelope:**
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "run_not_found",
+    "message": "Run 'abc123' not found in history database.",
+    "suggestions": ["Run 'agc report list' to see available run IDs."]
+  }
+}
+```
+
+**Exit codes** (consistent across all commands):
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Failure (tests failed, regression detected) |
+| 2 | Invalid arguments |
+| 3 | Config error |
+| 4 | Runtime error (IO, network, DB) |
+| 5 | Not found |
 
 ## Configuration
 
@@ -99,20 +248,20 @@ A bundle is a signed, distributable archive of a skill's fixture, cases, and evi
 
 ```bash
 # Pack a bundle
-agentcarousel bundle pack fixtures/regex-builder
+agc bundle pack fixtures/regex-builder
 
 # Verify bundle integrity
-agentcarousel bundle verify fixtures/customer-support
-agentcarousel bundle verify my-bundle.tar.gz
+agc bundle verify fixtures/customer-support
+agc bundle verify my-bundle.tar.gz
 
 # Pull from registry
-agentcarousel bundle pull customer-support-1.0.0 --url "https://api.agentcarousel.com"
+agc bundle pull customer-support-1.0.0 --url "https://api.agentcarousel.com"
 
 # Publish to registry
-agentcarousel publish fixtures/customer-support --url "https://api.agentcarousel.com"
+agc publish fixtures/customer-support --url "https://api.agentcarousel.com"
 
 # Publish multiple runs
-agentcarousel publish fixtures/customer-support \
+agc publish fixtures/customer-support \
   --url "https://api.agentcarousel.com" \
   --all-runs --limit 5
 ```
@@ -123,11 +272,11 @@ Trust checks query a skill's registry state for use in CI gates and governed wor
 
 ```bash
 # Check trust state from registry
-agentcarousel trust-check customer-support@1.0.0 \
+agc trust-check customer-support@1.0.0 \
   --url "https://api.agentcarousel.com"
 
 # Verify with local attestation
-agentcarousel trust-check customer-support@1.0.0 \
+agc trust-check customer-support@1.0.0 \
   --url "https://api.agentcarousel.com" \
   --attestation ./attestation-customer-support-1.0.0.json \
   --minisign-pubkey ./your-minisign.pub

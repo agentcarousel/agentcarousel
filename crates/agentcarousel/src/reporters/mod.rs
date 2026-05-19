@@ -1,6 +1,8 @@
 //! Human-readable and machine-readable **output**: terminal tables, JSON, JUnit, persisted
 //! history (SQLite), and [`diff_runs`] / [`print_diff`] for comparing two runs.
 
+#[cfg(feature = "dashboard")]
+pub mod dashboard;
 mod diff;
 mod history;
 mod junit;

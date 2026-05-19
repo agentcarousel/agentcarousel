@@ -191,7 +191,7 @@ jobs:
         with:
           key: release-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}
 
-      - name: Build release binary
+      - name: Build slim binary
         run: cargo build --release -p agentcarousel --target "${{ matrix.target }}"
 
       - name: Record cross-build verification strategy
@@ -200,8 +200,7 @@ jobs:
           echo "Cross-built target ${{ matrix.target }} cannot be executed on ${{ runner.os }}."
           echo "Relying on tag/Cargo.toml preflight and successful link output instead."
 
-
-      - name: Package artifact
+      - name: Package slim artifact
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
@@ -213,6 +212,21 @@ jobs:
             BIN="target/${{ matrix.target }}/release/agentcarousel"
           fi
           bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
+
+      - name: Build full binary (--features dashboard)
+        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}" --features dashboard
+
+      - name: Package full artifact
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+        run: |
+          if [[ "${{ matrix.target }}" == *-windows-* ]]; then
+            BIN="target/${{ matrix.target }}/release/agentcarousel.exe"
+          else
+            BIN="target/${{ matrix.target }}/release/agentcarousel"
+          fi
+          bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist full
 
       - uses: actions/upload-artifact@v4
         with:

@@ -2,6 +2,9 @@ You are an expert QA engineer generating test fixtures for an AI agent evaluatio
 
 Your task: generate {{COUNT}} test cases in valid YAML for the skill or agent described below.
 
+Skill name: **{{SKILL_NAME}}**
+Every case ID MUST start with `{{SKILL_NAME}}/` (e.g. `{{SKILL_NAME}}/happy-path`).
+
 ---
 
 ## Skill / Agent Description
@@ -23,7 +26,7 @@ Each case must conform exactly to the schema below.
 
 ```yaml
 cases:
-  - id: <skill-or-agent-id>/<short-scenario-slug>
+  - id: {{SKILL_NAME}}/<short-scenario-slug>
     description: >
       One or two sentences: what this case tests and what constitutes a pass.
     tags: [<domain-tag>, nightly]          # include "smoke" on the happy-path case only
@@ -80,7 +83,7 @@ Generate exactly {{COUNT}} cases covering ALL of the following categories (propo
 
 ## Rules
 
-- Case IDs: use the format `<skill-slug>/<short-kebab-case-slug>` (e.g. `customer-support/refund-edge-case`)
+- Case IDs: MUST use the format `{{SKILL_NAME}}/<short-kebab-case-slug>` (e.g. `{{SKILL_NAME}}/refund-edge-case`)
 - Rubric weights within each case MUST sum to exactly 1.0
 - Every case MUST have at least one rubric item and at least one output assertion
 - Use `auto_check` wherever possible; omit it only for rubric items requiring genuine language understanding

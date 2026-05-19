@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.0 - May 2026
+
+**Theme: From solo eval tool to team-scale CI platform.**
+
+### Features
+
+- **`agc generate`** — LLM-powered fixture case generation. Point it at a skill description, an existing `prompt.md`, or an existing fixture directory and it scaffolds validated YAML cases using your configured generator model. Retries once with validation errors appended if the LLM output fails schema validation. `--dry-run` writes to stdout for pipeline use; `--json` emits a structured envelope for agent workflows. Uses the same `GeneratorProvider` / `call_provider_blocking` infrastructure as `agc eval` — no new HTTP code.
+- **`agc compare`** — CI regression gate. Compares two eval runs by effectiveness score and pass rate; exits 1 when regression exceeds `--threshold` (default 0.05). Supports explicit `--baseline <run-id>`, named baselines (`agc compare tag <run-id> --name prod-baseline`), and auto-baseline (previous run for same skill). Structured `--json` output for downstream tooling.
+- **`agc dashboard`** — Embedded web UI served from a single binary, zero config. Run `agc dashboard` and open `http://localhost:7421`. Four pages: run history index with trend sparklines, run detail with inline case expansion, side-by-side run comparison with delta badges, and a judge review screen for annotating LLM judge calls (✓ correct / ✗ wrong / ~ borderline). Annotations persist to `reviews.jsonl` alongside the history DB. SSE keeps the dashboard live as new runs arrive.
+- **`--json` / TTY detection** — Every command emits a structured JSON envelope (`{"ok": true, "command": "...", "data": {...}}`) when `--json` is passed or stdout is not a TTY. Error paths return `{"ok": false, "error": {"code": "...", "message": "...", "suggestions": [...]}}`. Compact no-arg help when stdout is not a TTY.
+
+### Packaging
+
+- **Dual release variants** — Every release now ships two artifacts per platform:
+  - `agentcarousel-{tag}-{triple}.tar.gz` — slim binary (default, no dashboard)
+  - `agentcarousel-{tag}-{triple}-full.tar.gz` — full binary with web dashboard UI
+- **`agc update --feature dashboard`** — In-place upgrade to the full variant. `agc update` without `--feature` stays on the slim variant.
+- **Install script** — `--feature dashboard` flag and `AGENTCAROUSEL_FEATURES=dashboard` env var added; both select the full binary. Default install remains slim.
+
+### Dashboard Cargo feature
+
+`axum` and `tokio-stream` are now optional dependencies behind the `dashboard` feature flag. The default build (`cargo build -p agentcarousel --release`) produces the slim binary. Add `--features dashboard` for the full binary.
+
 ## 0.5.7 - May 2026
 
 ### Refactors

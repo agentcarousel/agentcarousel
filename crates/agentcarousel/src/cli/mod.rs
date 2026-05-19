@@ -2,6 +2,8 @@ mod bundle;
 mod compare;
 mod completions;
 mod config;
+#[cfg(feature = "dashboard")]
+mod dashboard;
 mod doctor;
 mod eval;
 mod exit_codes;
@@ -86,6 +88,9 @@ enum Command {
     Report(report::ReportArgs),
     /// Generate fixture cases for a skill using an LLM.
     Generate(generate::GenerateArgs),
+    /// Serve the run-history web dashboard.
+    #[cfg(feature = "dashboard")]
+    Dashboard(dashboard::DashboardArgs),
     /// Scaffold a new skill or agent fixture template.
     Init(init::InitArgs),
     /// Pack, verify, or pull fixture bundles.
@@ -155,6 +160,14 @@ fn help_template() -> String {
     let doctor = c("doctor");
     let help = c("help");
 
+    #[cfg(feature = "dashboard")]
+    let dashboard_line = {
+        let dashboard = c("dashboard");
+        format!("  {dashboard}    Serve run history, trends, and judge review in a local web UI\n")
+    };
+    #[cfg(not(feature = "dashboard"))]
+    let dashboard_line = String::new();
+
     format!(
         r#"{{about}}
 
@@ -183,7 +196,7 @@ Usage:
   {trust_check}  Check a bundle's trust state in the registry and optionally verify its attestation
 
 {to}:
-  {completions}  Print a shell completion script to stdout
+{dashboard_line}  {completions}  Print a shell completion script to stdout
   {update}       Check for and install updates to the agentcarousel CLI
   {doctor}       Check environment, config, and fixture setup for common issues
   {help}         Print this message or the help of the given subcommand(s)
@@ -258,6 +271,8 @@ pub fn run() -> i32 {
         Command::Eval(args) => eval::run_eval_command(args, &config, &globals),
         Command::Report(args) => report::run_report(args, &config, &globals),
         Command::Generate(args) => generate::run_generate(args, &globals),
+        #[cfg(feature = "dashboard")]
+        Command::Dashboard(args) => dashboard::run_dashboard(args, &globals),
         Command::Init(args) => init::run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
@@ -277,7 +292,10 @@ fn print_compact_help() {
         "agc {} — AI agent behavioral testing\n",
         env!("CARGO_PKG_VERSION")
     );
+    #[cfg(feature = "dashboard")]
     println!("COMMANDS: validate test eval generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
+    #[cfg(not(feature = "dashboard"))]
+    println!("COMMANDS: validate test eval generate lint init report stats export bundle publish trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");

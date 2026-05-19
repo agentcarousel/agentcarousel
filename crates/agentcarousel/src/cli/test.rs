@@ -16,7 +16,7 @@ use super::GlobalOptions;
 /// Run fixtures with mock generation (no API keys required).
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc test fixtures/customer-support/cases.yaml\n  agc test fixtures/ --filter-tags smoke\n  agc test fixtures/ --concurrency 4 --format json"
+    after_help = "Examples:\n  agc test fixtures/customer-support/cases.yaml\n  agc test fixtures/ --filter-tags smoke\n  agc test fixtures/ --concurrency 4 --format json\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed\n  4  runtime error (IO, network)\n  5  fixture path not found"
 )]
 pub struct TestArgs {
     /// Fixture files or dirs (default: fixtures).

@@ -27,7 +27,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "8917d1131b6e7f1baecdfe3022599bb6df6732b6ef0b60d3a914fc1cdd527d60"
+      "sha256": "e6d97c0e8b8d43a7116a475841c1e453bee7f39f3226eed94b0019884d54ab59"
     },
     {
       "path": "golden/null-pointer-invoice.txt",

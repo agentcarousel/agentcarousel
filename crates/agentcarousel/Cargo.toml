@@ -1,6 +1,6 @@
 [package]
 name = "agentcarousel"
-version = "0.5.7"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.95"
 description = "Unit tests for AI agents. Run behavioral tests in CI, score with an LLM judge, and export signed evidence your auditors accept."
@@ -22,6 +22,10 @@ path = "src/main.rs"
 [[bin]]
 name = "agc"
 path = "src/bin/agc.rs"
+
+[features]
+default = []
+dashboard = ["dep:axum", "dep:tokio-stream"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
@@ -45,7 +49,9 @@ similar = "3"
 tar = "0.4"
 tempfile = "3"
 thiserror = "2.0.18"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "macros"] }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+axum = { version = "0.8", optional = true }
 toml = "1.1.2"
 ulid = "1"
 walkdir = "2"

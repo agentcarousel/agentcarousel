@@ -341,3 +341,149 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(retention|delete.*expired|purge|retention.*limit|not.*indefinitely)'
+
+  # ── Case 6: Pseudonymous mixed schema — tiered classification ────────────────
+  - id: data-privacy-classifier/happy-path-pseudonymous-mixed
+    description: >
+      Schema mixes HIGH (full_name, shipping_address), MEDIUM pseudonymous
+      (user_uuid as FK, email_hmac via HMAC-SHA256), and LOW (order_total,
+      login_timestamp) fields. Agent must tier each correctly and include the
+      standard engineering-guidance disclaimer.
+    tags: [data-privacy, classification, smoke]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Please classify the following database schema fields for GDPR and CCPA sensitivity:
+            - user_uuid: UUID, foreign key to users table
+            - email_hmac: HMAC-SHA256 hash of user email
+            - full_name: VARCHAR(255)
+            - order_total: DECIMAL(10,2)
+            - shipping_address: TEXT
+            - login_timestamp: DATETIME
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(full.name.*high|full.name.*personal.*data|full.name.*PII)'
+        - kind: regex
+          value: '(?i)(shipping.address.*high|shipping.*personal.*data|shipping.*PII)'
+        - kind: regex
+          value: '(?i)(user.uuid.*medium|user.uuid.*pseudonym|uuid.*linkable|uuid.*foreign)'
+        - kind: regex
+          value: '(?i)(email.hmac.*medium|hmac.*pseudonym|email.hmac.*pseudonymous)'
+        - kind: regex
+          value: '(?i)(order.total.*low|order.total.*not.*personal|total.*aggregate|total.*non.PII)'
+        - kind: regex
+          value: '(?i)(login.timestamp.*low|login.*not.*personal|timestamp.*non.PII)'
+        - kind: regex
+          value: '(?i)(engineering.*guidance.*not.*legal|not.*legal.*advice)'
+        - kind: not_contains
+          value: MD5
+        - kind: regex
+          value: '(?i)(HMAC.SHA256|HMAC.*SHA)'
+
+      rubric:
+        - id: high-sensitivity-correct
+          description: >
+            Correctly identifies full_name and shipping_address as HIGH sensitivity
+            personal data requiring protection.
+          weight: 0.3
+          auto_check:
+            kind: regex
+            value: '(?i)(full.name.*high|full.name.*personal.*data|full.name.*PII)'
+        - id: medium-sensitivity-correct
+          description: >
+            Correctly identifies user_uuid and email_hmac as MEDIUM sensitivity
+            pseudonymous data, noting HMAC-SHA256 is stronger than MD5.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(user.uuid.*pseudonym|user.uuid.*medium|uuid.*linkable|uuid.*foreign)'
+        - id: low-sensitivity-correct
+          description: >
+            Correctly identifies order_total and login_timestamp as LOW sensitivity
+            non-personal data.
+          weight: 0.2
+          auto_check:
+            kind: regex
+            value: '(?i)(order.total.*low|order.total.*not.*personal|total.*aggregate)'
+        - id: disclaimer-present
+          description: >
+            Includes the standard disclaimer about engineering guidance, not legal advice.
+          weight: 0.1
+          auto_check:
+            kind: regex
+            value: '(?i)(engineering.*guidance|not.*legal.*advice)'
+
+  # ── Case 7: All-low schema — no false positives ───────────────────────────
+  - id: data-privacy-classifier/edge-case-only-low-sensitivity
+    description: >
+      Schema composed entirely of aggregate/categorical product data — no
+      personal identifiers. Agent must classify all fields as LOW sensitivity
+      without inventing GDPR/CCPA concerns, and include the standard disclaimer.
+    tags: [data-privacy, classification, edge-case]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            I need to classify the following fields:
+            - product_id: INT
+            - category_name: VARCHAR(100)
+            - stock_count: INT
+            - last_updated_at: TIMESTAMP
+            - country_code: CHAR(2)
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(product.id.*low|product.id.*not.*personal|product.*non.PII)'
+        - kind: regex
+          value: '(?i)(category.name.*low|category.*not.*personal)'
+        - kind: regex
+          value: '(?i)(stock.count.*low|stock.*not.*personal|count.*aggregate)'
+        - kind: regex
+          value: '(?i)(last.updated.at.*low|timestamp.*not.*personal|updated.*non.PII)'
+        - kind: regex
+          value: '(?i)(country.code.*low|country.*not.*personal)'
+        - kind: not_contains
+          value: HIGH sensitivity
+        - kind: not_contains
+          value: MEDIUM sensitivity
+        - kind: regex
+          value: '(?i)(engineering.*guidance|not.*legal.*advice)'
+        - kind: not_contains
+          value: encrypt
+        - kind: not_contains
+          value: access control
+
+      rubric:
+        - id: all-low-sensitivity
+          description: >
+            All provided fields are correctly classified as LOW sensitivity (or
+            non-personal/aggregate data) with appropriate reasoning.
+          weight: 0.7
+          auto_check:
+            kind: regex
+            value: '(?i)(product.*low|product.*not.*personal|no.*personal.*data|aggregate)'
+        - id: no-false-positives
+          description: >
+            Agent does not invent privacy concerns — no HIGH or MEDIUM sensitivity
+            claims for these non-personal fields.
+          weight: 0.2
+          auto_check:
+            kind: not_contains
+            value: HIGH sensitivity
+        - id: disclaimer-present
+          description: >
+            Includes the standard disclaimer about engineering guidance, not legal advice.
+          weight: 0.1
+          auto_check:
+            kind: regex
+            value: '(?i)(engineering.*guidance|not.*legal.*advice)'

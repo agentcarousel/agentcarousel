@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run Detail — AgentCarousel</title>
+<style>
+:root{--bg:#f4f4f4;--surface:#ffffff;--surface2:#efefef;--border:#dde1e4;--accent:#3d3d3d;--text:#1a1a1a;--muted:#6e7681;--green:#1a6b35;--red:#b91c1c;--yellow:#92400e;--orange:#b45309}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}
+nav{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:24px;position:sticky;top:0;z-index:10}
+.brand{color:var(--accent);font-weight:700;font-size:15px}
+nav a{color:var(--muted);font-size:13px}
+nav a:hover{color:var(--text)}
+main{max-width:1200px;margin:0 auto;padding:28px 24px}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;margin-bottom:20px}
+.back:hover{color:var(--text)}
+.run-header{margin-bottom:24px}
+.run-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.run-meta{color:var(--muted);font-size:13px}
+.summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.stat-value{font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.stat-value.accent{color:var(--accent)}
+.stat-value.green{color:var(--green)}
+.stat-value.red{color:var(--red)}
+h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13px}
+th{text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child>td{border-bottom:none}
+.case-row{cursor:pointer}
+.case-row:hover>td{background:var(--surface2)}
+.case-row.open>td{background:var(--surface2)}
+.detail-row{display:none;background:var(--surface2)}
+.detail-row.open{display:table-row}
+.detail-inner{padding:16px 14px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.detail-section h3{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.trace-step{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px;font-size:12px}
+.step-kind{font-weight:600;color:var(--accent);margin-bottom:4px;font-size:11px;text-transform:uppercase}
+.step-tool{color:var(--text);margin-bottom:4px}
+.step-meta{color:var(--muted);font-size:11px}
+.rubric-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.rubric-item:last-child{border-bottom:none}
+.rubric-id{color:var(--text);flex:1}
+.rubric-score{font-weight:700;font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
+.rubric-bar{width:60px;height:4px;background:var(--border);border-radius:2px;margin-left:10px;flex-shrink:0}
+.rubric-fill{height:100%;border-radius:2px;background:var(--accent)}
+.judge-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;color:var(--text);line-height:1.6;margin-top:8px}
+.output-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;font-family:"SFMono-Regular",Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin-top:8px;color:var(--text)}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
+.passed{background:rgba(63,185,80,.15);color:var(--green)}
+.failed{background:rgba(248,81,73,.15);color:var(--red)}
+.error{background:rgba(248,81,73,.12);color:var(--red)}
+.flaky{background:rgba(227,179,65,.15);color:var(--orange)}
+.skipped,.timed_out{background:rgba(139,148,158,.15);color:var(--muted)}
+.mono{font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;color:var(--muted)}
+.dim{color:var(--muted)}
+.expand-icon{color:var(--muted);font-size:10px;transition:transform .15s}
+.open .expand-icon{transform:rotate(90deg)}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">⬡ AgentCarousel</span>
+  <a href="/">Dashboard</a>
+  <a href="/compare">Compare</a>
+  <a href="/review">Review</a>
+</nav>
+<main>
+  <a class="back" href="/">← Dashboard</a>
+  <div class="run-header">
+    <div class="run-title" id="run-title">Loading…</div>
+    <div class="run-meta" id="run-meta"></div>
+  </div>
+  <div class="summary-grid" id="summary"></div>
+  <h2>Cases</h2>
+  <table>
+    <thead><tr>
+      <th></th><th>Case ID</th><th>Status</th>
+      <th>Effectiveness</th><th>Latency</th><th>Steps</th>
+    </tr></thead>
+    <tbody id="cases-body">
+      <tr><td colspan="6" class="dim" style="text-align:center;padding:32px">Loading…</td></tr>
+    </tbody>
+  </table>
+</main>
+<script>
+const runId = location.pathname.replace(/^\/runs\//, '').split('/')[0];
+if (!runId) location.href = '/';
+
+function badge(status) {
+  const map = {passed:'pass',failed:'fail',error:'error',flaky:'flaky',skipped:'skipped',timed_out:'timed_out'};
+  const cls = map[status] || 'skipped';
+  return `<span class="badge ${cls}">${status.replace('_',' ')}</span>`;
+}
+function score(v) { return v == null ? '—' : v.toFixed(2); }
+function ms(v) { return v == null ? '—' : v >= 1000 ? (v/1000).toFixed(1)+'s' : v+'ms'; }
+function fmtTime(iso) { return new Date(iso).toLocaleString(); }
+function shortId(id) { return (id||'').slice(0,8); }
+
+function statCard(label, value, cls='') {
+  return `<div class="stat-card">
+    <div class="stat-label">${label}</div>
+    <div class="stat-value ${cls}">${value}</div>
+  </div>`;
+}
+
+function renderTrace(steps) {
+  if (!steps || !steps.length) return '<p class="dim" style="font-size:12px">No trace steps recorded.</p>';
+  return steps.map(s => `
+    <div class="trace-step">
+      <div class="step-kind">${s.kind.replace('_',' ')}</div>
+      ${s.tool ? `<div class="step-tool">${s.tool}</div>` : ''}
+      <div class="step-meta">${ms(s.latency_ms)}${s.tokens_in ? ` · ${s.tokens_in} in` : ''}${s.tokens_out ? ` / ${s.tokens_out} out` : ''}</div>
+    </div>`).join('');
+}
+
+function renderRubric(scores) {
+  if (!scores || !scores.length) return '<p class="dim" style="font-size:12px">No rubric scores.</p>';
+  return scores.map(s => `
+    <div class="rubric-item">
+      <span class="rubric-id">${s.rubric_id}</span>
+      <span class="rubric-score" style="color:${s.score >= 0.7 ? 'var(--green)' : s.score >= 0.4 ? 'var(--yellow)' : 'var(--red)'}">${s.score.toFixed(2)}</span>
+      <div class="rubric-bar"><div class="rubric-fill" style="width:${(s.score*100).toFixed(0)}%"></div></div>
+    </div>`).join('');
+}
+
+async function load() {
+  const run = await fetch(`/api/runs/${runId}`).then(r => {
+    if (!r.ok) throw new Error('Run not found');
+    return r.json();
+  }).catch(e => null);
+
+  if (!run) {
+    document.querySelector('#run-title').textContent = 'Run not found';
+    return;
+  }
+
+  const s = run.summary || {};
+  document.title = `Run ${shortId(run.id)} — AgentCarousel`;
+  document.querySelector('#run-title').textContent = `Run ${shortId(run.id)}`;
+  document.querySelector('#run-meta').textContent =
+    `${run.skill_or_agent || 'unknown'} · ${fmtTime(run.started_at)} · ${run.command || ''}`;
+
+  const summaryEl = document.querySelector('#summary');
+  summaryEl.innerHTML = [
+    statCard('Total', s.total ?? '—'),
+    statCard('Passed', s.passed ?? '—', 'green'),
+    statCard('Failed', s.failed ?? '—', 'red'),
+    statCard('Errored', s.errored ?? '—', 'red'),
+    statCard('Pass Rate', s.pass_rate != null ? (s.pass_rate*100).toFixed(0)+'%' : '—', 'accent'),
+    statCard('Effectiveness', score(s.mean_effectiveness_score), 'accent'),
+  ].join('');
+
+  const tbody = document.querySelector('#cases-body');
+  if (!run.cases || !run.cases.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="dim" style="text-align:center;padding:24px">No cases in this run.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = run.cases.map((c, i) => {
+    const es = c.eval_scores;
+    const detailId = `detail-${i}`;
+    const hasDetail = !!(c.trace?.steps?.length || es);
+    return `
+      <tr class="case-row" onclick="toggleDetail(${i})" id="row-${i}">
+        <td style="width:20px"><span class="expand-icon">▶</span></td>
+        <td class="mono">${c.case_id}</td>
+        <td>${badge(c.status)}</td>
+        <td>${score(es?.effectiveness_score)}</td>
+        <td class="dim">${ms(c.metrics?.total_latency_ms)}</td>
+        <td class="dim">${c.metrics?.total_steps ?? '—'}</td>
+      </tr>
+      <tr class="detail-row" id="${detailId}">
+        <td colspan="6">
+          <div class="detail-inner">
+            <div class="detail-section">
+              <h3>Output</h3>
+              <div class="output-box">${escHtml(c.trace?.final_output || '(no output)')}</div>
+              ${es?.judge_rationale ? `<h3 style="margin-top:14px">Judge Rationale</h3><div class="judge-box">${escHtml(es.judge_rationale)}</div>` : ''}
+            </div>
+            <div class="detail-section">
+              <h3>Rubric Scores</h3>
+              ${renderRubric(es?.rubric_scores)}
+              <h3 style="margin-top:16px">Execution Trace</h3>
+              ${renderTrace(c.trace?.steps)}
+            </div>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function toggleDetail(i) {
+  const row = document.getElementById(`row-${i}`);
+  const detail = document.getElementById(`detail-${i}`);
+  row.classList.toggle('open');
+  detail.classList.toggle('open');
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+load().catch(console.error);
+</script>
+</body>
+</html>

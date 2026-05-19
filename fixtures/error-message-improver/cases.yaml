@@ -325,3 +325,103 @@ cases:
           auto_check:
             kind: not_contains
             value: "deadlock"
+
+  # ── Case 6: Network refused with internal identifiers ────────────────────────
+  - id: error-message-improver/positive-network-refused-internal
+    description: >
+      ECONNREFUSED containing an internal service name and port number surfaces to
+      end users. Agent must produce a friendly message that drops internal identifiers,
+      explains what happened in user terms, and gives a concrete next step.
+    tags: [happy-path, smoke, network-error]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            An unexpected error occurred: ECONNREFUSED. Connection to 'backend-service-123' on port 8080 was refused.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: "(?i)(couldn.t connect|unable to connect|failed to connect|service.*unavailable|connection.*problem)"
+        - kind: regex
+          value: '(?i)(try again|retry|please.*try|contact.*support)'
+        - kind: not_contains
+          value: ECONNREFUSED
+        - kind: not_contains
+          value: backend-service-123
+        - kind: not_contains
+          value: port 8080
+
+      rubric:
+        - id: plain-language
+          description: >
+            Improved message replaces ECONNREFUSED and the internal service name with
+            user-friendly language explaining a connection failure.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: "(?i)(couldn.t connect|unable to connect|failed to connect|connection.*problem|service.*unavailable)"
+        - id: explanation-and-action
+          description: >
+            Message explains what happened and gives a concrete next step — try again
+            or contact support.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(try again|retry|contact.*support|reach.*support)'
+        - id: conciseness
+          description: >
+            Improved message is brief — no internal identifiers, no stack trace, no
+            unnecessary technical detail beyond what helps the user act.
+          weight: 0.2
+
+  # ── Case 7: Vague error with no context ──────────────────────────────────────
+  - id: error-message-improver/edge-missing-info-vague
+    description: >
+      Extremely vague error message ("Failed to process.") with no context. Agent
+      must produce a user-friendly acknowledgement and next step without inventing
+      technical specifics that were not provided.
+    tags: [edge-case, vague-input]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Failed to process.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(encountered.*issue|something went wrong|unable to complete|error.*occurred|problem.*occurred)'
+        - kind: regex
+          value: '(?i)(try again|retry|contact.*support)'
+        - kind: not_contains
+          value: "Failed to process."
+
+      rubric:
+        - id: plain-language-vague
+          description: >
+            Message transforms the vague input into plain, understandable language
+            without inventing technical context that was not provided.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(encountered.*issue|something went wrong|unable to complete|error.*occurred)'
+        - id: actionable-despite-vagueness
+          description: >
+            Message provides a concrete next step — try again or contact support —
+            despite the lack of initial context.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(try again|retry|contact.*support)'
+        - id: conciseness
+          description: >
+            Message is brief and does not fabricate specifics — no invented service
+            names, operation details, or technical terms.
+          weight: 0.2
