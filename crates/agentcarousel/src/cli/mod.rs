@@ -21,6 +21,7 @@ mod test;
 mod trust_check;
 mod update;
 mod validate;
+mod watch;
 
 use clap::builder::styling::{AnsiColor, Color, Effects, RgbColor, Style, Styles};
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -113,6 +114,8 @@ enum Command {
     Stats(stats::StatsArgs),
     /// Compare two eval runs and gate on regressions.
     Compare(compare::CompareArgs),
+    /// Run tests automatically whenever you save a fixture file.
+    Watch(watch::WatchArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -145,6 +148,7 @@ fn help_template() -> String {
     let validate = c("validate");
     let test = c("test");
     let eval = c("eval");
+    let watch = c("watch");
     let generate = c("generate");
     let lint = c("lint");
     let init = c("init");
@@ -180,6 +184,7 @@ Usage:
   {validate}     Validate YAML/TOML fixtures against the schema (no execution); scans `.` by default
   {test}         Run fixtures with mock generation (no API keys required)
   {eval}         Run evaluation with mock or live generation; optionally score with an LLM judge
+  {watch}        Run tests automatically whenever you save a fixture file
   {generate}     Generate fixture cases for a skill using an LLM
   {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
   {init}         Scaffold a new skill or agent fixture template
@@ -235,6 +240,7 @@ pub fn run() -> i32 {
         Command::TrustCheck(a) => a.config.as_deref(),
         Command::Doctor(a) => a.config.as_deref(),
         Command::Stats(a) => a.config.as_deref(),
+        Command::Watch(a) => a.config.as_deref(),
         _ => None,
     };
 
@@ -284,6 +290,7 @@ pub fn run() -> i32 {
         Command::Lint(args) => lint::run_lint(args, &globals),
         Command::Stats(args) => stats::run_stats(args, &config, &globals),
         Command::Compare(args) => compare::run_compare(args, &globals),
+        Command::Watch(args) => watch::run_watch(args, &config, &globals),
     }
 }
 
@@ -293,9 +300,9 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval watch generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval generate lint init report stats export bundle publish trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval watch generate lint init report stats export bundle publish trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");
