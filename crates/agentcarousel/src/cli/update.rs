@@ -10,6 +10,9 @@ const API_BASE: &str = "https://api.github.com";
 const DL_BASE: &str = "https://github.com";
 
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc update                          # upgrade slim binary in-place\n  agc update --check                  # print available version without installing\n  agc update --feature dashboard      # upgrade to the full binary (includes web dashboard)\n  agc update --yes                    # skip confirmation prompt (CI)\n  agc update --feature dashboard -y   # non-interactive full upgrade"
+)]
 /// Check for and install updates to the agentcarousel CLI.
 pub struct UpdateArgs {
     /// Print whether an update is available without installing it.
@@ -18,6 +21,9 @@ pub struct UpdateArgs {
     /// Skip the confirmation prompt (useful for CI/non-interactive shells).
     #[arg(short = 'y', long)]
     pub yes: bool,
+    /// Enable an optional feature in the downloaded binary (e.g. `--feature dashboard`).
+    #[arg(long = "feature", value_name = "FEATURE")]
+    pub features: Vec<String>,
 }
 
 pub fn run_update(args: UpdateArgs) -> i32 {
@@ -54,7 +60,8 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     }
 
     let triple = target_triple()?;
-    let asset = format!("agentcarousel-{tag}-{triple}.tar.gz");
+    let variant = resolve_variant(&args);
+    let asset = asset_name(&tag, triple, variant);
     let tarball_url = format!("{DL_BASE}/{REPO}/releases/download/{tag}/{asset}");
     let sums_url = format!("{DL_BASE}/{REPO}/releases/download/{tag}/SHA256SUMS");
 
@@ -74,6 +81,22 @@ fn update(args: UpdateArgs) -> Result<(), String> {
 
     println!("updated to agentcarousel {latest}.");
     Ok(())
+}
+
+fn resolve_variant(args: &UpdateArgs) -> &'static str {
+    if args.features.iter().any(|f| f == "dashboard") {
+        "full"
+    } else {
+        "slim"
+    }
+}
+
+fn asset_name(tag: &str, triple: &str, variant: &str) -> String {
+    if variant == "full" {
+        format!("agentcarousel-{tag}-{triple}-full.tar.gz")
+    } else {
+        format!("agentcarousel-{tag}-{triple}.tar.gz")
+    }
 }
 
 fn fetch_latest_tag() -> Result<String, String> {

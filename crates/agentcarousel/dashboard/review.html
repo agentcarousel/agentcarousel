@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Judge Review — AgentCarousel</title>
+<style>
+:root{--bg:#f4f4f4;--surface:#ffffff;--surface2:#efefef;--border:#dde1e4;--accent:#3d3d3d;--text:#1a1a1a;--muted:#6e7681;--green:#1a6b35;--red:#b91c1c;--yellow:#92400e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}
+nav{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:24px;position:sticky;top:0;z-index:10}
+.brand{color:var(--accent);font-weight:700;font-size:15px}
+nav a{color:var(--muted);font-size:13px}
+nav a:hover,nav a.active{color:var(--text)}
+main{max-width:900px;margin:0 auto;padding:28px 24px}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;margin-bottom:20px}
+.back:hover{color:var(--text)}
+h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+.run-picker{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:24px;display:flex;gap:12px;align-items:flex-end}
+.form-group{flex:1}
+label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+input:focus{border-color:var(--accent)}
+input::placeholder{color:var(--muted)}
+select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+select:focus{border-color:var(--accent)}
+select option{background:var(--surface);color:var(--text)}
+button.primary{background:var(--accent);color:#ffffff;border:none;border-radius:6px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+button.primary:hover{opacity:.9}
+.page-title{font-size:18px;font-weight:700;margin-bottom:4px}
+.page-meta{color:var(--muted);font-size:13px;margin-bottom:24px}
+.case-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
+.case-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.case-id{font-family:"SFMono-Regular",Consolas,monospace;font-size:13px;font-weight:600;color:var(--accent)}
+.eff-score{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.section-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;margin-top:14px}
+.msg-block{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12px;margin-bottom:6px}
+.msg-role{font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:var(--muted)}
+.msg-role.user{color:var(--accent)}
+.msg-role.assistant{color:var(--green)}
+.output-box,.rationale-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto;color:var(--text)}
+.rubric-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}
+.rubric-row:last-child{border-bottom:none}
+.rubric-id{flex:1;color:var(--text)}
+.rubric-score{font-weight:700;font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
+.annotation-row{display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.verdict-btn{border:1px solid var(--border);background:transparent;color:var(--text);border-radius:6px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.verdict-btn:hover{border-color:var(--accent);color:var(--accent)}
+.verdict-btn.active-correct{background:rgba(63,185,80,.15);border-color:var(--green);color:var(--green)}
+.verdict-btn.active-wrong{background:rgba(248,81,73,.15);border-color:var(--red);color:var(--red)}
+.verdict-btn.active-borderline{background:rgba(210,153,34,.15);border-color:var(--yellow);color:var(--yellow)}
+.note-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;font-family:inherit;outline:none}
+.note-input:focus{border-color:var(--accent)}
+.saved-chip{font-size:11px;color:var(--green);display:none}
+.placeholder{text-align:center;padding:60px;color:var(--muted)}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">⬡ AgentCarousel</span>
+  <a href="/">Dashboard</a>
+  <a href="/compare">Compare</a>
+  <a href="/review" class="active">Review</a>
+</nav>
+<main>
+  <a class="back" href="/">← Dashboard</a>
+  <div class="run-picker">
+    <div class="form-group">
+      <label>Judged Run</label>
+      <select id="run-select">
+        <option value="" disabled selected>Loading judged runs…</option>
+      </select>
+    </div>
+    <button class="primary" onclick="loadSelectedRun()">Review</button>
+  </div>
+  <div id="content">
+    <div class="placeholder" id="placeholder">Select a run above to start reviewing judge annotations.</div>
+  </div>
+</main>
+<script>
+let currentRunId = null;
+const reviews = {};
+
+function score(v) { return v == null ? '—' : v.toFixed(2); }
+function fmtTime(iso) {
+  const d = new Date(iso), now = new Date(), diff = now - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+  return d.toLocaleDateString();
+}
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function loadSelectedRun() {
+  const sel = document.getElementById('run-select');
+  const runId = sel.value;
+  if (!runId) return;
+  currentRunId = runId;
+  history.replaceState(null, '', `?run=${encodeURIComponent(runId)}`);
+  renderRun(runId);
+}
+
+async function populateRunPicker(preselectId) {
+  const sel = document.getElementById('run-select');
+  const data = await fetch('/api/runs?limit=100').then(r => r.json()).catch(() => ({ runs: [] }));
+  const allRuns = data.runs || [];
+
+  // Filter to runs with at least one judged case, take up to 5
+  const judgedRuns = allRuns
+    .filter(r => (r.cases || []).some(c => c.eval_scores?.judge_rationale))
+    .slice(0, 5);
+
+  if (!judgedRuns.length) {
+    sel.innerHTML = '<option value="" disabled selected>No judged runs yet — run agc eval --judge</option>';
+    return;
+  }
+
+  sel.innerHTML = judgedRuns.map(r => {
+    const judgedCount = (r.cases || []).filter(c => c.eval_scores?.judge_rationale).length;
+    const label = `${r.id.slice(0, 8)} — ${r.skill_or_agent || 'unknown'} — ${judgedCount} judged case${judgedCount === 1 ? '' : 's'} (${fmtTime(r.started_at)})`;
+    const selected = r.id === preselectId ? ' selected' : '';
+    return `<option value="${r.id}"${selected}>${label}</option>`;
+  }).join('');
+
+  // Auto-load: use preselectId if valid, otherwise first in list
+  const toLoad = preselectId && judgedRuns.find(r => r.id === preselectId)
+    ? preselectId
+    : judgedRuns[0].id;
+  sel.value = toLoad;
+  currentRunId = toLoad;
+  renderRun(toLoad);
+}
+
+async function renderRun(runId) {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="placeholder">Loading…</div>';
+
+  const [run, existingReviews] = await Promise.all([
+    fetch(`/api/runs/${runId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+    fetch(`/api/reviews?run=${encodeURIComponent(runId)}`).then(r => r.json()).catch(() => []),
+  ]);
+
+  if (!run) {
+    content.innerHTML = '<div class="placeholder">Run not found.</div>';
+    return;
+  }
+
+  // Load existing reviews into state
+  (existingReviews || []).forEach(r => {
+    reviews[r.case_id] = { verdict: r.verdict, note: r.note || '' };
+  });
+
+  const judgedCases = (run.cases || []).filter(c => c.eval_scores?.judge_rationale);
+  if (!judgedCases.length) {
+    content.innerHTML = `
+      <div class="page-title">Run ${runId.slice(0,8)}</div>
+      <div class="page-meta">${run.skill_or_agent || ''}</div>
+      <div class="placeholder">No judged cases in this run. Run with <code>agc eval --judge</code> to enable judge review.</div>`;
+    return;
+  }
+
+  const cards = judgedCases.map((c, idx) => {
+    const es = c.eval_scores;
+    const effColor = es.effectiveness_score >= 0.7 ? 'var(--green)' : es.effectiveness_score >= 0.4 ? 'var(--yellow)' : 'var(--red)';
+    const rev = reviews[c.case_id] || {};
+
+    const rubricsHtml = (es.rubric_scores || []).map(r =>
+      `<div class="rubric-row">
+        <span class="rubric-id">${escHtml(r.rubric_id)}</span>
+        <span class="rubric-score" style="color:${r.score >= 0.7 ? 'var(--green)' : r.score >= 0.4 ? 'var(--yellow)' : 'var(--red)'}">${r.score.toFixed(2)}</span>
+        ${r.rationale ? `<span style="color:var(--muted);font-size:11px;flex:2">${escHtml(r.rationale)}</span>` : ''}
+      </div>`).join('');
+
+    const verdictBtns = ['correct','wrong','borderline'].map(v =>
+      `<button class="verdict-btn ${rev.verdict === v ? `active-${v}` : ''}" id="btn-${idx}-${v}"
+        onclick="setVerdict('${c.case_id}', ${idx}, '${v}')">${v === 'correct' ? '✓ Correct' : v === 'wrong' ? '✗ Wrong' : '~ Borderline'}</button>`
+    ).join('');
+
+    return `<div class="case-card" id="card-${idx}">
+      <div class="case-header">
+        <span class="case-id">${escHtml(c.case_id)}</span>
+        <span class="eff-score" style="color:${effColor}">${es.effectiveness_score.toFixed(2)}</span>
+      </div>
+      <div class="section-label">Judge Rationale</div>
+      <div class="rationale-box">${escHtml(es.judge_rationale)}</div>
+      <div class="section-label">Output</div>
+      <div class="output-box">${escHtml(c.trace?.final_output || '(no output)')}</div>
+      ${rubricsHtml ? `<div class="section-label">Rubric Scores</div>${rubricsHtml}` : ''}
+      <div class="annotation-row">
+        ${verdictBtns}
+        <input class="note-input" id="note-${idx}" placeholder="Optional note…"
+          value="${escHtml(rev.note || '')}"
+          onchange="saveAnnotation('${c.case_id}', ${idx})">
+        <span class="saved-chip" id="saved-${idx}">Saved ✓</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="page-title">Run ${runId.slice(0,8)}</div>
+    <div class="page-meta">${escHtml(run.skill_or_agent || '')} · ${judgedCases.length} judged case${judgedCases.length === 1 ? '' : 's'}</div>
+    ${cards}`;
+}
+
+function setVerdict(caseId, idx, verdict) {
+  ['correct','wrong','borderline'].forEach(v => {
+    document.getElementById(`btn-${idx}-${v}`)?.classList.remove(`active-${v}`);
+  });
+  document.getElementById(`btn-${idx}-${verdict}`)?.classList.add(`active-${verdict}`);
+  if (!reviews[caseId]) reviews[caseId] = {};
+  reviews[caseId].verdict = verdict;
+  saveAnnotation(caseId, idx);
+}
+
+async function saveAnnotation(caseId, idx) {
+  const note = document.getElementById(`note-${idx}`)?.value || '';
+  if (!reviews[caseId]) reviews[caseId] = {};
+  reviews[caseId].note = note;
+
+  if (!reviews[caseId].verdict && !note) return;
+
+  await fetch('/api/reviews', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      run_id: currentRunId,
+      case_id: caseId,
+      verdict: reviews[caseId].verdict || 'borderline',
+      note: note || null,
+    }),
+  }).catch(() => {});
+
+  const chip = document.getElementById(`saved-${idx}`);
+  if (chip) {
+    chip.style.display = 'inline';
+    setTimeout(() => { chip.style.display = 'none'; }, 2000);
+  }
+}
+
+const qRun = new URLSearchParams(location.search).get('run');
+populateRunPicker(qRun).catch(console.error);
+</script>
+</body>
+</html>

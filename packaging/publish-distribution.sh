@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 pack <release-tag> <rust-triple> <path-to-binary> <out-dir>" >&2
+  echo "usage: $0 pack <release-tag> <rust-triple> <path-to-binary> <out-dir> [full]" >&2
   echo "       $0 checksums <release-assets-dir>" >&2
   echo "       $0 scan-release-dir <release-assets-dir>" >&2
 }
@@ -14,7 +14,10 @@ cmd_pack() {
   local target="$2"
   local bin_path="$3"
   local outdir="$4"
-  local asset="agentcarousel-${tag}-${target}.tar.gz"
+  local variant="${5:-}"
+  local suffix=""
+  [[ "${variant}" == "full" ]] && suffix="-full"
+  local asset="agentcarousel-${tag}-${target}${suffix}.tar.gz"
   local tmp
   local outdir_abs
   tmp="$(mktemp -d)"

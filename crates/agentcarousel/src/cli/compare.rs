@@ -12,7 +12,7 @@ const DEFAULT_THRESHOLD: f32 = 0.05;
 /// Compare eval runs and gate on regressions.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc compare -l --baseline <run-id>\n  agc compare -l --baseline <run-id> --threshold 0.05\n  agc compare <run-id> --baseline <run-id>\n  agc compare tag <run-id> --name prod-baseline\n  agc compare -l  # auto-baseline: previous run for same skill"
+    after_help = "Examples:\n  agc compare -l --baseline <run-id>\n  agc compare -l --baseline <run-id> --threshold 0.05\n  agc compare <run-id> --baseline <run-id>\n  agc compare tag <run-id> --name prod-baseline\n  agc compare -l  # auto-baseline: previous run for same skill\n\nExit codes:\n  0  no regression (or improvement)\n  1  regression exceeds threshold\n  4  runtime error (IO, database)\n  5  run not found in history"
 )]
 pub struct CompareArgs {
     #[command(subcommand)]

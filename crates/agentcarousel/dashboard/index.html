@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgentCarousel Dashboard</title>
+<style>
+:root{--bg:#f4f4f4;--surface:#ffffff;--surface2:#efefef;--border:#dde1e4;--accent:#3d3d3d;--text:#1a1a1a;--muted:#6e7681;--green:#1a6b35;--red:#b91c1c;--yellow:#92400e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}
+nav{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:24px;position:sticky;top:0;z-index:10}
+.brand{color:var(--accent);font-weight:700;font-size:15px}
+nav a{color:var(--muted);font-size:13px;padding:4px 0;border-bottom:2px solid transparent}
+nav a:hover{color:var(--text)}
+nav a.active{color:var(--text);border-color:var(--accent)}
+main{max-width:1200px;margin:0 auto;padding:28px 24px}
+h2{font-size:14px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px 20px}
+.card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.card-value{font-size:30px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:24px}
+.chart-wrap{margin-top:12px;height:72px;overflow:hidden}
+.chart-wrap svg{width:100%;height:72px;display:block}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13px}
+th{text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.run-row{cursor:pointer}
+.run-row:hover td{background:var(--surface2)}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:.3px}
+.pass{background:rgba(63,185,80,.15);color:var(--green)}
+.fail{background:rgba(248,81,73,.15);color:var(--red)}
+.warn{background:rgba(210,153,34,.15);color:var(--yellow)}
+.mono{font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;color:var(--muted)}
+.dim{color:var(--muted)}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">⬡ AgentCarousel</span>
+  <a href="/" class="active">Dashboard</a>
+  <a href="/compare">Compare</a>
+  <a href="/review">Review</a>
+</nav>
+<main>
+  <div class="metrics">
+    <div class="card"><div class="card-label">Total Runs</div><div class="card-value" id="m-runs">—</div></div>
+    <div class="card"><div class="card-label">Pass Rate</div><div class="card-value" id="m-pass">—</div></div>
+    <div class="card"><div class="card-label">Effectiveness</div><div class="card-value" id="m-eff">—</div></div>
+    <div class="card"><div class="card-label">This Week</div><div class="card-value" id="m-week">—</div></div>
+  </div>
+  <div class="chart-card">
+    <h2>Pass Rate — Last 30 Runs</h2>
+    <div class="chart-wrap" id="chart"></div>
+  </div>
+  <h2>Recent Runs</h2>
+  <table>
+    <thead><tr>
+      <th>Run ID</th><th>Skill / Agent</th><th>Started</th>
+      <th>Cases</th><th>Pass Rate</th><th>Effectiveness</th><th>Evaluator</th><th>Mode</th><th>Status</th>
+    </tr></thead>
+    <tbody id="runs-body">
+      <tr><td colspan="9" class="dim" style="text-align:center;padding:32px">Loading…</td></tr>
+    </tbody>
+  </table>
+</main>
+<script>
+const qs = s => document.querySelector(s);
+
+function sparkline(data) {
+  if (!data.length) return '';
+  const W = 800, H = 64, pad = 6;
+  const max = Math.max(...data, 0.01), min = Math.min(...data);
+  const rng = max - min || 0.01;
+  const pts = data.map((v, i) => {
+    const x = (i / Math.max(data.length - 1, 1)) * W;
+    const y = H - ((v - min) / rng) * (H - pad * 2) - pad;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const area = `0,${H} ${pts.join(' ')} ${W},${H}`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6b6b6b" stop-opacity=".15"/>
+      <stop offset="100%" stop-color="#6b6b6b" stop-opacity="0"/>
+    </linearGradient></defs>
+    <polygon fill="url(#lg)" points="${area}"/>
+    <polyline fill="none" stroke="#6b6b6b" stroke-width="1.8"
+      stroke-linejoin="round" stroke-linecap="round" points="${pts.join(' ')}"/>
+  </svg>`;
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+  return d.toLocaleDateString();
+}
+
+function badge(rate) {
+  if (rate == null) return '<span class="badge warn">—</span>';
+  if (rate >= 0.9) return '<span class="badge pass">PASS</span>';
+  if (rate >= 0.7) return '<span class="badge warn">WARN</span>';
+  return '<span class="badge fail">FAIL</span>';
+}
+
+function inferEvaluator(run) {
+  if (run.command === 'test') return 'mock';
+  const cases = run.cases || [];
+  const hasJudge = cases.some(c => c.eval_scores?.judge_rationale);
+  const hasRules = cases.some(c => (c.eval_scores?.rubric_scores || []).length > 0);
+  if (hasJudge && hasRules) return 'all';
+  if (hasJudge) return 'judge';
+  if (hasRules) return 'rules';
+  return 'mock';
+}
+
+function inferMode(run) {
+  if (run.runner_mock_only) return 'mock';
+  return 'live';
+}
+
+function evalBadge(e) {
+  const style = (e === 'judge' || e === 'all')
+    ? 'color:var(--accent);font-weight:600'
+    : 'color:var(--muted)';
+  return `<span style="font-size:11px;${style}">${e.toUpperCase()}</span>`;
+}
+
+function modeBadge(m) {
+  const style = m === 'live' ? 'color:var(--green);font-weight:600' : 'color:var(--muted)';
+  return `<span style="font-size:11px;${style}">${m.toUpperCase()}</span>`;
+}
+
+function pct(v) { return v == null ? '—' : (v * 100).toFixed(0) + '%'; }
+function score(v) { return v == null ? '—' : v.toFixed(2); }
+function shortId(id) { return (id || '').slice(0, 8); }
+
+async function load() {
+  const [runsData, stats] = await Promise.all([
+    fetch('/api/runs?limit=50').then(r => r.json()).catch(() => ({ runs: [] })),
+    fetch('/api/stats').then(r => r.json()).catch(() => ({})),
+  ]);
+  const runs = runsData.runs || [];
+
+  qs('#m-runs').textContent = stats.total_runs ?? '0';
+  qs('#m-pass').textContent = pct(stats.overall_pass_rate);
+  qs('#m-eff').textContent = score(stats.mean_effectiveness);
+  qs('#m-week').textContent = stats.runs_this_week ?? '0';
+
+  const rates = runs.slice().reverse().slice(-30).map(r => r.summary?.pass_rate ?? 0);
+  qs('#chart').innerHTML = sparkline(rates);
+
+  const tbody = qs('#runs-body');
+  if (!runs.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="dim" style="text-align:center;padding:32px">No runs yet — run <code>agc eval</code> to get started.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = runs.map(r => {
+    const s = r.summary || {};
+    return `<tr class="run-row" onclick="location='/runs/${r.id}'">
+      <td class="mono">${shortId(r.id)}</td>
+      <td>${r.skill_or_agent ?? '<span class="dim">—</span>'}</td>
+      <td class="dim">${fmtTime(r.started_at)}</td>
+      <td class="dim">${s.total ?? '—'}</td>
+      <td>${pct(s.pass_rate)}</td>
+      <td>${score(s.mean_effectiveness_score)}</td>
+      <td>${evalBadge(inferEvaluator(r))}</td>
+      <td>${modeBadge(inferMode(r))}</td>
+      <td>${badge(s.pass_rate)}</td>
+    </tr>`;
+  }).join('');
+}
+
+const es = new EventSource('/api/events');
+es.onmessage = () => load();
+es.onerror = () => {};
+
+load().catch(console.error);
+</script>
+</body>
+</html>

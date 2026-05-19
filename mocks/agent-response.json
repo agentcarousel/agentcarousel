@@ -556,5 +556,41 @@
     "response": {
       "content": "Please provide the contents of your .env file so I can audit it. Paste the environment variables you'd like me to review and I'll check them for security issues."
     }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/positive-network-refused-internal"
+    },
+      "response": {
+        "content": "We couldn't connect to the service. Please try again or contact support if the issue continues."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "error-message-improver/edge-missing-info-vague"
+    },
+      "response": {
+        "content": "We encountered an issue completing your request. Please try again, or contact support if the problem persists."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/happy-path-pseudonymous-mixed"
+    },
+      "response": {
+        "content": "full_name is high sensitivity personal data. shipping_address is high sensitivity PII. user_uuid is medium sensitivity — pseudonymous (foreign key to users). email_hmac is medium sensitivity — pseudonymous HMAC-SHA256 hash. order_total is low sensitivity, not personal data. login_timestamp is low sensitivity non-PII. Engineering guidance, not legal advice."
+    }
+  },
+  {
+    "tool": "agent_response",
+    "args_match": {
+      "case_id": "data-privacy-classifier/edge-case-only-low-sensitivity"
+    },
+      "response": {
+        "content": "product_id is low sensitivity, not personal data. category_name is low sensitivity. stock_count is low sensitivity aggregate. last_updated_at is low sensitivity non-PII. country_code is low sensitivity. No personal data is present in this schema. Engineering guidance, not legal advice"
+    }
   }
 ]

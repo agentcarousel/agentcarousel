@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compare Runs — AgentCarousel</title>
+<style>
+:root{--bg:#f4f4f4;--surface:#ffffff;--surface2:#efefef;--border:#dde1e4;--accent:#3d3d3d;--text:#1a1a1a;--muted:#6e7681;--green:#1a6b35;--red:#b91c1c;--yellow:#92400e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}
+nav{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:24px;position:sticky;top:0;z-index:10}
+.brand{color:var(--accent);font-weight:700;font-size:15px}
+nav a{color:var(--muted);font-size:13px}
+nav a:hover,nav a.active{color:var(--text)}
+main{max-width:1200px;margin:0 auto;padding:28px 24px}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;margin-bottom:20px}
+.back:hover{color:var(--text)}
+h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+.compare-form{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:24px;display:flex;gap:12px;align-items:flex-end}
+.form-group{flex:1}
+label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+input:focus{border-color:var(--accent)}
+input::placeholder{color:var(--muted)}
+button{background:var(--accent);color:#ffffff;border:none;border-radius:6px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+button:hover{opacity:.9}
+.summary-cols{display:grid;grid-template-columns:1fr auto 1fr;gap:0;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.col{padding:20px}
+.col:first-child{border-right:1px solid var(--border)}
+.col:last-child{border-left:1px solid var(--border)}
+.col-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.col-id{font-family:"SFMono-Regular",Consolas,monospace;font-size:13px;color:var(--accent);margin-bottom:8px}
+.metric-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border)}
+.metric-row:last-child{border-bottom:none}
+.metric-label{color:var(--muted)}
+.metric-value{font-weight:600;font-variant-numeric:tabular-nums}
+.delta-col{padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.delta-badge{padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700}
+.delta-positive{background:rgba(63,185,80,.15);color:var(--green)}
+.delta-negative{background:rgba(248,81,73,.15);color:var(--red)}
+.delta-neutral{background:rgba(139,148,158,.15);color:var(--muted)}
+.regression-banner{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);border-radius:8px;padding:12px 16px;margin-bottom:20px;color:var(--red);font-weight:600;display:none}
+.ok-banner{background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:8px;padding:12px 16px;margin-bottom:20px;color:var(--green);font-weight:600;display:none}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13px}
+th{text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px}
+td{padding:10px 14px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+.reg-row td{background:rgba(248,81,73,.05)}
+.mono{font-family:"SFMono-Regular",Consolas,monospace;font-size:12px}
+.dim{color:var(--muted)}
+.placeholder{text-align:center;padding:40px;color:var(--muted)}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">⬡ AgentCarousel</span>
+  <a href="/">Dashboard</a>
+  <a href="/compare" class="active">Compare</a>
+  <a href="/review">Review</a>
+</nav>
+<main>
+  <a class="back" href="/">← Dashboard</a>
+  <div class="compare-form">
+    <div class="form-group">
+      <label>Baseline Run ID</label>
+      <input type="text" id="inp-a" placeholder="run-id or tag name (e.g. prod-baseline)">
+    </div>
+    <div class="form-group">
+      <label>Current Run ID</label>
+      <input type="text" id="inp-b" placeholder="run-id to compare">
+    </div>
+    <button onclick="compare()">Compare</button>
+  </div>
+  <div class="regression-banner" id="reg-banner">⚠ Regression detected — effectiveness delta exceeds threshold</div>
+  <div class="ok-banner" id="ok-banner">✓ No regression detected</div>
+  <div id="results" style="display:none">
+    <div class="summary-cols" id="summary-cols"></div>
+    <h2>Case Deltas</h2>
+    <table>
+      <thead><tr>
+        <th>Case ID</th><th>Before</th><th>After</th><th>Delta</th><th>Regression</th>
+      </tr></thead>
+      <tbody id="cases-body"></tbody>
+    </table>
+  </div>
+  <div class="placeholder" id="placeholder">Enter two run IDs above to compare them, or share a link with <code>?a=id1&amp;b=id2</code></div>
+</main>
+<script>
+function pct(v) { return v == null ? '—' : (v * 100).toFixed(0) + '%'; }
+function score(v) { return v == null ? '—' : (typeof v === 'number' ? v.toFixed(3) : v); }
+function deltaStr(v) { return v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(3); }
+function shortId(id) { return (id || '').slice(0, 8); }
+
+async function compare() {
+  const a = document.getElementById('inp-a').value.trim();
+  const b = document.getElementById('inp-b').value.trim();
+  if (!a || !b) return;
+  history.replaceState(null, '', `?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+  await runCompare(a, b);
+}
+
+async function runCompare(a, b) {
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('reg-banner').style.display = 'none';
+  document.getElementById('ok-banner').style.display = 'none';
+
+  const data = await fetch(`/api/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`)
+    .then(r => r.json()).catch(() => null);
+
+  if (!data || data.error) {
+    document.getElementById('placeholder').textContent = data?.error || 'Compare failed — check run IDs.';
+    document.getElementById('placeholder').style.display = 'block';
+    return;
+  }
+
+  if (data.regression) {
+    document.getElementById('reg-banner').style.display = 'block';
+  } else {
+    document.getElementById('ok-banner').style.display = 'block';
+  }
+
+  const cols = document.getElementById('summary-cols');
+  const effDelta = data.overall_effectiveness_delta;
+  const prDelta = data.pass_rate_delta;
+  const effDeltaStr = effDelta == null ? '—' : (effDelta >= 0 ? '+' : '') + effDelta.toFixed(3);
+  const prDeltaStr = prDelta == null ? '—' : (prDelta >= 0 ? '+' : '') + (prDelta * 100).toFixed(1) + '%';
+  const deltaColor = v => v == null ? 'neutral' : v >= 0 ? 'positive' : 'negative';
+
+  cols.innerHTML = `
+    <div class="col">
+      <div class="col-label">Baseline</div>
+      <div class="col-id">${shortId(data.baseline_run_id)}</div>
+    </div>
+    <div class="delta-col">
+      <span class="delta-badge delta-${deltaColor(effDelta)}">${effDeltaStr} eff</span>
+      <span class="delta-badge delta-${deltaColor(prDelta)}">${prDeltaStr} pass</span>
+    </div>
+    <div class="col" style="text-align:right">
+      <div class="col-label">Current</div>
+      <div class="col-id">${shortId(data.current_run_id)}</div>
+    </div>`;
+
+  const tbody = document.getElementById('cases-body');
+  const cases = data.cases || [];
+  if (!cases.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="dim" style="text-align:center;padding:24px">No case data available.</td></tr>';
+  } else {
+    tbody.innerHTML = cases.map(c => {
+      const d = c.delta;
+      const cls = c.regression ? 'reg-row' : '';
+      const dColor = d == null ? 'var(--muted)' : d >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<tr class="${cls}">
+        <td class="mono">${c.case_id}</td>
+        <td>${score(c.baseline_effectiveness)}</td>
+        <td>${score(c.current_effectiveness)}</td>
+        <td style="color:${dColor};font-weight:600">${deltaStr(d)}</td>
+        <td>${c.regression ? '<span style="color:var(--red);font-weight:600">⚠ YES</span>' : '<span style="color:var(--muted)">—</span>'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('results').style.display = 'block';
+}
+
+async function init() {
+  const p = new URLSearchParams(location.search);
+  const qa = p.get('a'), qb = p.get('b');
+  if (qa && qb) {
+    document.getElementById('inp-a').value = qa;
+    document.getElementById('inp-b').value = qb;
+    runCompare(qa, qb);
+    return;
+  }
+  // Auto-compare the last two runs
+  const data = await fetch('/api/runs?limit=2').then(r => r.json()).catch(() => ({ runs: [] }));
+  const runs = data.runs || [];
+  if (runs.length >= 2) {
+    // runs[0] = most recent (current), runs[1] = second most recent (baseline)
+    document.getElementById('inp-a').value = runs[1].id;
+    document.getElementById('inp-b').value = runs[0].id;
+    history.replaceState(null, '', `?a=${encodeURIComponent(runs[1].id)}&b=${encodeURIComponent(runs[0].id)}`);
+    runCompare(runs[1].id, runs[0].id);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
