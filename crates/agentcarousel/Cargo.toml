@@ -55,6 +55,7 @@ axum = { version = "0.8", optional = true }
 toml = "1.1.2"
 ulid = "1"
 walkdir = "2"
+notify = "6"
 
 # Bundled SQLite on Linux and Windows so CI/release binaries link without host libsqlite
 # (cross-compile to aarch64-gnu has no arm64 libsqlite; musl already needed bundled).

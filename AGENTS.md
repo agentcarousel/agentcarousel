@@ -1,45 +1,11 @@
 # Agent Instructions
 
-**Before doing anything else, read [`repo-info.md`](repo-info.md) in full.** It contains the complete project primer: architecture, module layout, key types, CLI commands, fixture schema, development workflow, issue tracking, and correlated repos. Do not skip it.
-
----
-
-This project uses **br** (beads) for issue tracking. The CLI binary is `br` — never use `bd`.
-
-## Quick Reference
-
-```bash
-br ready              # Find available work
-br show <id>          # View issue details
-br update <id> --claim  # Claim work atomically
-br close <id>         # Complete work
-```
-
-## Non-Interactive Shell Commands
-
-**Always use `rg` (ripgrep), never `grep`.**
-
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
-
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
-
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
-
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
-
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
+> **MANDATORY — do this before anything else, no exceptions:**
+>
+> 1. Read this file (`AGENTS.md`) in full — you are reading it now; complete it before proceeding.
+> 2. Read [`repo-info.md`](repo-info.md) in full — complete project primer: architecture, module layout, key types, CLI commands, fixture schema, development workflow, issue tracking, and correlated repos.
+>
+> Do not answer, plan, search, or write any code until both files have been read. Skipping either file is a protocol violation.
 
 ## Beads Issue Tracker
 
