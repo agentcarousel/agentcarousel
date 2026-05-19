@@ -123,6 +123,7 @@ docs/rba/
 .dolt/
 *.db
 .beads-credential-key
+.beads/
 
 # Beads report exports
 beads_report_*.md

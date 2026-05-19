@@ -1,4 +1,5 @@
 use clap::Parser;
+use console::style;
 use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
 use ulid::Ulid;
@@ -80,6 +81,7 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     atomic_replace(&current_exe, &binary)?;
 
     println!("updated to agentcarousel {latest}.");
+    print_whats_new(latest);
     Ok(())
 }
 
@@ -224,6 +226,44 @@ fn atomic_replace(current_exe: &std::path::Path, new_binary: &[u8]) -> Result<()
     })?;
 
     Ok(())
+}
+
+fn print_whats_new(version: &str) {
+    let Some(items) = whats_new(version) else {
+        return;
+    };
+    println!();
+    println!(
+        "  {} {}",
+        style("⚡ what's new in").cyan().bold(),
+        style(format!("v{version}")).cyan().bold()
+    );
+    println!();
+    for (cmd, desc) in items {
+        println!("  {}  {}", style(cmd).green().bold(), style(desc).dim());
+    }
+    println!();
+}
+
+fn whats_new(version: &str) -> Option<&'static [(&'static str, &'static str)]> {
+    match version {
+        "0.6.0" => Some(&[
+            ("agc generate  ", "scaffold fixture cases with an LLM"),
+            (
+                "agc compare   ",
+                "CI regression gate — exits 1 on score drop",
+            ),
+            (
+                "agc dashboard ",
+                "embedded web UI @ :7421 — history, diffs, judge review",
+            ),
+            (
+                "--json        ",
+                "structured {ok, data} envelope on every command",
+            ),
+        ]),
+        _ => None,
+    }
 }
 
 fn confirm_prompt() -> Result<bool, String> {
