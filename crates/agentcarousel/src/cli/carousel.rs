@@ -1,0 +1,445 @@
+use agentcarousel_core::{judge_key_candidates, judge_provider_from_model, FixtureFile};
+use agentcarousel_fixtures::load_fixture;
+use agentcarousel_reporters::persist_run;
+use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
+use clap::{ArgAction, Parser};
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
+use serde::Serialize;
+use std::io::{stderr, IsTerminal};
+use std::path::PathBuf;
+use std::time::Duration;
+
+use super::config::{config_hash, ResolvedConfig};
+use super::exit_codes::ExitCode;
+use super::fixture_utils::{apply_case_filter, apply_tag_filter, collect_fixture_paths};
+use super::output::JsonOutput;
+use super::GlobalOptions;
+
+/// Run the same fixture suite against multiple models and get a ranked comparison.
+///
+/// Point carousel at your fixtures and give it a list of models. It runs each
+/// model in parallel and prints a table showing which model scored highest,
+/// how many cases passed, and how fast each one was. Every model's run is
+/// saved to history, so you can use `agc compare` or the dashboard afterward.
+///
+/// Requires live API keys for each provider in the model list.
+#[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc carousel --models gpt-4o,gemini-2.5-flash,claude-sonnet-4-6 fixtures/my-skill/\n  agc carousel --models gpt-4o,gemini-2.5-flash fixtures/ --evaluator all --judge\n  agc carousel --models gpt-4o,gpt-4o-mini fixtures/my-skill/ --json\n\nExit codes:\n  0  all models passed\n  1  one or more models had failures\n  4  runtime error"
+)]
+pub struct CarouselArgs {
+    /// Fixture files or directories to run (default: fixtures).
+    #[arg(value_name = "PATHS", default_value = "fixtures")]
+    paths: Vec<PathBuf>,
+    /// Config file path (default: agentcarousel.toml in the current directory).
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    /// Comma-separated list of generator models to run (required).
+    #[arg(long, value_delimiter = ',', required = true)]
+    models: Vec<String>,
+    /// Evaluator: `rules` | `golden` | `process` | `judge` | `all`.
+    #[arg(short = 'e', long, default_value = "rules")]
+    evaluator: String,
+    /// Enable the LLM judge for judge-scored cases (requires API keys).
+    #[arg(short = 'j', long)]
+    judge: bool,
+    /// Model to use for judge scoring (overrides config `judge.model`).
+    #[arg(short = 'J', long)]
+    judge_model: Option<String>,
+    /// Number of times to run each case per model (use >1 for flakiness detection).
+    #[arg(short = 'n', long, default_value_t = 1)]
+    runs: u32,
+    /// Glob matched against full case ids (`skill/case-id`).
+    #[arg(short = 'f', long)]
+    filter: Option<String>,
+    /// Comma-separated case tags to include (e.g. `smoke,fast`).
+    #[arg(
+        short = 'g',
+        long = "filter-tags",
+        value_name = "TAG",
+        value_delimiter = ','
+    )]
+    filter_tags: Option<Vec<String>>,
+    /// Per-model case concurrency (default: 1 for live generation).
+    #[arg(short = 'c', long)]
+    concurrency: Option<usize>,
+    /// Per-case timeout in seconds.
+    #[arg(short = 't', long)]
+    timeout: Option<u64>,
+    /// Show a model-level progress bar on stderr (default: on when stderr is a TTY).
+    #[arg(short = 'P', long, action = ArgAction::SetTrue)]
+    progress: bool,
+    /// Never show the carousel progress bar.
+    #[arg(short = 'N', long, action = ArgAction::SetTrue)]
+    no_progress: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CarouselOutput {
+    pub models: Vec<ModelRow>,
+    pub total_cases: u32,
+    pub fixture_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelRow {
+    pub rank: usize,
+    pub model: String,
+    pub run_id: String,
+    pub passed: u32,
+    pub total: u32,
+    pub pass_rate: f32,
+    pub effectiveness_score: Option<f32>,
+    pub latency_p50_ms: Option<f64>,
+    pub any_failures: bool,
+}
+
+pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
+    if args.models.is_empty() {
+        eprintln!("error: --models is required and must name at least one model");
+        return ExitCode::ConfigError.as_i32();
+    }
+
+    // Validate judge keys upfront if judge is enabled.
+    let judge_model = args
+        .judge_model
+        .clone()
+        .unwrap_or_else(|| config.judge.model.clone());
+    let judge_provider = judge_provider_from_model(&judge_model);
+    let judge_active = args.judge && is_judge_evaluator_active(&args.evaluator);
+    if judge_active && resolve_key(judge_key_candidates(judge_provider)).is_none() {
+        eprintln!(
+            "error: set one of {} to use --judge with model '{}'",
+            judge_key_candidates(judge_provider).join(", "),
+            judge_model
+        );
+        return ExitCode::ConfigError.as_i32();
+    }
+
+    // Validate generator keys upfront for each model.
+    for model in &args.models {
+        let provider = GeneratorProvider::from_model(model);
+        if resolve_key(provider.key_candidates()).is_none() {
+            eprintln!(
+                "error: set one of {} to run live generation for model '{}'",
+                provider.key_candidates().join(", "),
+                model
+            );
+            return ExitCode::ConfigError.as_i32();
+        }
+    }
+
+    // Load and filter fixtures once; clone per model.
+    let fixture_paths = collect_fixture_paths(&args.paths);
+    if fixture_paths.is_empty() {
+        eprintln!("error: no fixture files found in the specified paths");
+        return ExitCode::ConfigError.as_i32();
+    }
+    let fixture_count = fixture_paths.len();
+
+    let mut fixtures: Vec<FixtureFile> = Vec::new();
+    for path in fixture_paths {
+        match load_fixture(&path) {
+            Ok(f) => {
+                let f = apply_case_filter(f, args.filter.as_deref());
+                let f = apply_tag_filter(f, args.filter_tags.as_deref());
+                fixtures.push(f);
+            }
+            Err(err) => {
+                eprintln!("error: failed to load fixture {}: {err}", path.display());
+                return ExitCode::ConfigError.as_i32();
+            }
+        }
+    }
+    if fixtures.is_empty() {
+        eprintln!("error: all fixture files are empty or were filtered to zero cases");
+        return ExitCode::ConfigError.as_i32();
+    }
+
+    let total_cases = fixtures.iter().map(|f| f.cases.len() as u32).sum::<u32>();
+    let concurrency = args.concurrency.or(config.runner.concurrency).unwrap_or(1);
+
+    if !globals.json && !globals.quiet {
+        eprintln!(
+            "{} carousel — {} model(s) × {} case(s) — running in parallel",
+            style("🎠").bold(),
+            args.models.len(),
+            total_cases,
+        );
+    }
+
+    let show_progress = !args.no_progress
+        && !globals.quiet
+        && !globals.json
+        && (args.progress || stderr().is_terminal());
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .expect("tokio runtime");
+
+    // Spawn one eval task per model; collect results as each completes.
+    let results: Vec<(String, agentcarousel_core::Run)> = runtime.block_on(async {
+        let pb: Option<ProgressBar> = if show_progress {
+            let pb = ProgressBar::new(args.models.len() as u64);
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} models",
+                )
+                .expect("progress template")
+                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+            );
+            pb.enable_steady_tick(Duration::from_millis(120));
+            Some(pb)
+        } else {
+            None
+        };
+
+        let mut set = tokio::task::JoinSet::new();
+        for model in &args.models {
+            let fixtures_clone = fixtures.clone();
+            let eval_config = build_eval_config(
+                model,
+                &args,
+                config,
+                concurrency,
+                judge_active,
+                &judge_model,
+            );
+            let model_clone = model.clone();
+            set.spawn(async move { (model_clone, run_eval(fixtures_clone, eval_config).await) });
+        }
+
+        let mut out = Vec::new();
+        while let Some(res) = set.join_next().await {
+            match res {
+                Ok((model, run)) => {
+                    if let Some(pb) = &pb {
+                        pb.inc(1);
+                    }
+                    out.push((model, run));
+                }
+                Err(e) => eprintln!("error: model task panicked: {e}"),
+            }
+        }
+        if let Some(pb) = pb {
+            pb.finish_and_clear();
+        }
+        out
+    });
+
+    if results.is_empty() {
+        eprintln!("error: all model runs failed");
+        return ExitCode::RuntimeError.as_i32();
+    }
+
+    // Persist all runs.
+    for (_, run) in &results {
+        let _ = persist_run(run);
+    }
+
+    // Build ranked rows: sort by effectiveness score desc, then pass_rate desc.
+    let mut rows: Vec<ModelRow> = results
+        .iter()
+        .map(|(model, run)| {
+            let s = &run.summary;
+            ModelRow {
+                rank: 0,
+                model: model.clone(),
+                run_id: run.id.0.clone(),
+                passed: s.passed,
+                total: s.total,
+                pass_rate: s.pass_rate,
+                effectiveness_score: s.mean_effectiveness_score,
+                latency_p50_ms: s.latency_p50_ms,
+                any_failures: s.failed > 0 || s.errored > 0 || s.timed_out > 0,
+            }
+        })
+        .collect();
+
+    rows.sort_by(|a, b| {
+        b.effectiveness_score
+            .unwrap_or(b.pass_rate)
+            .partial_cmp(&a.effectiveness_score.unwrap_or(a.pass_rate))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(
+                b.pass_rate
+                    .partial_cmp(&a.pass_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+    });
+    for (i, row) in rows.iter_mut().enumerate() {
+        row.rank = i + 1;
+    }
+
+    let any_failure = rows.iter().any(|r| r.any_failures);
+
+    if globals.json {
+        let out = CarouselOutput {
+            models: rows,
+            total_cases,
+            fixture_count,
+        };
+        JsonOutput::ok("carousel", out).print();
+        return if any_failure {
+            ExitCode::Failed.as_i32()
+        } else {
+            ExitCode::Ok.as_i32()
+        };
+    }
+
+    print_table(&rows, total_cases);
+
+    if any_failure {
+        ExitCode::Failed.as_i32()
+    } else {
+        ExitCode::Ok.as_i32()
+    }
+}
+
+fn build_eval_config(
+    model: &str,
+    args: &CarouselArgs,
+    config: &ResolvedConfig,
+    concurrency: usize,
+    judge: bool,
+    judge_model: &str,
+) -> EvalConfig {
+    let runner = RunnerConfig {
+        concurrency,
+        timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
+        run_timeout_secs: None,
+        offline: false,
+        mock_dir: config.runner.mock_dir.clone(),
+        generation_mode: GenerationMode::Live,
+        generator_model: Some(model.to_string()),
+        generator_max_tokens: config.generator.max_tokens,
+        generator_endpoint: None,
+        fail_fast: false,
+        mock_strict: false,
+        command: "carousel".to_string(),
+        agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
+        config_hash: config_hash(config),
+        run_id: None,
+    };
+    EvalConfig {
+        runner,
+        runs: args.runs,
+        seed: 0,
+        evaluator: if args.evaluator == "rules" {
+            config.eval.default_evaluator.clone()
+        } else {
+            args.evaluator.clone()
+        },
+        judge,
+        judge_model: Some(judge_model.to_string()),
+        judge_max_tokens: config.judge.max_tokens,
+        effectiveness_threshold: config.eval.effectiveness_threshold,
+        certification_context: None,
+        carousel_iteration: None,
+        policy_version: None,
+        progress: false,
+        update_golden: false,
+    }
+}
+
+fn print_table(rows: &[ModelRow], total_cases: u32) {
+    let model_w = rows.iter().map(|r| r.model.len()).max().unwrap_or(5).max(5);
+    let run_id_w = 10; // show first 10 chars of run id
+
+    println!();
+    println!(
+        "  {:<4}  {:<model_w$}  {:>10}  {:>9}  {:>11}  {}",
+        style("Rank").bold(),
+        style("Model").bold(),
+        style("Passed").bold(),
+        style("Score").bold(),
+        style("Latency p50").bold(),
+        style("Run ID").bold(),
+    );
+    let sep_w = 4 + 2 + model_w + 2 + 10 + 2 + 9 + 2 + 11 + 2 + run_id_w;
+    println!("  {}", "─".repeat(sep_w));
+
+    for row in rows {
+        let rank_str = format!("#{}", row.rank);
+        let passed_str = format!("{} / {}", row.passed, total_cases);
+        let score_str = row
+            .effectiveness_score
+            .map(|s| format!("{:.2}", s))
+            .unwrap_or_else(|| "—".to_string());
+        let latency_str = row
+            .latency_p50_ms
+            .map(|ms| format!("{:.1} s", ms / 1000.0))
+            .unwrap_or_else(|| "—".to_string());
+        let run_prefix: String = row.run_id.chars().take(run_id_w).collect();
+
+        let rank_col = if row.rank == 1 {
+            style(rank_str).green().bold().to_string()
+        } else if row.any_failures {
+            style(rank_str).yellow().to_string()
+        } else {
+            style(rank_str).dim().to_string()
+        };
+
+        let model_col = if row.rank == 1 {
+            style(&row.model).green().to_string()
+        } else {
+            row.model.clone()
+        };
+
+        println!(
+            "  {rank_col:<4}  {model_col:<model_w$}  {passed_str:>10}  {score_str:>9}  {latency_str:>11}  {run_prefix}",
+        );
+    }
+
+    println!("  {}", "─".repeat(sep_w));
+
+    if let Some(best) = rows.first() {
+        let score_label = best
+            .effectiveness_score
+            .map(|s| format!("  score {:.2}", s))
+            .unwrap_or_default();
+        println!(
+            "\n  {} {}{}  ({:.0}% pass rate)",
+            style("Best:").bold(),
+            style(&best.model).green().bold(),
+            score_label,
+            best.pass_rate * 100.0,
+        );
+    }
+
+    if rows.len() >= 2 {
+        let a = &rows[0].run_id;
+        let b = &rows[1].run_id;
+        println!(
+            "  {}  agc compare {} --baseline {}",
+            style("Compare top 2:").dim(),
+            a,
+            b,
+        );
+    }
+    println!();
+}
+
+fn is_judge_evaluator_active(evaluator: &str) -> bool {
+    evaluator == "judge" || evaluator == "all"
+}
+
+fn resolve_key(candidates: &[&str]) -> Option<String> {
+    candidates.iter().find_map(|k| std::env::var(k).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_judge_evaluator_active;
+
+    #[test]
+    fn judge_active_for_judge_and_all() {
+        assert!(is_judge_evaluator_active("judge"));
+        assert!(is_judge_evaluator_active("all"));
+        assert!(!is_judge_evaluator_active("rules"));
+        assert!(!is_judge_evaluator_active("golden"));
+    }
+}
