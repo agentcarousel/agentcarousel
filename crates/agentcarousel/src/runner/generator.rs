@@ -1,9 +1,4 @@
 use agentcarousel_core::{compute_backoff_ms, is_retryable_status, retry_policy, Case, Role};
-use openrouter_rs::{
-    api::chat::{ChatCompletionRequest, Message as OpenRouterMessage},
-    types::Role as OpenRouterRole,
-    OpenRouterClient,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
@@ -552,70 +547,72 @@ async fn generate_with_openrouter(
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, String> {
     let openrouter_model = model.strip_prefix("openrouter/").unwrap_or(model);
-    let client = OpenRouterClient::builder()
-        .api_key(key.to_string())
-        .x_title("agentcarousel")
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(|err| err.to_string())?;
     let candidates = openrouter_model_candidates(openrouter_model);
     let mut last_error = None;
     for candidate in candidates {
-        let request = build_openrouter_request(candidate, prompt, max_tokens)?;
-        match client.chat().create(&request).await {
-            Ok(response) => {
-                let output = response
-                    .choices
-                    .first()
-                    .and_then(|choice| choice.content())
-                    .map(|text| text.trim().to_string())
-                    .filter(|text| !text.is_empty())
-                    .ok_or_else(|| "openrouter returned empty generation output".to_string())?;
-                return Ok(GenerationResult {
-                    output,
-                    tokens_in: response
-                        .usage
-                        .as_ref()
-                        .map(|usage| usage.prompt_tokens as u64),
-                    tokens_out: response
-                        .usage
-                        .as_ref()
-                        .map(|usage| usage.completion_tokens as u64),
-                });
-            }
+        let request = OpenAiRequest {
+            model: candidate.to_string(),
+            messages: vec![OpenAiMessage {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            temperature: 0.2,
+            max_tokens,
+        };
+        let send_result = client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .bearer_auth(key)
+            .header(
+                "HTTP-Referer",
+                "https://github.com/agentcarousel/agentcarousel",
+            )
+            .header("X-Title", "agentcarousel")
+            .json(&request)
+            .send()
+            .await;
+        let response = match send_result {
+            Ok(r) => r,
             Err(err) => {
-                let err_text = err.to_string();
-                // For missing OpenRouter routes, try known model suffix variants.
-                let retryable_model_miss = err_text.contains("No endpoints found")
-                    || (err_text.contains("api_code=404") && err_text.contains(candidate));
-                last_error = Some(err_text);
-                if retryable_model_miss {
-                    continue;
-                }
+                last_error = Some(err.to_string());
                 break;
             }
+        };
+        let status = response.status();
+        if status.is_success() {
+            let body: OpenAiResponse = response.json().await.map_err(|err| err.to_string())?;
+            let output = body
+                .choices
+                .first()
+                .map(|choice| choice.message.content.trim().to_string())
+                .filter(|text| !text.is_empty())
+                .ok_or_else(|| "openrouter returned empty generation output".to_string())?;
+            return Ok(GenerationResult {
+                output,
+                tokens_in: body.usage.as_ref().and_then(|u| u.prompt_tokens),
+                tokens_out: body.usage.as_ref().and_then(|u| u.completion_tokens),
+            });
         }
+        let body_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "unable to read error body".to_string());
+        // For missing OpenRouter routes, try known model suffix variants.
+        let retryable_model_miss =
+            status.as_u16() == 404 || body_text.contains("No endpoints found");
+        last_error = Some(format!(
+            "openrouter generation failed ({status}): {body_text}"
+        ));
+        if retryable_model_miss {
+            continue;
+        }
+        break;
     }
 
     Err(last_error.unwrap_or_else(|| "openrouter generation failed".to_string()))
-}
-
-fn build_openrouter_request(
-    model: &str,
-    prompt: &str,
-    max_tokens: Option<u32>,
-) -> Result<ChatCompletionRequest, String> {
-    let mut builder = ChatCompletionRequest::builder();
-    builder
-        .model(model.to_string())
-        .messages(vec![OpenRouterMessage::new(
-            OpenRouterRole::User,
-            prompt.to_string(),
-        )])
-        .temperature(0.2);
-    if let Some(max_tokens) = max_tokens {
-        builder.max_tokens(max_tokens);
-    }
-    builder.build().map_err(|err| err.to_string())
 }
 
 fn openrouter_model_candidates(model: &str) -> Vec<&str> {
