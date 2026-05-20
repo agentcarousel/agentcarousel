@@ -34,13 +34,6 @@ brew tap agentcarousel/agentcarousel && brew install agentcarousel
 cargo install agentcarousel
 ```
 
-Two binary variants are available on every release:
-
-| Variant | Asset suffix | Includes |
-|---------|-------------|----------|
-| Slim (default) | *(none)* | All commands except `dashboard` |
-| Full | `-full` | Everything, including `agc dashboard` |
-
 Upgrade an existing installation to the full variant at any time:
 
 ```bash
@@ -126,9 +119,56 @@ agc eval fixtures/regex-builder/ \
 
 **Filters** — `--filter` on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`)
 
+## Multi-Model Comparison
+
+`agc carousel` runs the same fixture suite against multiple models in parallel and prints a ranked comparison table — pass rate, effectiveness score, and latency p50 per model. Every model's run is saved to history so `agc compare` and the dashboard compare view work immediately.
+
+```bash
+# Rank three models head-to-head
+agc carousel \
+  --models gpt-4o,gemini-2.5-flash,claude-sonnet-4-6 \
+  fixtures/my-skill/
+
+# With judge scoring
+agc carousel \
+  --models gpt-4o,gemini-2.5-flash \
+  fixtures/ \
+  --evaluator all --judge \
+  --judge-model claude-haiku-4-5-20251001
+
+# JSON output for downstream tooling
+agc carousel --models gpt-4o,gemini-2.5-flash fixtures/ --json
+```
+
+## A/B Prompt Comparison
+
+`agc ab` runs the same test (fixture) against two prompts concurrently and produces a head-to-head comparison. Pass rate, effectiveness score, and per-case winners.
+
+```bash
+# Compare two prompt variants
+agc ab \
+  --a fixtures/v1/prompt.md \
+  --b fixtures/v2/prompt.md \
+  fixtures/my-skill/ \
+  --execution-mode live \
+  --model gemini-2.5-flash
+
+# With judge scoring
+agc ab \
+  --a prompts/old.md --b prompts/new.md \
+  fixtures/ \
+  --evaluator all --judge \
+  --judge-model claude-haiku-4-5-20251001
+
+# JSON output
+agc ab --a p1.md --b p2.md fixtures/ --json
+```
+
+The `--threshold` flag controls the effectiveness delta required to declare a winner (default `0.05`). Both runs are saved to history.
+
 ## CI Regression Gate
 
-`agc compare` compares two eval runs and exits 1 when effectiveness regresses beyond a threshold — drop it into any CI pipeline as a binary pass/fail gate.
+`agc compare` compares two eval runs and exits 1 when effectiveness regresses beyond a threshold. When at least 5 matched cases carry effectiveness scores, a [Mann-Whitney U test](https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U_test) gates the exit: the regression only triggers when the delta exceeds `--threshold` **and** the [p-value](https://en.wikipedia.org/wiki/P-value) falls below `--significance`. This prevents single-run noise from failing CI.
 
 ```bash
 # Compare the latest run to an explicit baseline
@@ -137,48 +177,35 @@ agc compare -l --baseline <run-id> --threshold 0.05
 # Auto-baseline: finds previous run for the same skill
 agc compare -l
 
+# Tighten the significance gate for high-stakes checks
+agc compare -l --baseline <run-id> --threshold 0.05 --significance 0.01
+
 # Tag a run as a named baseline for CI reference
 agc compare tag <run-id> --name prod-baseline
-
-# JSON output for downstream tooling
-agc compare -l --baseline <run-id> --json
 ```
 
 **GitHub Actions example:**
 
 ```yaml
 - name: Eval
-  run: agc eval fixtures/ --judge --runs 3
+  run: agc eval fixtures/ --judge --runs 5
 
 - name: Regression gate
   run: agc compare -l --baseline ${{ vars.BASELINE_RUN_ID }} --threshold 0.05
 ```
 
-Exit codes: `0` = no regression, `1` = regression exceeds threshold, `2` = error.
+The JSON output includes `p_value`, `significant`, `samples_baseline`, and `samples_current` fields for downstream analysis.
+
+Exit codes: `0` = no regression, `1` = regression exceeds threshold, `4` = runtime error.
 
 ## Dashboard
 
-`agc dashboard` serves a local web UI from the binary — zero config. Open `http://localhost:7421` after starting it. Available in the full binary variant.
+`agc dashboard` serves a local web UI from the binary. Open `http://localhost:7421` after starting it. Available in the full binary or with feature-flag `dashboard`.
 
 ```bash
 agc dashboard                        # http://localhost:7421
 agc dashboard --port 8080            # custom port
 agc dashboard --db path/to/history.db
-```
-
-**Pages:**
-
-- **`/`** — Run history index with headline metrics (total runs, pass rate, mean effectiveness) and trend sparklines
-- **`/runs/:id`** — Run detail: per-case effectiveness, inline expansion with trace steps, rubric scores, and judge rationale
-- **`/compare?a=:id&b=:id`** — Side-by-side run comparison with delta badges and regression highlighting; deep-linkable URL
-- **`/review?run=:id`** — Judge review screen: annotate each LLM judge call as ✓ correct / ✗ wrong / ~ borderline; annotations persist to `reviews.jsonl` and are included in `agc export` evidence bundles
-
-Install the full variant to get dashboard access:
-
-```bash
-curl -fsSL https://install.agentcarousel.com | sh -s -- --feature dashboard
-# or upgrade in-place:
-agc update --feature dashboard
 ```
 
 ## Reports
@@ -208,23 +235,6 @@ agc validate fixtures/ --json | jq '.data.atf_summary'
 
 # Generate fixtures from an agent script
 agc generate --extend fixtures/my-skill/ --count 5 --json
-```
-
-**Success envelope:**
-```json
-{ "ok": true, "command": "eval", "data": { ... } }
-```
-
-**Error envelope:**
-```json
-{
-  "ok": false,
-  "error": {
-    "code": "run_not_found",
-    "message": "Run 'abc123' not found in history database.",
-    "suggestions": ["Run 'agc report list' to see available run IDs."]
-  }
-}
 ```
 
 **Exit codes** (consistent across all commands):

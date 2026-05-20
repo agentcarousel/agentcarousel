@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1 - May 2026
+
+### Features
+
+- **`agc watch`** — Filesystem watcher for live fixture re-evaluation. `agc watch fixtures/my-skill/ [--eval]` detects changes to fixture YAML files, debounces 200 ms, and automatically re-runs only the affected cases. Collapses the edit→run→read loop to under 2 seconds. Uses the `notify` crate; fully additive on top of existing eval infrastructure.
+- **`agc carousel`** — Multi-model fixture evaluation. `agc carousel --models gpt-4o,claude-sonnet-4-6,gemini-2.5-flash fixtures/my-skill/` runs the same fixture suite against N models in parallel and produces a ranked comparison table: effectiveness score, pass rate, mean latency, estimated cost. Each model's run is persisted to history so the dashboard compare view works immediately. Includes a progress bar per model.
+- **`agc ab`** — A/B prompt variant comparison. `agc ab --a prompt-v1.md --b prompt-v2.md fixtures/skill/` runs identical fixture cases against two system prompts concurrently and produces a head-to-head: per-case winner, per-rubric effectiveness delta, overall pass-rate comparison, and cases that flipped status. JSON output supported for pipeline use.
+- **Statistical significance on `agc compare`** — When both runs have N≥5 scored cases, applies the Mann-Whitney U test (non-parametric, no normality assumption) to determine whether the effectiveness score delta is statistically significant. Surfaces p-value alongside the raw delta (`Δ −0.03, p=0.004 ★ significant`). New `--significance <alpha>` flag (default 0.05); exit code 1 (regression) only fires when the delta exceeds threshold **and** p < alpha. Backwards-compatible: skips the test and notes it when N<5. No new dependencies — Mann-Whitney U implemented in ~30 lines of pure math.
+
+### Chores
+
+- Drop `openrouter-rs` crate; replace with raw `reqwest` calls in `generator.rs`. Removes ~100 KiB from the release binary and eliminates the `derive_builder` and `dotenvy_macro` transitive dependencies. Behavior is identical — OpenRouter's API is OpenAI-compatible and the existing `OpenAiRequest`/`OpenAiResponse` structs are reused directly.
+
 ## 0.6.0 - May 2026
 
 **Theme: From solo eval tool to team-scale CI platform.**

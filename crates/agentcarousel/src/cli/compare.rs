@@ -33,6 +33,12 @@ pub struct CompareArgs {
     /// Regression threshold for overall effectiveness delta (default: 0.05).
     #[arg(long, default_value_t = DEFAULT_THRESHOLD)]
     threshold: f32,
+
+    /// Significance level (alpha) for the Mann-Whitney U test (default: 0.05).
+    /// When N≥5 matched cases have effectiveness scores, exit 1 only when the
+    /// delta exceeds --threshold AND p < --significance.
+    #[arg(long, default_value_t = 0.05_f32)]
+    significance: f32,
 }
 
 #[derive(Debug, Subcommand)]
@@ -56,6 +62,15 @@ pub struct CompareResult {
     pub overall_effectiveness_delta: Option<f32>,
     pub pass_rate_delta: f32,
     pub threshold: f32,
+    pub significance: f32,
+    /// Per-case effectiveness scores from the baseline run (matched cases only).
+    pub samples_baseline: Vec<f64>,
+    /// Per-case effectiveness scores from the current run (matched cases only).
+    pub samples_current: Vec<f64>,
+    /// Mann-Whitney U p-value. `None` when fewer than 5 matched scored cases.
+    pub p_value: Option<f64>,
+    /// Whether the effectiveness delta is statistically significant at `significance` level.
+    pub significant: Option<bool>,
     pub cases: Vec<CaseCompare>,
 }
 
@@ -115,7 +130,7 @@ fn run_compare_runs(args: CompareArgs, globals: &GlobalOptions) -> i32 {
         Err(code) => return code,
     };
 
-    let result = build_compare_result(&baseline, &current, args.threshold);
+    let result = build_compare_result(&baseline, &current, args.threshold, args.significance);
     let regression = result.regression;
 
     if globals.json {
@@ -273,6 +288,7 @@ fn build_compare_result(
     baseline: &agentcarousel_core::Run,
     current: &agentcarousel_core::Run,
     threshold: f32,
+    significance: f32,
 ) -> CompareResult {
     use std::collections::HashMap;
 
@@ -283,6 +299,9 @@ fn build_compare_result(
         .collect();
 
     let mut cases = Vec::new();
+    let mut samples_baseline: Vec<f64> = Vec::new();
+    let mut samples_current: Vec<f64> = Vec::new();
+
     for case in &current.cases {
         let baseline_eff = baseline_cases
             .get(case.case_id.0.as_str())
@@ -294,6 +313,10 @@ fn build_compare_result(
             _ => None,
         };
         let regression = delta.is_some_and(|d| d < -threshold);
+        if let (Some(b), Some(c)) = (baseline_eff, current_eff) {
+            samples_baseline.push(b as f64);
+            samples_current.push(c as f64);
+        }
         cases.push(CaseCompare {
             case_id: case.case_id.0.clone(),
             baseline_effectiveness: baseline_eff,
@@ -314,8 +337,15 @@ fn build_compare_result(
         _ => None,
     };
 
-    let regression = overall_effectiveness_delta.is_some_and(|d| d < -threshold)
-        || cases.iter().any(|c| c.regression);
+    let p_value = stats::mann_whitney_u_pvalue(&samples_baseline, &samples_current);
+    let significant = p_value.map(|p| p < significance as f64);
+
+    let overall_regression = match (overall_effectiveness_delta, p_value) {
+        (Some(d), Some(p)) => d < -threshold && p < significance as f64,
+        (Some(d), None) => d < -threshold,
+        _ => false,
+    };
+    let regression = overall_regression || cases.iter().any(|c| c.regression);
 
     CompareResult {
         baseline_run_id: baseline.id.0.clone(),
@@ -325,6 +355,11 @@ fn build_compare_result(
         overall_effectiveness_delta,
         pass_rate_delta,
         threshold,
+        significance,
+        samples_baseline,
+        samples_current,
+        p_value,
+        significant,
         cases,
     }
 }
@@ -345,9 +380,16 @@ fn print_compare_terminal(result: &CompareResult) {
         } else {
             style("✓ OK").green().bold()
         };
+        let sig_note = match result.p_value {
+            Some(p) if result.significant == Some(true) => {
+                format!("  p={p:.3} ★ significant")
+            }
+            Some(p) => format!("  p={p:.3} (not significant)"),
+            None => "  (N<5, no significance test)".to_string(),
+        };
         println!(
-            "  Overall effectiveness   {:+.2}   {}  {}",
-            delta, arrow, label
+            "  Overall effectiveness   {:+.2}   {}  {}{}",
+            delta, arrow, label, sig_note
         );
     }
 
@@ -399,6 +441,85 @@ fn print_compare_terminal(result: &CompareResult) {
         println!("  {}", style("No regression detected").green());
     }
     println!();
+}
+
+mod stats {
+    /// Mann-Whitney U test (two-tailed). Returns `None` when either sample has
+    /// fewer than 5 observations — not enough data for a meaningful result.
+    pub(super) fn mann_whitney_u_pvalue(a: &[f64], b: &[f64]) -> Option<f64> {
+        if a.len() < 5 || b.len() < 5 {
+            return None;
+        }
+        let n_a = a.len() as f64;
+        let n_b = b.len() as f64;
+        let mut u = 0.0_f64;
+        for &ai in a {
+            for &bj in b {
+                if ai > bj {
+                    u += 1.0;
+                } else if (ai - bj).abs() < f64::EPSILON {
+                    u += 0.5;
+                }
+            }
+        }
+        let mean_u = n_a * n_b / 2.0;
+        let var_u = n_a * n_b * (n_a + n_b + 1.0) / 12.0;
+        if var_u <= 0.0 {
+            return None;
+        }
+        let z = (u - mean_u) / var_u.sqrt();
+        Some(2.0 * normal_sf(z.abs()))
+    }
+
+    fn normal_sf(z: f64) -> f64 {
+        0.5 * erfc(z / std::f64::consts::SQRT_2)
+    }
+
+    /// Complementary error function — Abramowitz & Stegun 7.1.26, max error < 1.5e-7.
+    fn erfc(x: f64) -> f64 {
+        if x < 0.0 {
+            return 2.0 - erfc(-x);
+        }
+        let t = 1.0 / (1.0 + 0.3275911 * x);
+        let poly = t
+            * (0.254_829_592
+                + t * (-0.284_496_736
+                    + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
+        poly * (-x * x).exp()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::mann_whitney_u_pvalue;
+
+        #[test]
+        fn identical_samples_give_high_pvalue() {
+            let a = vec![0.8, 0.9, 0.7, 0.85, 0.8];
+            let p = mann_whitney_u_pvalue(&a, &a).unwrap();
+            assert!(
+                p > 0.5,
+                "identical distributions should not be significant: p={p}"
+            );
+        }
+
+        #[test]
+        fn clearly_different_samples_give_low_pvalue() {
+            let a = vec![0.1, 0.15, 0.12, 0.11, 0.13];
+            let b = vec![0.9, 0.92, 0.88, 0.91, 0.95];
+            let p = mann_whitney_u_pvalue(&a, &b).unwrap();
+            assert!(
+                p < 0.05,
+                "clearly different distributions should be significant: p={p}"
+            );
+        }
+
+        #[test]
+        fn returns_none_when_too_few_samples() {
+            let a = vec![0.8, 0.9, 0.7, 0.85];
+            let b = vec![0.8, 0.9, 0.7, 0.85, 0.8];
+            assert!(mann_whitney_u_pvalue(&a, &b).is_none());
+        }
+    }
 }
 
 fn emit_error(

@@ -118,10 +118,13 @@ crates/agentcarousel/src/
 | `agc validate [paths]` | Schema-validate fixtures; SARIF output with `--format sarif` |
 | `agc test [paths]` | Run cases in mock mode (no API keys); assertion-based scoring |
 | `agc eval [paths]` | Run cases with live or mock generation; LLM judge optional |
+| `agc carousel --models M1,M2 [paths]` | Run fixtures against N models in parallel; ranked comparison table |
+| `agc ab --a A.md --b B.md [paths]` | Run fixtures against two system prompts; head-to-head comparison |
 | `agc lint [paths]` | Fixture quality checks beyond schema (smoke coverage, rubric weights) |
 | `agc init --skill NAME` | Scaffold `fixtures/<name>/` with cases.yaml, prompt.md, manifest, golden/ |
 | `agc report list/show/diff` | Inspect persisted run history (SQLite) |
 | `agc stats` | Pass-rate trends, flakiness, latency from history |
+| `agc compare` | Compare two runs; Mann-Whitney U significance gate when N≥5 scored cases |
 | `agc export` | Export run(s) as signed evidence tarballs |
 | `agc bundle pack/verify/pull` | Bundle lifecycle |
 | `agc publish` | Publish bundle + evidence to registry |
