@@ -61,7 +61,9 @@ fn update(args: UpdateArgs) -> Result<(), String> {
                 if want_dashboard { "full" } else { "slim" },
             );
         } else {
-            println!("update available: {current} → {latest}  (run `agentcarousel update` to install)");
+            println!(
+                "update available: {current} → {latest}  (run `agentcarousel update` to install)"
+            );
         }
         return Ok(());
     }
