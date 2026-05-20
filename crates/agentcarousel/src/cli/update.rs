@@ -43,17 +43,38 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     let tag = fetch_latest_tag()?;
     let latest = tag.trim_start_matches('v');
 
-    if current == latest {
+    let want_dashboard = args.features.iter().any(|f| f == "dashboard");
+    let have_dashboard = cfg!(feature = "dashboard");
+    let version_current = current == latest;
+    let variant_current = want_dashboard == have_dashboard;
+
+    if version_current && variant_current {
         println!("agentcarousel {current} is already up to date.");
         return Ok(());
     }
 
     if args.check {
-        println!("update available: {current} → {latest}  (run `agentcarousel update` to install)");
+        if version_current {
+            println!(
+                "variant change available: {} → {}  (run `agentcarousel update --feature dashboard` to install)",
+                if have_dashboard { "full" } else { "slim" },
+                if want_dashboard { "full" } else { "slim" },
+            );
+        } else {
+            println!("update available: {current} → {latest}  (run `agentcarousel update` to install)");
+        }
         return Ok(());
     }
 
-    println!("update available: {current} → {latest}");
+    if version_current {
+        println!(
+            "switching variant: {} → {}",
+            if have_dashboard { "full" } else { "slim" },
+            if want_dashboard { "full" } else { "slim" },
+        );
+    } else {
+        println!("update available: {current} → {latest}");
+    }
 
     if !args.yes && !confirm_prompt()? {
         println!("aborted.");
