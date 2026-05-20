@@ -32,6 +32,7 @@ async fn run_case_inner(
     evaluate_rules: bool,
 ) -> CaseResult {
     let start = Instant::now();
+    let input = case.input.messages.clone();
     let mut trace = ExecutionTrace {
         steps: Vec::new(),
         final_output: None,
@@ -198,10 +199,14 @@ async fn run_case_inner(
         trace,
         metrics,
         eval_scores: None,
+        input,
     }
 }
 
-pub fn timeout_result(case_id: agentcarousel_core::CaseId) -> CaseResult {
+pub fn timeout_result(
+    case_id: agentcarousel_core::CaseId,
+    input: Vec<agentcarousel_core::Message>,
+) -> CaseResult {
     CaseResult {
         case_id,
         status: CaseStatus::TimedOut,
@@ -213,6 +218,7 @@ pub fn timeout_result(case_id: agentcarousel_core::CaseId) -> CaseResult {
         },
         metrics: Metrics::default(),
         eval_scores: None,
+        input,
     }
 }
 

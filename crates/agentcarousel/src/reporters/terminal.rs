@@ -1,4 +1,4 @@
-use agentcarousel_core::{CaseResult, CaseStatus, EvalScores, RubricScore, Run};
+use agentcarousel_core::{CaseResult, CaseStatus, EvalScores, Role, RubricScore, Run};
 use console::style;
 use serde_json::Value;
 
@@ -262,7 +262,41 @@ fn print_judge_failure_summary(scores: &EvalScores) {
     }
 }
 
+fn role_label(role: &Role) -> &'static str {
+    match role {
+        Role::User => "user",
+        Role::Assistant => "assistant",
+        Role::System => "system",
+        Role::Tool => "tool",
+    }
+}
+
 fn print_case_failure_details(case: &CaseResult) {
+    let is_judged = case
+        .eval_scores
+        .as_ref()
+        .map(|s| s.evaluator == "judge")
+        .unwrap_or(false);
+
+    if is_judged && !case.input.is_empty() {
+        println!("               {}", style("input:").dim().bold());
+        for msg in &case.input {
+            let role = role_label(&msg.role);
+            let content_line = msg.content.replace('\n', " ");
+            let snippet = if content_line.chars().count() > 160 {
+                format!("{}…", content_line.chars().take(157).collect::<String>())
+            } else {
+                content_line
+            };
+            println!(
+                "               [{}] {}",
+                style(role).bold(),
+                style(snippet).dim()
+            );
+        }
+        println!();
+    }
+
     if let Some(out) = case.trace.final_output.as_ref() {
         if !out.is_empty() && matches!(case.status, CaseStatus::Failed | CaseStatus::Error) {
             let one_line = out.replace('\n', " ").trim().to_string();

@@ -152,6 +152,15 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         eprintln!("error: judge evaluator selected; rerun with --judge");
         return ExitCode::ConfigError.as_i32();
     }
+    // When --judge is set with the default "rules" evaluator, auto-select the judge
+    // evaluator so `agc eval --judge` does what the user expects without also requiring
+    // --evaluator judge.
+    let (judge_selected, effective_evaluator) =
+        if args.judge && !judge_selected && args.evaluator == "rules" {
+            (true, "judge".to_string())
+        } else {
+            (judge_selected, args.evaluator.clone())
+        };
     let judge_model = args
         .judge_model
         .clone()
@@ -226,10 +235,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         && (args.progress || ((format != "json" && format != "junit") && stderr().is_terminal()));
     if !globals.quiet && format != "json" && format != "junit" && args.judge && !judge_enabled {
         eprintln!(
-            "{} --judge is set but the judge evaluator is not active (--evaluator is {:?}). \
-For fixtures like customer-support that set judge per case, use --evaluator all (and keep --judge).",
+            "{} --judge is set but no judge evaluator is active (--evaluator is {:?}). \
+For fixtures that set judge per case, use --evaluator all (and keep --judge).",
             style("hint:").yellow().bold(),
-            args.evaluator
+            effective_evaluator
         );
     }
     let runner = RunnerConfig {
@@ -262,10 +271,10 @@ For fixtures like customer-support that set judge per case, use --evaluator all 
         runner,
         runs: args.runs,
         seed: args.seed,
-        evaluator: if args.evaluator == "rules" {
+        evaluator: if effective_evaluator == "rules" {
             config.eval.default_evaluator.clone()
         } else {
-            args.evaluator
+            effective_evaluator
         },
         judge: judge_enabled,
         judge_model: Some(judge_model),
