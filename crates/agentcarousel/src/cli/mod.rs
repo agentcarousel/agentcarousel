@@ -1,3 +1,4 @@
+mod ab;
 mod bundle;
 mod carousel;
 mod compare;
@@ -119,6 +120,8 @@ enum Command {
     Watch(watch::WatchArgs),
     /// Run the same fixture suite against multiple models and get a ranked comparison.
     Carousel(carousel::CarouselArgs),
+    /// Run the same fixture suite against two system prompts and get a head-to-head comparison.
+    Ab(ab::AbArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -153,6 +156,7 @@ fn help_template() -> String {
     let eval = c("eval");
     let watch = c("watch");
     let carousel = c("carousel");
+    let ab = c("ab");
     let generate = c("generate");
     let lint = c("lint");
     let init = c("init");
@@ -189,6 +193,7 @@ Usage:
   {test}         Run fixtures with mock generation (no API keys required)
   {eval}         Run evaluation with mock or live generation; optionally score with an LLM judge
   {carousel}     Run the same fixtures against multiple models and get a ranked comparison table
+  {ab}           Run the same fixtures against two system prompts and compare head-to-head
   {watch}        Run tests automatically whenever you save a fixture file
   {generate}     Generate fixture cases for a skill using an LLM
   {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
@@ -246,6 +251,7 @@ pub fn run() -> i32 {
         Command::Doctor(a) => a.config.as_deref(),
         Command::Stats(a) => a.config.as_deref(),
         Command::Watch(a) => a.config.as_deref(),
+        Command::Ab(a) => a.config.as_deref(),
         _ => None,
     };
 
@@ -297,6 +303,7 @@ pub fn run() -> i32 {
         Command::Compare(args) => compare::run_compare(args, &globals),
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
+        Command::Ab(args) => ab::run_ab(args, &config, &globals),
     }
 }
 
@@ -306,9 +313,9 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel watch generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel watch generate lint init report stats export bundle publish trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate lint init report stats export bundle publish trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");
