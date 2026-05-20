@@ -28,6 +28,7 @@ fn run_with_latency(id: &str, latency_ms: u64) -> Run {
             ..Metrics::default()
         },
         eval_scores: None,
+        input: vec![],
     };
     Run {
         id: RunId(id.to_string()),

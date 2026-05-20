@@ -32,6 +32,7 @@ pub(super) fn aggregate_case_results(
         trace: representative.trace.clone(),
         metrics,
         eval_scores,
+        input: case.input.messages.clone(),
     }
 }
 

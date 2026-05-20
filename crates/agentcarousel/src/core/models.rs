@@ -185,6 +185,9 @@ pub struct CaseResult {
     pub trace: ExecutionTrace,
     pub metrics: Metrics,
     pub eval_scores: Option<EvalScores>,
+    /// Input messages from the fixture case; stored for human review in reports and dashboard.
+    #[serde(default)]
+    pub input: Vec<Message>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

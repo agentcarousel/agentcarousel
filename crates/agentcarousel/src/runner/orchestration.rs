@@ -127,6 +127,7 @@ pub(super) async fn run_sequential(
     let mut results = Vec::new();
     for case in cases {
         let case_id = case.id.clone();
+        let case_input = case.input.messages.clone();
         let timeout = tokio::time::timeout(
             std::time::Duration::from_secs(case.timeout_secs.unwrap_or(config.timeout_secs)),
             super::executor::run_case(case, mock_engine, config),
@@ -134,7 +135,7 @@ pub(super) async fn run_sequential(
         .await;
         let result = match timeout {
             Ok(result) => result,
-            Err(_) => super::executor::timeout_result(case_id),
+            Err(_) => super::executor::timeout_result(case_id, case_input),
         };
         let should_stop = result.status != CaseStatus::Passed;
         results.push(result);
@@ -160,6 +161,7 @@ pub(super) async fn run_parallel(
         let config = config.clone();
         let case_id = case.id.clone();
         let case_id_for_tuple = case_id.clone();
+        let case_input = case.input.messages.clone();
         let handle = tokio::spawn(async move {
             let _permit = permit;
             let timeout = tokio::time::timeout(
@@ -169,7 +171,7 @@ pub(super) async fn run_parallel(
             .await;
             match timeout {
                 Ok(result) => result,
-                Err(_) => super::executor::timeout_result(case_id),
+                Err(_) => super::executor::timeout_result(case_id, case_input),
             }
         });
         handles.push((case_id_for_tuple, handle));
@@ -190,6 +192,7 @@ pub(super) async fn run_parallel(
                 },
                 metrics: agentcarousel_core::Metrics::default(),
                 eval_scores: None,
+                input: Vec::new(),
             }),
         }
     }

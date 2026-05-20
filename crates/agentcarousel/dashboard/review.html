@@ -176,6 +176,13 @@ async function renderRun(runId) {
         ${r.rationale ? `<span style="color:var(--muted);font-size:11px;flex:2">${escHtml(r.rationale)}</span>` : ''}
       </div>`).join('');
 
+    const inputHtml = (c.input || []).map(m =>
+      `<div class="msg-block">
+        <div class="msg-role ${escHtml(m.role)}">${escHtml(m.role)}</div>
+        <div style="white-space:pre-wrap;word-break:break-word">${escHtml(m.content)}</div>
+      </div>`
+    ).join('');
+
     const verdictBtns = ['correct','wrong','borderline'].map(v =>
       `<button class="verdict-btn ${rev.verdict === v ? `active-${v}` : ''}" id="btn-${idx}-${v}"
         onclick="setVerdict('${c.case_id}', ${idx}, '${v}')">${v === 'correct' ? '✓ Correct' : v === 'wrong' ? '✗ Wrong' : '~ Borderline'}</button>`
@@ -186,10 +193,11 @@ async function renderRun(runId) {
         <span class="case-id">${escHtml(c.case_id)}</span>
         <span class="eff-score" style="color:${effColor}">${es.effectiveness_score.toFixed(2)}</span>
       </div>
-      <div class="section-label">Judge Rationale</div>
-      <div class="rationale-box">${escHtml(es.judge_rationale)}</div>
+      ${inputHtml ? `<div class="section-label">Input</div>${inputHtml}` : ''}
       <div class="section-label">Output</div>
       <div class="output-box">${escHtml(c.trace?.final_output || '(no output)')}</div>
+      <div class="section-label">Judge Rationale</div>
+      <div class="rationale-box">${escHtml(es.judge_rationale)}</div>
       ${rubricsHtml ? `<div class="section-label">Rubric Scores</div>${rubricsHtml}` : ''}
       <div class="annotation-row">
         ${verdictBtns}

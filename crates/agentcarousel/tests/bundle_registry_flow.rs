@@ -45,6 +45,7 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
             ..Metrics::default()
         },
         eval_scores: None,
+        input: vec![],
     };
     let started_at = Utc::now();
     Run {

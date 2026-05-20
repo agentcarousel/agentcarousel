@@ -40,6 +40,7 @@ fn run_with_embedded_api_error() -> Run {
             ..Metrics::default()
         },
         eval_scores: None,
+        input: vec![],
     };
     Run {
         id: RunId("test-report-show-humanize".to_string()),
