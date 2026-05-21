@@ -56,18 +56,31 @@ br dep add <child> <parent>
 
 For every issue worked:
 
-1. `br update <id> --claim` — claim before writing code
-2. Implement the change
-3. `cargo test --all` — do NOT stage or close unless tests pass
-4. `git add <files>` — stage the change, then **stop and wait for user review**
-5. Do NOT commit. The user will commit after reviewing the staged diff.
+1. `bv --robot-next` — let it pick the highest-scored unblocked issue
+2. `br update <id> --claim` — claim before writing any code
+3. Implement the change, then run in order:
+   ```bash
+   cargo fmt --all
+   cargo clippy -p agentcarousel --all-targets --all-features -- -D warnings
+   cargo test --all
+   ```
+   Do NOT stage or close unless all three pass. Fix errors before proceeding.
+4. `git add <files>` — stage the change, then **stop and wait for the user's review**
+5. Do NOT commit. The user commits after reviewing the staged diff.
 6. `br close <id>` — only after the user has reviewed and committed
+
+## Issue Structure
+
+- Use **epics** for strategic grouping and **tasks** that depend directly on them.
+- Skip the feature layer — for a small team, labels replace it.
+- Label tasks with `area:baseline`, `area:auth`, `area:www`, `lang:rust`, `lang:typescript`, etc.
+- After creating a batch of issues, run `bv --robot-suggest` to catch gaps.
 
 ## Pre-Push Quality Gates (mandatory before every `git push`)
 
 ```bash
 cargo fmt --all
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy -p agentcarousel --all-targets --all-features -- -D warnings
 cargo test --all
 cargo build --release
 ```

@@ -86,37 +86,466 @@ jobs:
           path: test-results-smoke.json
 
   eval-nightly:
-    name: Eval harness (nightly, certification track)
+    name: Nightly KPI pipeline (per-bundle)
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
     needs: validate
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AGENTCAROUSEL_REGISTRY_URL: ${{ vars.AGENTCAROUSEL_REGISTRY_URL }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-      - name: Build agentcarousel (release)
-        run: cargo build --release -p agentcarousel
-      - name: Eval all certification-tagged cases
-        env:
-          AGENTCAROUSEL_JUDGE_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: agentcarousel-linux
+          path: target/release
+
+      - name: Make binary executable
+        run: chmod +x target/release/agentcarousel
+
+      - name: Restore eval history (for regression diff)
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/agentcarousel
+          key: eval-history-${{ github.run_id }}
+          restore-keys: eval-history-
+
+      - name: Create output directories
+        run: mkdir -p eval-results
+
+      - name: Doctor check (non-fatal)
+        continue-on-error: true
         run: |
-          ./target/release/agentcarousel eval fixtures/ \
-            --filter-tags certification \
-            --evaluator all \
-            --runs 5 \
-            --judge \
-            > eval-results.json
-      - name: Upload eval artifact
+          ./target/release/agentcarousel doctor --json | tee doctor-report.json
+
+      - name: Acquire registry credentials (OIDC preferred, PAT fallback)
+        id: registry-creds
+        run: |
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            OIDC_TOKEN=$(curl -sS \
+              -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=agentcarousel-registry" \
+              | jq -r '.value // empty')
+            if [ -n "$OIDC_TOKEN" ]; then
+              echo "AGENTCAROUSEL_API_TOKEN=${OIDC_TOKEN}" >> "$GITHUB_ENV"
+              echo "::notice::Registry auth: OIDC workload identity"
+              exit 0
+            fi
+          fi
+          if [ -n "${_PAT_SECRET}" ]; then
+            echo "AGENTCAROUSEL_API_TOKEN=${_PAT_SECRET}" >> "$GITHUB_ENV"
+            echo "::notice::Registry auth: PAT secret"
+          else
+            echo "::warning::No registry credentials — registry operations will be skipped gracefully"
+          fi
+        env:
+          _PAT_SECRET: ${{ secrets.AGENTCAROUSEL_API_TOKEN }}
+
+      - name: Phase 1 — offline eval (10 runs per bundle)
+        run: |
+          BUNDLES=(
+            accessibility-auditor
+            ci-failure-triager
+            code-reviewer
+            customer-support
+            data-privacy-classifier
+            database-migration-advisor
+            dockerfile-linter
+            env-file-auditor
+            error-message-improver
+            github-actions-generator
+            prompt-injection-detector
+            regex-builder
+            sql-query-generator
+            terraform-sentinel-scaffold
+            unit-test-generator
+          )
+
+          for skill in "${BUNDLES[@]}"; do
+            set +e
+
+            ./target/release/agentcarousel eval "fixtures/${skill}/" \
+              --execution-mode mock \
+              --evaluator rules \
+              --runs 10 \
+              --certification-context ci \
+              --json > "eval-results/${skill}.json" 2>&1
+            EVAL_EXIT=$?
+
+            RUN_ID=$(./target/release/agentcarousel report list --limit 1 --json \
+              | jq -r '.data.runs[0].id // empty')
+
+            ./target/release/agentcarousel compare -l --json \
+              > "eval-results/${skill}.compare.json" 2>&1
+            COMPARE_EXIT=$?
+            [ $COMPARE_EXIT -eq 1 ] && \
+              echo "::warning title=regression-${skill}::regression detected for ${skill}"
+
+            ./target/release/agentcarousel stats --skill "$skill" --json \
+              > "eval-results/${skill}.stats.json" 2>/dev/null \
+              || echo '{}' > "eval-results/${skill}.stats.json"
+
+            # Derive registry bundle ID from manifest (slug-version, e.g. code-reviewer-1.0.0)
+            REGISTRY_BUNDLE_ID=$(jq -r '
+              ((.skill_or_agent // .bundle_id // "") | gsub(" "; "-")) as $slug |
+              (.bundle_version // .version // "1.0.0") as $ver |
+              if $slug != "" then $slug + "-" + $ver else "" end
+            ' "fixtures/${skill}/bundle.manifest.json" 2>/dev/null || echo "")
+
+            # exit 5 = no local baseline (first run for this bundle)
+            IS_FIRST_RUN=false
+            SHOULD_TAG=false
+            if [ $COMPARE_EXIT -eq 5 ] && [ -n "$RUN_ID" ]; then
+              IS_FIRST_RUN=true
+              SHOULD_TAG=true
+            elif [ $COMPARE_EXIT -eq 0 ] && [ -n "$RUN_ID" ]; then
+              IMPROVED=$(jq -r '
+                ((.data.pass_rate_delta // 0) > 0) or
+                ((.data.overall_effectiveness_delta // 0) > 0)
+              ' "eval-results/${skill}.compare.json" 2>/dev/null || echo "false")
+              [ "$IMPROVED" = "true" ] && SHOULD_TAG=true
+            fi
+
+            # Publish run to registry (non-fatal)
+            if [ -n "$AGENTCAROUSEL_REGISTRY_URL" ] && [ -n "$AGENTCAROUSEL_API_TOKEN" ]; then
+              ./target/release/agentcarousel publish "fixtures/${skill}/" --json \
+                > "eval-results/${skill}.publish.json" 2>&1 \
+                || echo "::notice::Registry publish skipped for ${skill}"
+            fi
+
+            if [ "$SHOULD_TAG" = "true" ]; then
+              # Advance local SQLite baseline
+              ./target/release/agentcarousel compare tag "$RUN_ID" \
+                --name "nightly-${skill}" || true
+
+              # Advance registry baseline (non-fatal)
+              if [ -n "$AGENTCAROUSEL_REGISTRY_URL" ] && \
+                 [ -n "$AGENTCAROUSEL_API_TOKEN" ] && \
+                 [ -n "$REGISTRY_BUNDLE_ID" ]; then
+                ./target/release/agentcarousel compare tag "$RUN_ID" \
+                  --name "$REGISTRY_BUNDLE_ID" \
+                  --registry || true
+                if [ "$IS_FIRST_RUN" = "true" ]; then
+                  echo "::notice::First run — registry baseline initialized: ${REGISTRY_BUNDLE_ID} → ${RUN_ID}"
+                else
+                  echo "::notice::Registry baseline advanced: ${REGISTRY_BUNDLE_ID} → ${RUN_ID}"
+                fi
+              fi
+
+              echo "Baseline advanced: nightly-${skill} → ${RUN_ID}"
+            fi
+
+            set -e
+          done
+
+      - name: Phase 2 — live judge eval (requires AGENTCAROUSEL_JUDGE_KEY)
+        if: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
+        run: |
+          BUNDLES=(
+            accessibility-auditor
+            ci-failure-triager
+            code-reviewer
+            customer-support
+            data-privacy-classifier
+            database-migration-advisor
+            dockerfile-linter
+            env-file-auditor
+            error-message-improver
+            github-actions-generator
+            prompt-injection-detector
+            regex-builder
+            sql-query-generator
+            terraform-sentinel-scaffold
+            unit-test-generator
+          )
+
+          for skill in "${BUNDLES[@]}"; do
+            ./target/release/agentcarousel eval "fixtures/${skill}/" \
+              --execution-mode live \
+              --evaluator judge \
+              --judge \
+              --runs 3 \
+              --certification-context ci \
+              --json > "eval-results/${skill}.live.json" 2>&1 \
+              || echo "::warning::Live eval failed for ${skill}"
+          done
+
+      - name: Phase 3 — model carousel (requires AGENTCAROUSEL_CAROUSEL_MODELS + keys)
+        if: ${{ secrets.AGENTCAROUSEL_CAROUSEL_MODELS != '' && secrets.AGENTCAROUSEL_JUDGE_KEY != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.AGENTCAROUSEL_OPENAI_KEY }}
+        run: |
+          mkdir -p carousel-results
+
+          BUNDLES=(
+            accessibility-auditor
+            ci-failure-triager
+            code-reviewer
+            customer-support
+            data-privacy-classifier
+            database-migration-advisor
+            dockerfile-linter
+            env-file-auditor
+            error-message-improver
+            github-actions-generator
+            prompt-injection-detector
+            regex-builder
+            sql-query-generator
+            terraform-sentinel-scaffold
+            unit-test-generator
+          )
+
+          CAROUSEL_MODELS="${{ secrets.AGENTCAROUSEL_CAROUSEL_MODELS }}"
+          for skill in "${BUNDLES[@]}"; do
+            ./target/release/agentcarousel carousel \
+              --models "$CAROUSEL_MODELS" \
+              --evaluator judge \
+              --judge \
+              --runs 3 \
+              --json \
+              "fixtures/${skill}/" \
+              > "carousel-results/${skill}.json" 2>&1 \
+              || echo "::warning::Carousel failed for ${skill}"
+          done
+
+      - name: Evidence export
+        run: |
+          ./target/release/agentcarousel export --last 5 --json > export-manifest.json 2>&1 || true
+
+      - name: Aggregate KPI summary
+        run: |
+          BUNDLES=(
+            accessibility-auditor
+            ci-failure-triager
+            code-reviewer
+            customer-support
+            data-privacy-classifier
+            database-migration-advisor
+            dockerfile-linter
+            env-file-auditor
+            error-message-improver
+            github-actions-generator
+            prompt-injection-detector
+            regex-builder
+            sql-query-generator
+            terraform-sentinel-scaffold
+            unit-test-generator
+          )
+
+          BUNDLES_JSON="[]"
+          for skill in "${BUNDLES[@]}"; do
+            BUNDLE_KPI=$(jq -n \
+              --arg skill "$skill" \
+              --slurpfile eval "eval-results/${skill}.json" \
+              --slurpfile compare "eval-results/${skill}.compare.json" \
+              --slurpfile stats "eval-results/${skill}.stats.json" '
+              ($eval[0].data.summary // {}) as $sum |
+              ($eval[0].data.cases // []) as $cases |
+              ($compare[0].data // {}) as $cmp |
+              ($stats[0].data // {}) as $st |
+              ($sum.pass_rate // 0) as $pr |
+              ([$cases[] | .metrics.consistency_score // 0]
+                | if length > 0 then (add / length) else null end) as $cons_avg |
+              ($cmp.regression // false) as $reg |
+              ($pr == 1.0 and ($sum.flaky // 0) == 0 and ($reg | not)) as $cert_ready |
+              (if $cert_ready then "green"
+               elif ($pr >= 0.8 and ($reg | not)) then "yellow"
+               else "red" end) as $status |
+              {
+                skill: $skill,
+                pass_rate: $pr,
+                total: ($sum.total // 0),
+                passed: ($sum.passed // 0),
+                flaky: ($sum.flaky // 0),
+                errored: ($sum.errored // 0),
+                consistency_avg: $cons_avg,
+                regression: $reg,
+                regression_delta: ($cmp.overall_effectiveness_delta // null),
+                p_value: ($cmp.p_value // null),
+                pass_rate_trend: ($st.pass_rate_trend // null),
+                cert_ready: $cert_ready,
+                status: $status
+              }
+            ')
+            BUNDLES_JSON=$(echo "$BUNDLES_JSON" | jq --argjson b "$BUNDLE_KPI" '. + [$b]')
+          done
+
+          jq -n \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg sha "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --argjson bundles "$BUNDLES_JSON" '{
+              timestamp: $ts, git_sha: $sha, github_run_id: $run_id,
+              bundles: $bundles,
+              overall: {
+                bundle_count: ($bundles | length),
+                overall_pass_rate: ([$bundles[] | select(.pass_rate != null) | .pass_rate]
+                  | if length > 0 then add / length else null end),
+                total_flaky: ([$bundles[] | .flaky // 0] | add),
+                regression_count: ([$bundles[] | select(.regression == true)] | length),
+                green_count: ([$bundles[] | select(.status == "green")] | length),
+                yellow_count: ([$bundles[] | select(.status == "yellow")] | length),
+                red_count: ([$bundles[] | select(.status == "red")] | length)
+              },
+              certification_ready: [$bundles[] | select(.cert_ready == true) | .skill],
+              needs_attention: [$bundles[] | select(.status == "red") | .skill]
+            }' > kpi-summary.json
+
+      - name: Write GitHub Actions job summary
+        run: |
+          TS=$(jq -r '.timestamp' kpi-summary.json)
+          SHA=$(echo "$GITHUB_SHA" | cut -c1-8)
+          RUN_URL="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          printf '# Nightly KPI Report\n\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '**%s** · commit `%s` · [run](%s)\n\n' "$TS" "$SHA" "$RUN_URL" >> "$GITHUB_STEP_SUMMARY"
+
+          OVERALL_PR=$(jq -r '
+            if .overall.overall_pass_rate != null
+            then (.overall.overall_pass_rate * 100 | round | tostring) + "%"
+            else "n/a" end
+          ' kpi-summary.json)
+          FLAKY=$(jq '.overall.total_flaky' kpi-summary.json)
+          REG=$(jq '.overall.regression_count' kpi-summary.json)
+          GREEN=$(jq '.overall.green_count' kpi-summary.json)
+          YELLOW=$(jq '.overall.yellow_count' kpi-summary.json)
+          RED=$(jq '.overall.red_count' kpi-summary.json)
+
+          printf '## Overall Health\n\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '| Pass Rate | Flaky | Regressions | 🟢 Green | 🟡 Yellow | 🔴 Red |\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '|---|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '| %s | %s | %s | %s | %s | %s |\n\n' \
+            "$OVERALL_PR" "$FLAKY" "$REG" "$GREEN" "$YELLOW" "$RED" >> "$GITHUB_STEP_SUMMARY"
+
+          printf '## Per-Bundle KPIs\n\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '| Bundle | Pass Rate | Flaky | Consistency | Errored | Regression | Cert Ready | Status |\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '|---|---|---|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.bundles[] |
+            [.skill,
+             (if .pass_rate != null then (.pass_rate * 100 | round | tostring) + "%" else "err" end),
+             (.flaky | tostring),
+             (if .consistency_avg != null then (.consistency_avg * 100 | round | tostring) + "%" else "n/a" end),
+             (.errored | tostring),
+             (if .regression then "YES ⚠" else "no" end),
+             (if .cert_ready then "✅ READY" else "—" end),
+             (if .status == "green" then "🟢" elif .status == "yellow" then "🟡" else "🔴" end)
+            ] | "| " + join(" | ") + " |"
+          ' kpi-summary.json >> "$GITHUB_STEP_SUMMARY"
+
+          CERT_READY=$(jq -r '.certification_ready | if length > 0 then join(", ") else "none" end' kpi-summary.json)
+          NEEDS_ATTN=$(jq -r '.needs_attention | if length > 0 then join(", ") else "none" end' kpi-summary.json)
+
+          printf '\n## Certification Advancement Ready\n\n%s\n' "$CERT_READY" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n## Needs Attention\n\n%s\n' "$NEEDS_ATTN" >> "$GITHUB_STEP_SUMMARY"
+
+          if ls carousel-results/*.json 1>/dev/null 2>&1; then
+            BUNDLES=(
+              accessibility-auditor
+              ci-failure-triager
+              code-reviewer
+              customer-support
+              data-privacy-classifier
+              database-migration-advisor
+              dockerfile-linter
+              env-file-auditor
+              error-message-improver
+              github-actions-generator
+              prompt-injection-detector
+              regex-builder
+              sql-query-generator
+              terraform-sentinel-scaffold
+              unit-test-generator
+            )
+            printf '\n## Model Carousel Results\n\n' >> "$GITHUB_STEP_SUMMARY"
+            printf '| Skill | #1 Model | Pass Rate | Eff. Score | Latency p50 |\n' >> "$GITHUB_STEP_SUMMARY"
+            printf '|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+            for skill in "${BUNDLES[@]}"; do
+              [ -f "carousel-results/${skill}.json" ] && \
+              jq -r --arg skill "$skill" '
+                (.data.models[0] // {}) as $best |
+                [
+                  $skill,
+                  ($best.model // "n/a"),
+                  (if $best.pass_rate then ($best.pass_rate * 100 | round | tostring) + "%" else "err" end),
+                  ($best.effectiveness_score | if . then (. * 100 | round | tostring) + "%" else "n/a" end),
+                  ($best.latency_p50_ms | if . then (. / 1000 | . * 10 | round / 10 | tostring) + "s" else "n/a" end)
+                ] | "| " + join(" | ") + " |"
+              ' "carousel-results/${skill}.json" >> "$GITHUB_STEP_SUMMARY" || true
+            done
+          fi
+
+          printf '\n> **Note:** pass rates are offline (mock execution). Effectiveness scores require Phase 2 (live judge).\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload eval results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-results
-          path: eval-results.json
-      - name: Regression check
+          name: eval-results-${{ github.run_id }}
+          path: eval-results/*.json
+          retention-days: 30
+
+      - name: Upload KPI summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kpi-summary
+          path: kpi-summary.json
+          retention-days: 90
+
+      - name: Upload doctor report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-report
+          path: doctor-report.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload export manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-manifest
+          path: export-manifest.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload carousel results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: carousel-results-${{ github.run_id }}
+          path: carousel-results/*.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+  kpi-gate:
+    name: KPI gate (main branch)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [validate]
+    steps:
+      - name: Download KPI summary from last nightly
+        uses: actions/download-artifact@v4
+        with:
+          name: kpi-summary
+          path: .
+        continue-on-error: true
+
+      - name: Enforce KPI gate
         run: |
-          PREV=$(./target/release/agentcarousel report list --limit 2 --json | jq -r '.data.runs[1].id // empty')
-          if [ -n "$PREV" ]; then
-            CURR=$(./target/release/agentcarousel report list --limit 1 --json | jq -r '.data.runs[0].id')
-            ./target/release/agentcarousel report diff "$PREV" "$CURR"
+          [ ! -f kpi-summary.json ] && { echo "No KPI data yet — skipping gate"; exit 0; }
+          RED=$(jq '.overall.red_count' kpi-summary.json)
+          REG=$(jq '.overall.regression_count' kpi-summary.json)
+          if [ "$RED" -gt 0 ] || [ "$REG" -gt 0 ]; then
+            echo "::error::KPI gate: ${RED} red bundles, ${REG} regressions"
+            exit 1
           fi
+          echo "KPI gate passed"

@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
+use super::registry_client::{resolve_token, RegistryClient};
 use super::GlobalOptions;
 
 const DEFAULT_THRESHOLD: f32 = 0.05;
@@ -12,7 +13,7 @@ const DEFAULT_THRESHOLD: f32 = 0.05;
 /// Compare eval runs and gate on regressions.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc compare -l --baseline <run-id>\n  agc compare -l --baseline <run-id> --threshold 0.05\n  agc compare <run-id> --baseline <run-id>\n  agc compare tag <run-id> --name prod-baseline\n  agc compare -l  # auto-baseline: previous run for same skill\n\nExit codes:\n  0  no regression (or improvement)\n  1  regression exceeds threshold\n  4  runtime error (IO, database)\n  5  run not found in history"
+    after_help = "Examples:\n  agc compare -l --baseline <run-id>\n  agc compare -l --baseline <run-id> --threshold 0.05\n  agc compare <run-id> --baseline <run-id>\n  agc compare <run-id> --registry              # fetch baseline from registry\n  agc compare tag <run-id> --name prod-baseline\n  agc compare tag <run-id> --name prod-baseline --registry  # push to registry\n  agc compare -l  # auto-baseline: previous run for same skill\n\nExit codes:\n  0  no regression (or improvement)\n  1  regression exceeds threshold\n  4  runtime error (IO, database)\n  5  run not found in history"
 )]
 pub struct CompareArgs {
     #[command(subcommand)]
@@ -30,6 +31,14 @@ pub struct CompareArgs {
     #[arg(long)]
     baseline: Option<String>,
 
+    /// Fetch the baseline from the registry instead of local SQLite.
+    #[arg(long)]
+    registry: bool,
+
+    /// Fall back to local SQLite if --registry baseline fetch fails (default: true).
+    #[arg(long, default_value_t = true)]
+    local_fallback: bool,
+
     /// Regression threshold for overall effectiveness delta (default: 0.05).
     #[arg(long, default_value_t = DEFAULT_THRESHOLD)]
     threshold: f32,
@@ -39,6 +48,14 @@ pub struct CompareArgs {
     /// delta exceeds --threshold AND p < --significance.
     #[arg(long, default_value_t = 0.05_f32)]
     significance: f32,
+
+    /// Registry URL (overrides AGENTCAROUSEL_REGISTRY_URL env and config).
+    #[arg(long)]
+    registry_url: Option<String>,
+
+    /// API token for registry write operations (overrides AGENTCAROUSEL_API_TOKEN env).
+    #[arg(long)]
+    token: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -50,6 +67,15 @@ enum CompareCommand {
         /// Name to store (e.g. `prod-baseline`).
         #[arg(long)]
         name: String,
+        /// Push this baseline to the registry instead of local SQLite.
+        #[arg(long)]
+        registry: bool,
+        /// Registry URL (overrides env).
+        #[arg(long)]
+        registry_url: Option<String>,
+        /// API token for registry write operations.
+        #[arg(long)]
+        token: Option<String>,
     },
 }
 
@@ -84,37 +110,143 @@ pub struct CaseCompare {
 }
 
 pub fn run_compare(args: CompareArgs, globals: &GlobalOptions) -> i32 {
-    if let Some(CompareCommand::Tag { run_id, name }) = args.command {
-        return run_tag(&run_id, &name, globals);
+    if let Some(CompareCommand::Tag {
+        run_id,
+        name,
+        registry,
+        registry_url,
+        token,
+    }) = args.command
+    {
+        return run_tag(
+            &run_id,
+            &name,
+            registry,
+            registry_url.as_deref(),
+            token.as_deref(),
+            globals,
+        );
     }
     run_compare_runs(args, globals)
 }
 
-fn run_tag(run_id: &str, name: &str, globals: &GlobalOptions) -> i32 {
-    match tag_run(name, run_id) {
-        Ok(()) => {
-            if globals.json {
-                JsonOutput::ok(
+fn run_tag(
+    run_id: &str,
+    name: &str,
+    registry: bool,
+    registry_url: Option<&str>,
+    token_flag: Option<&str>,
+    globals: &GlobalOptions,
+) -> i32 {
+    if registry {
+        // Push baseline to registry (agc-oisz)
+        let url = match std::env::var("AGENTCAROUSEL_REGISTRY_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| registry_url.map(str::to_string))
+        {
+            Some(u) => u,
+            None => {
+                emit_error(
+                    globals,
                     "compare tag",
-                    serde_json::json!({ "name": name, "run_id": run_id }),
-                )
-                .print();
-            } else {
-                println!("tagged run {run_id} as '{name}'");
+                    "no_registry_url",
+                    "Registry URL required for --registry. Set AGENTCAROUSEL_REGISTRY_URL or pass --registry-url.",
+                    vec![],
+                    String::new(),
+                );
+                return ExitCode::ValidationFailed.as_i32();
             }
-            ExitCode::Ok.as_i32()
+        };
+        let token = match resolve_token(token_flag) {
+            Some(t) => t,
+            None => {
+                emit_error(
+                    globals,
+                    "compare tag",
+                    "no_token",
+                    "Registry token required for --registry. Run `agc login --token <token>` or set AGENTCAROUSEL_API_TOKEN.",
+                    vec!["agc login --token <your-token>".to_string()],
+                    String::new(),
+                );
+                return ExitCode::ValidationFailed.as_i32();
+            }
+        };
+        let client = match RegistryClient::new(&url, &token) {
+            Ok(c) => c,
+            Err(err) => {
+                emit_error(
+                    globals,
+                    "compare tag",
+                    "client_error",
+                    &err,
+                    vec![],
+                    String::new(),
+                );
+                return ExitCode::RuntimeError.as_i32();
+            }
+        };
+        // bundle_id from run name convention: use the `name` arg as bundle_id (CI usage)
+        match client.set_bundle_baseline(name, run_id) {
+            Ok(res) => {
+                if globals.json {
+                    JsonOutput::ok("compare tag", &res).print();
+                } else {
+                    let set_at = res.get("set_at").and_then(|v| v.as_str()).unwrap_or("");
+                    println!("registry baseline set: run={run_id} bundle={name} set_at={set_at}");
+                }
+                ExitCode::Ok.as_i32()
+            }
+            Err(err) if err.contains("not an improvement") => {
+                emit_error(
+                    globals,
+                    "compare tag",
+                    "not_an_improvement",
+                    "Registry rejected baseline: run is not an improvement over the current baseline.",
+                    vec!["Only a strictly better run (higher pass_rate or composite_score) can replace the baseline.".to_string()],
+                    err,
+                );
+                ExitCode::Failed.as_i32()
+            }
+            Err(err) => {
+                emit_error(
+                    globals,
+                    "compare tag",
+                    "runtime_error",
+                    &err,
+                    vec![],
+                    String::new(),
+                );
+                ExitCode::RuntimeError.as_i32()
+            }
         }
-        Err(err) => {
-            if globals.json {
-                JsonOutput::err(
-                    "compare tag",
-                    JsonError::new("runtime_error", err.to_string()),
-                )
-                .print();
-            } else {
-                eprintln!("error: {err}");
+    } else {
+        // Local SQLite tag
+        match tag_run(name, run_id) {
+            Ok(()) => {
+                if globals.json {
+                    JsonOutput::ok(
+                        "compare tag",
+                        serde_json::json!({ "name": name, "run_id": run_id }),
+                    )
+                    .print();
+                } else {
+                    println!("tagged run {run_id} as '{name}'");
+                }
+                ExitCode::Ok.as_i32()
             }
-            ExitCode::RuntimeError.as_i32()
+            Err(err) => {
+                if globals.json {
+                    JsonOutput::err(
+                        "compare tag",
+                        JsonError::new("runtime_error", err.to_string()),
+                    )
+                    .print();
+                } else {
+                    eprintln!("error: {err}");
+                }
+                ExitCode::RuntimeError.as_i32()
+            }
         }
     }
 }
@@ -125,7 +257,14 @@ fn run_compare_runs(args: CompareArgs, globals: &GlobalOptions) -> i32 {
         Err(code) => return code,
     };
 
-    let baseline = match resolve_baseline(&args.baseline, &current, globals) {
+    let baseline = match resolve_baseline(
+        &args.baseline,
+        &current,
+        args.registry,
+        args.local_fallback,
+        args.registry_url.as_deref(),
+        globals,
+    ) {
         Ok(r) => r,
         Err(code) => return code,
     };
@@ -213,11 +352,81 @@ fn resolve_current_run(
 fn resolve_baseline(
     baseline_arg: &Option<String>,
     current: &agentcarousel_core::Run,
+    registry: bool,
+    local_fallback: bool,
+    registry_url: Option<&str>,
     globals: &GlobalOptions,
 ) -> Result<agentcarousel_core::Run, i32> {
+    // --registry: fetch baseline from registry, optionally fall back to local
+    if registry {
+        let bundle_id = current.skill_or_agent.as_deref().unwrap_or("");
+        if bundle_id.is_empty() {
+            emit_error(
+                globals,
+                "compare",
+                "no_bundle_id",
+                "Cannot fetch registry baseline: current run has no skill_or_agent.",
+                vec!["Pass --baseline <run-id> for explicit local baseline.".to_string()],
+                String::new(),
+            );
+            return Err(ExitCode::ValidationFailed.as_i32());
+        }
+
+        let url = std::env::var("AGENTCAROUSEL_REGISTRY_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| registry_url.map(str::to_string));
+
+        if let Some(url) = url {
+            if let Ok(client) = RegistryClient::new(&url, "") {
+                match client.get_bundle_baseline(bundle_id) {
+                    Ok(res) => {
+                        if let Some(run_id) = res.get("run_id").and_then(|v| v.as_str()) {
+                            if let Ok(run) = fetch_run(run_id) {
+                                return Ok(run);
+                            }
+                            // run not in local history — build a synthetic baseline
+                            let pass_rate =
+                                res.get("pass_rate").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                            let composite = res
+                                .get("composite_score")
+                                .and_then(|v| v.as_f64())
+                                .map(|v| v as f32);
+                            return Ok(synthetic_baseline_run(
+                                run_id, bundle_id, pass_rate, composite,
+                            ));
+                        }
+                    }
+                    Err(err) if !local_fallback => {
+                        emit_error(
+                            globals,
+                            "compare",
+                            "registry_baseline_failed",
+                            &format!("Failed to fetch registry baseline: {err}"),
+                            vec!["Pass --local-fallback to fall back to local SQLite.".to_string()],
+                            err,
+                        );
+                        return Err(ExitCode::RuntimeError.as_i32());
+                    }
+                    Err(_) => {} // fall through to local
+                }
+            }
+        } else if !local_fallback {
+            emit_error(
+                globals,
+                "compare",
+                "no_registry_url",
+                "Registry URL required for --registry. Set AGENTCAROUSEL_REGISTRY_URL or pass --registry-url.",
+                vec![],
+                String::new(),
+            );
+            return Err(ExitCode::ValidationFailed.as_i32());
+        }
+        // fall through to local resolution
+    }
+
     // Resolution order: explicit --baseline, named tag, auto (previous run for same skill)
     let baseline_id: Option<String> = if let Some(ref spec) = baseline_arg {
-        // Try as run ID first; if not found try as a named tag
         if fetch_run(spec).is_ok() {
             Some(spec.clone())
         } else {
@@ -281,6 +490,67 @@ fn resolve_baseline(
             );
             Err(ExitCode::RuntimeError.as_i32())
         }
+    }
+}
+
+/// Build a minimal synthetic Run from registry baseline metrics when the run isn't in local history.
+fn synthetic_baseline_run(
+    run_id: &str,
+    skill: &str,
+    pass_rate: f32,
+    composite_score: Option<f32>,
+) -> agentcarousel_core::Run {
+    use agentcarousel_core::{OverallStatus, ProviderErrorMetrics, Run, RunId, RunSummary};
+    use chrono::Utc;
+    let summary = RunSummary {
+        total: 0,
+        passed: 0,
+        failed: 0,
+        skipped: 0,
+        flaky: 0,
+        errored: 0,
+        timed_out: 0,
+        pass_rate,
+        mean_latency_ms: 0.0,
+        mean_effectiveness_score: composite_score,
+        provider_errors: ProviderErrorMetrics {
+            status_429: 0,
+            status_500: 0,
+            status_503: 0,
+            status_504: 0,
+        },
+        overall_status: if pass_rate >= 1.0 {
+            OverallStatus::Pass
+        } else {
+            OverallStatus::Fail
+        },
+        tokens_in: None,
+        tokens_out: None,
+        mean_tokens_per_judged_case: None,
+        latency_p50_ms: None,
+        latency_p95_ms: None,
+        latency_p99_ms: None,
+    };
+    Run {
+        id: RunId(run_id.to_string()),
+        schema_version: 1,
+        started_at: Utc::now(),
+        finished_at: None,
+        command: String::new(),
+        git_sha: None,
+        agentcarousel_version: String::new(),
+        config_hash: String::new(),
+        cases: vec![],
+        summary,
+        fixture_bundle_id: None,
+        fixture_bundle_version: None,
+        carousel_iteration: None,
+        certification_context: None,
+        policy_version: None,
+        skill_or_agent: Some(skill.to_string()),
+        runner_offline: false,
+        runner_mock_strict: false,
+        runner_mock_only: false,
     }
 }
 
