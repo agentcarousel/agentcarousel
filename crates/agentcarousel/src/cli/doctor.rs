@@ -4,6 +4,7 @@ use std::path::Path;
 
 use super::config::{resolve_schema_path, ResolvedConfig};
 use super::exit_codes::ExitCode;
+use super::login::load_stored_token;
 
 /// Check environment, configuration, and fixture setup for common issues.
 #[derive(Debug, Parser)]
@@ -33,6 +34,7 @@ struct Check {
 pub fn run_doctor(args: DoctorArgs, config: &ResolvedConfig) -> i32 {
     let checks = vec![
         check_api_keys(),
+        check_registry_token(),
         check_config_file(),
         check_history_db(config),
         check_fixtures_dir(),
@@ -159,6 +161,31 @@ fn check_api_keys() -> Check {
             status: CheckStatus::Ok,
             detail: format!("{} configured", found.join(", ")),
         }
+    }
+}
+
+fn check_registry_token() -> Check {
+    let from_env = std::env::var("AGENTCAROUSEL_API_TOKEN")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(|_| "env:AGENTCAROUSEL_API_TOKEN");
+    let from_store = if from_env.is_none() {
+        load_stored_token().map(|_| "credential store")
+    } else {
+        None
+    };
+
+    match from_env.or(from_store) {
+        Some(source) => Check {
+            label: "Registry token",
+            status: CheckStatus::Ok,
+            detail: format!("found ({source}) — publish and compare --remote will work"),
+        },
+        None => Check {
+            label: "Registry token",
+            status: CheckStatus::Warn,
+            detail: "no token found — run `agc login --token <token>` or set AGENTCAROUSEL_API_TOKEN to enable publish and compare --remote".to_string(),
+        },
     }
 }
 

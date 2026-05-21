@@ -6,6 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use super::config::ResolvedConfig;
+use super::login::load_stored_token;
 
 pub struct RegistryClient {
     base_url: String,
@@ -84,6 +85,31 @@ impl RegistryClient {
         parse_json_response("submit run", res)
     }
 
+    /// GET /v1/bundles/:bundleId/baseline — public, no auth needed.
+    pub fn get_bundle_baseline(&self, bundle_id: &str) -> Result<Value, String> {
+        let encoded = encode_registry_bundle_id(bundle_id);
+        let url = format!("{}/v1/bundles/{}/baseline", self.base_url, encoded);
+        let req = self.http.get(url).header(CONTENT_TYPE, "application/json");
+        let res = req.send().map_err(|err| format!("request failed: {err}"))?;
+        parse_json_response("bundle baseline", res)
+    }
+
+    /// PUT /v1/bundles/:bundleId/baseline — requires baseline:write token.
+    pub fn set_bundle_baseline(&self, bundle_id: &str, run_id: &str) -> Result<Value, String> {
+        let encoded = encode_registry_bundle_id(bundle_id);
+        let url = format!("{}/v1/bundles/{}/baseline", self.base_url, encoded);
+        let body = serde_json::json!({ "run_id": run_id });
+        let res = self
+            .http
+            .put(url)
+            .header(AUTHORIZATION, format!("Bearer {}", self.token))
+            .header(CONTENT_TYPE, "application/json")
+            .json(&body)
+            .send()
+            .map_err(|err| format!("request failed: {err}"))?;
+        parse_json_response("set baseline", res)
+    }
+
     pub fn get_trust_state(&self, bundle_id: &str) -> Result<Value, String> {
         let encoded_bundle_id = encode_registry_bundle_id(bundle_id);
         let url = format!(
@@ -155,6 +181,25 @@ impl RegistryClient {
 
 fn encode_registry_bundle_id(bundle_id: &str) -> String {
     bundle_id.replace('/', "%2F")
+}
+
+/// Resolve API token from CLI flag, environment, or OS credential store.
+///
+/// Order: `--token` CLI flag → `AGENTCAROUSEL_API_TOKEN` env → credential store.
+pub fn resolve_token(token_flag: Option<&str>) -> Option<String> {
+    if let Some(t) = token_flag {
+        let t = t.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    if let Ok(t) = std::env::var("AGENTCAROUSEL_API_TOKEN") {
+        let t = t.trim().to_string();
+        if !t.is_empty() {
+            return Some(t);
+        }
+    }
+    load_stored_token()
 }
 
 /// Resolve registry base URL from CLI flag, config, or environment (same rules as `publish`).

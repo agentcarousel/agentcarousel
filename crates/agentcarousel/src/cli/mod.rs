@@ -14,6 +14,7 @@ mod fixture_utils;
 mod generate;
 mod init;
 mod lint;
+mod login;
 mod output;
 mod publish;
 mod registry_client;
@@ -122,6 +123,8 @@ enum Command {
     Carousel(carousel::CarouselArgs),
     /// Run the same fixture suite against two system prompts and get a head-to-head comparison.
     Ab(ab::AbArgs),
+    /// Authenticate with the registry and store credentials.
+    Login(login::LoginArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -304,6 +307,7 @@ pub fn run() -> i32 {
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
+        Command::Login(args) => login::run_login(args, &globals),
     }
 }
 
