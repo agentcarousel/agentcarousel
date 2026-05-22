@@ -383,10 +383,7 @@ fn bootstrap_golden_cases(
         let golden_path = golden_dir.join(format!("{leaf}.txt"));
 
         if let Err(e) = std::fs::create_dir_all(&golden_dir) {
-            eprintln!(
-                "error: failed to create {}: {e}",
-                golden_dir.display()
-            );
+            eprintln!("error: failed to create {}: {e}", golden_dir.display());
             return ExitCode::RuntimeError.as_i32();
         }
         if let Err(e) = std::fs::write(&golden_path, &output) {
@@ -413,8 +410,10 @@ fn bootstrap_golden_cases(
         }
     }
 
-    let written: Vec<&BootstrapEntry> = entries.iter().filter(|e| e.skip_reason.is_none()).collect();
-    let skipped: Vec<&BootstrapEntry> = entries.iter().filter(|e| e.skip_reason.is_some()).collect();
+    let written: Vec<&BootstrapEntry> =
+        entries.iter().filter(|e| e.skip_reason.is_none()).collect();
+    let skipped: Vec<&BootstrapEntry> =
+        entries.iter().filter(|e| e.skip_reason.is_some()).collect();
 
     if globals.json {
         let cases_json: Vec<serde_json::Value> = entries
@@ -425,9 +424,8 @@ fn bootstrap_golden_cases(
                     "status": if e.skip_reason.is_none() { "bootstrapped" } else { "skipped" },
                 });
                 if !e.golden_path.as_os_str().is_empty() {
-                    obj["golden_path"] = serde_json::Value::String(
-                        e.golden_path.display().to_string(),
-                    );
+                    obj["golden_path"] =
+                        serde_json::Value::String(e.golden_path.display().to_string());
                 }
                 if let Some(reason) = &e.skip_reason {
                     obj["reason"] = serde_json::Value::String(reason.clone());
@@ -535,19 +533,13 @@ fn print_bootstrap_summary(
             .unwrap_or(20)
             .clamp(20, 50);
         let bar = "─".repeat(col_w + 2);
-        println!(
-            "  ┌{}┬──────────────────────────────────────────────┐",
-            bar
-        );
+        println!("  ┌{}┬──────────────────────────────────────────────┐", bar);
         println!(
             "  │ {:<col_w$} │ Golden file                                  │",
             "Case",
             col_w = col_w,
         );
-        println!(
-            "  ├{}┼──────────────────────────────────────────────┤",
-            bar
-        );
+        println!("  ├{}┼──────────────────────────────────────────────┤", bar);
         for e in written {
             let path_str = e.golden_path.display().to_string();
             let path_display = if path_str.len() > 44 {
@@ -562,10 +554,7 @@ fn print_bootstrap_summary(
                 col_w = col_w,
             );
         }
-        println!(
-            "  └{}┴──────────────────────────────────────────────┘",
-            bar
-        );
+        println!("  └{}┴──────────────────────────────────────────────┘", bar);
     }
 
     if !skipped.is_empty() {

@@ -1,6 +1,6 @@
 use agentcarousel_core::{
-    annotate_run_cost, judge_key_candidates, judge_provider_from_model,
-    prefetch_pricing, CaseStatus, CertificationContext, JudgeProvider,
+    annotate_run_cost, judge_key_candidates, judge_provider_from_model, prefetch_pricing,
+    CaseStatus, CertificationContext, JudgeProvider,
 };
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_junit, print_terminal};
