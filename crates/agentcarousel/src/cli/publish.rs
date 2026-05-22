@@ -12,7 +12,9 @@ use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
 use super::GlobalOptions;
 
-/// Publish a bundle to registry (register + submit run evidence).
+/// Publish a fixture bundle and its test evidence to the shared registry.
+///
+/// agc publish registers the bundle, uploads run evidence, and makes the results visible to your team in the registry dashboard. Run agc login first to store your registry credentials. A local run with passing results is required before publishing.
 #[derive(Debug, Parser)]
 pub struct PublishArgs {
     /// Bundle directory or explicit bundle.manifest.json path.

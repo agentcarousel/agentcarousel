@@ -95,6 +95,9 @@ jobs:
       contents: read
     env:
       AGENTCAROUSEL_REGISTRY_URL: ${{ vars.AGENTCAROUSEL_REGISTRY_URL }}
+      HAS_JUDGE_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY != '' }}
+      HAS_CAROUSEL_KEY: ${{ secrets.AGENTCAROUSEL_CAROUSEL_KEY != '' }}
+      HAS_CAROUSEL_MODELS: ${{ secrets.AGENTCAROUSEL_CAROUSEL_MODELS != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -243,7 +246,7 @@ jobs:
           done
 
       - name: Phase 2 — live judge eval (requires AGENTCAROUSEL_JUDGE_KEY)
-        if: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY != '' }}
+        if: env.HAS_JUDGE_KEY == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
         run: |
@@ -276,11 +279,11 @@ jobs:
               || echo "::warning::Live eval failed for ${skill}"
           done
 
-      - name: Phase 3 — model carousel (requires AGENTCAROUSEL_CAROUSEL_MODELS + keys)
-        if: ${{ secrets.AGENTCAROUSEL_CAROUSEL_MODELS != '' && secrets.AGENTCAROUSEL_JUDGE_KEY != '' }}
+      - name: Phase 3 — model carousel (requires AGENTCAROUSEL_CAROUSEL_MODELS + AGENTCAROUSEL_CAROUSEL_KEY)
+        if: env.HAS_CAROUSEL_KEY == 'true' && env.HAS_CAROUSEL_MODELS == 'true'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.AGENTCAROUSEL_OPENAI_KEY }}
+          AGENTCAROUSEL_GENERATOR_KEY: ${{ secrets.AGENTCAROUSEL_CAROUSEL_KEY }}
+          AGENTCAROUSEL_JUDGE_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
         run: |
           mkdir -p carousel-results
 

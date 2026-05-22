@@ -126,6 +126,8 @@ impl Evaluator for ProcessEvaluator {
             effectiveness_score,
             passed: response.passed.unwrap_or(effectiveness_score >= 1.0),
             judge_rationale: None,
+            judge_tokens_in: None,
+            judge_tokens_out: None,
         })
     }
 }

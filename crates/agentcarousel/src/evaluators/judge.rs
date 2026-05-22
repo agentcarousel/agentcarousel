@@ -9,6 +9,12 @@ use std::time::Duration;
 use super::assertions::check_output;
 use super::trait_def::{Evaluator, EvaluatorError, EvaluatorKind};
 
+struct JudgeCallOutput {
+    text: String,
+    tokens_in: Option<u64>,
+    tokens_out: Option<u64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct JudgeEvaluator {
     pub prompt: Option<String>,
@@ -69,8 +75,18 @@ struct GeminiGenerationConfig {
 }
 
 #[derive(Debug, Deserialize)]
+struct GeminiUsage {
+    #[serde(rename = "promptTokenCount")]
+    prompt_token_count: Option<u64>,
+    #[serde(rename = "candidatesTokenCount")]
+    candidates_token_count: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct GeminiResponse {
     candidates: Option<Vec<GeminiCandidate>>,
+    #[serde(rename = "usageMetadata")]
+    usage_metadata: Option<GeminiUsage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,46 +122,32 @@ impl Evaluator for JudgeEvaluator {
         let judge_key = resolve_judge_key(provider)?;
         let system_prompt = build_system_prompt(case, self.prompt.as_deref());
         let user_prompt = build_user_prompt(case, &output);
-        let response_text = match provider {
-            JudgeProvider::Gemini => call_gemini_text(
-                &judge_key,
-                &self.model,
-                self.max_tokens,
-                system_prompt.clone(),
-                user_prompt.clone(),
-            )?,
-            JudgeProvider::OpenAi => call_openai_text(
-                &judge_key,
-                &self.model,
-                self.max_tokens,
-                system_prompt.clone(),
-                user_prompt.clone(),
-            )?,
-            JudgeProvider::Anthropic => call_anthropic_text(
-                &judge_key,
-                &self.model,
-                self.max_tokens,
-                system_prompt.clone(),
-                user_prompt.clone(),
-            )?,
-            JudgeProvider::OpenRouter => call_openrouter_text(
-                &judge_key,
-                &self.model,
-                self.max_tokens,
-                system_prompt.clone(),
-                user_prompt.clone(),
-            )?,
+
+        let call_judge = |sp: String, up: String, max_tok: Option<u32>| match provider {
+            JudgeProvider::Gemini => call_gemini_text(&judge_key, &self.model, max_tok, sp, up),
+            JudgeProvider::OpenAi => call_openai_text(&judge_key, &self.model, max_tok, sp, up),
+            JudgeProvider::Anthropic => {
+                call_anthropic_text(&judge_key, &self.model, max_tok, sp, up)
+            }
+            JudgeProvider::OpenRouter => {
+                call_openrouter_text(&judge_key, &self.model, max_tok, sp, up)
+            }
         };
-        if response_text.trim().is_empty() {
+
+        let first_out = call_judge(system_prompt.clone(), user_prompt.clone(), self.max_tokens)?;
+        let mut judge_tokens_in: Option<u64> = first_out.tokens_in;
+        let mut judge_tokens_out: Option<u64> = first_out.tokens_out;
+
+        if first_out.text.trim().is_empty() {
             return Err(EvaluatorError::InvalidOutput(
                 "judge returned empty response".to_string(),
             ));
         }
 
-        let judge_response = match parse_judge_response(&response_text) {
+        let judge_response = match parse_judge_response(&first_out.text) {
             Ok(parsed) => parsed,
             Err(first_err) => {
-                if !looks_truncated_json(&response_text) {
+                if !looks_truncated_json(&first_out.text) {
                     return Err(first_err);
                 }
                 // Retry once with a larger token budget and stricter brevity constraints.
@@ -155,37 +157,10 @@ impl Evaluator for JudgeEvaluator {
                     "{}\nKeep each rationale <= 12 words. Return minified JSON only.",
                     system_prompt
                 );
-                let retry_text = match provider {
-                    JudgeProvider::Gemini => call_gemini_text(
-                        &judge_key,
-                        &self.model,
-                        retry_tokens,
-                        retry_system_prompt,
-                        user_prompt,
-                    )?,
-                    JudgeProvider::OpenAi => call_openai_text(
-                        &judge_key,
-                        &self.model,
-                        retry_tokens,
-                        retry_system_prompt,
-                        user_prompt,
-                    )?,
-                    JudgeProvider::Anthropic => call_anthropic_text(
-                        &judge_key,
-                        &self.model,
-                        retry_tokens,
-                        retry_system_prompt,
-                        user_prompt,
-                    )?,
-                    JudgeProvider::OpenRouter => call_openrouter_text(
-                        &judge_key,
-                        &self.model,
-                        retry_tokens,
-                        retry_system_prompt,
-                        user_prompt,
-                    )?,
-                };
-                parse_judge_response(&retry_text)?
+                let retry_out = call_judge(retry_system_prompt, user_prompt, retry_tokens)?;
+                judge_tokens_in = add_opt(judge_tokens_in, retry_out.tokens_in);
+                judge_tokens_out = add_opt(judge_tokens_out, retry_out.tokens_out);
+                parse_judge_response(&retry_out.text)?
             }
         };
         let mut judge_scores = std::collections::HashMap::new();
@@ -252,6 +227,8 @@ impl Evaluator for JudgeEvaluator {
             judge_rationale: judge_response
                 .overall_rationale
                 .or_else(|| Some("judge completed without rationale".to_string())),
+            judge_tokens_in,
+            judge_tokens_out,
         })
     }
 }
@@ -313,7 +290,7 @@ fn call_gemini_text(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let judge_key = judge_key.to_string();
     let model = model.to_string();
     std::thread::spawn(move || {
@@ -329,7 +306,7 @@ fn call_gemini_blocking(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
         model, judge_key
@@ -368,14 +345,27 @@ fn call_gemini_blocking(
             let parsed = response
                 .json::<GeminiResponse>()
                 .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
-            return Ok(parsed
+            let text = parsed
                 .candidates
                 .as_ref()
                 .and_then(|candidates| candidates.first())
                 .and_then(|candidate| candidate.content.as_ref())
                 .and_then(|content| content.parts.first())
                 .map(|part| part.text.clone())
-                .unwrap_or_default());
+                .unwrap_or_default();
+            let tokens_in = parsed
+                .usage_metadata
+                .as_ref()
+                .and_then(|u| u.prompt_token_count);
+            let tokens_out = parsed
+                .usage_metadata
+                .as_ref()
+                .and_then(|u| u.candidates_token_count);
+            return Ok(JudgeCallOutput {
+                text,
+                tokens_in,
+                tokens_out,
+            });
         }
 
         let body = response.text().unwrap_or_default();
@@ -422,8 +412,15 @@ struct OpenAiRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct OpenAiUsage {
+    prompt_tokens: Option<u64>,
+    completion_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct OpenAiResponse {
     choices: Option<Vec<OpenAiChoice>>,
+    usage: Option<OpenAiUsage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,7 +439,7 @@ fn call_openai_text(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let judge_key = judge_key.to_string();
     let model = model.to_string();
     std::thread::spawn(move || {
@@ -458,7 +455,7 @@ fn call_openai_blocking(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let request = OpenAiRequest {
         model: model.to_string(),
         messages: vec![
@@ -494,13 +491,20 @@ fn call_openai_blocking(
             let parsed = response
                 .json::<OpenAiResponse>()
                 .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
-            return Ok(parsed
+            let text = parsed
                 .choices
                 .as_ref()
                 .and_then(|choices| choices.first())
                 .and_then(|choice| choice.message.as_ref())
                 .and_then(|message| message.content.clone())
-                .unwrap_or_default());
+                .unwrap_or_default();
+            let tokens_in = parsed.usage.as_ref().and_then(|u| u.prompt_tokens);
+            let tokens_out = parsed.usage.as_ref().and_then(|u| u.completion_tokens);
+            return Ok(JudgeCallOutput {
+                text,
+                tokens_in,
+                tokens_out,
+            });
         }
         let body = response.text().unwrap_or_default();
         let retryable = is_retryable_status(status);
@@ -536,8 +540,15 @@ struct AnthropicRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct AnthropicUsage {
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AnthropicResponse {
     content: Option<Vec<AnthropicContent>>,
+    usage: Option<AnthropicUsage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -551,7 +562,7 @@ fn call_anthropic_text(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let judge_key = judge_key.to_string();
     let model = model.to_string();
     std::thread::spawn(move || {
@@ -567,7 +578,7 @@ fn call_anthropic_blocking(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let Some(max_tokens) = max_tokens else {
         return Err(EvaluatorError::JudgeFailed(
             "anthropic judge requires max_tokens".to_string(),
@@ -601,12 +612,19 @@ fn call_anthropic_blocking(
             let parsed = response
                 .json::<AnthropicResponse>()
                 .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
-            return Ok(parsed
+            let text = parsed
                 .content
                 .as_ref()
                 .and_then(|items| items.first())
                 .and_then(|item| item.text.clone())
-                .unwrap_or_default());
+                .unwrap_or_default();
+            let tokens_in = parsed.usage.as_ref().and_then(|u| u.input_tokens);
+            let tokens_out = parsed.usage.as_ref().and_then(|u| u.output_tokens);
+            return Ok(JudgeCallOutput {
+                text,
+                tokens_in,
+                tokens_out,
+            });
         }
         let body = response.text().unwrap_or_default();
         let retryable = is_retryable_status(status);
@@ -632,7 +650,7 @@ fn call_openrouter_text(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let judge_key = judge_key.to_string();
     let model = model.to_string();
     std::thread::spawn(move || {
@@ -648,7 +666,7 @@ fn call_openrouter_blocking(
     max_tokens: Option<u32>,
     system_prompt: String,
     user_prompt: String,
-) -> Result<String, EvaluatorError> {
+) -> Result<JudgeCallOutput, EvaluatorError> {
     let request = OpenAiRequest {
         model: model.to_string(),
         messages: vec![
@@ -689,13 +707,20 @@ fn call_openrouter_blocking(
             let parsed = response
                 .json::<OpenAiResponse>()
                 .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
-            return Ok(parsed
+            let text = parsed
                 .choices
                 .as_ref()
                 .and_then(|choices| choices.first())
                 .and_then(|choice| choice.message.as_ref())
                 .and_then(|message| message.content.clone())
-                .unwrap_or_default());
+                .unwrap_or_default();
+            let tokens_in = parsed.usage.as_ref().and_then(|u| u.prompt_tokens);
+            let tokens_out = parsed.usage.as_ref().and_then(|u| u.completion_tokens);
+            return Ok(JudgeCallOutput {
+                text,
+                tokens_in,
+                tokens_out,
+            });
         }
         let body = response.text().unwrap_or_default();
         let retryable = is_retryable_status(status);
@@ -741,6 +766,15 @@ fn parse_judge_response(raw_text: &str) -> Result<JudgeResponse, EvaluatorError>
     Err(EvaluatorError::InvalidOutput(
         "judge response was not valid JSON".to_string(),
     ))
+}
+
+fn add_opt(a: Option<u64>, b: Option<u64>) -> Option<u64> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x + y),
+        (Some(x), None) => Some(x),
+        (None, Some(y)) => Some(y),
+        (None, None) => None,
+    }
 }
 
 fn redact_api_key(message: &str) -> String {

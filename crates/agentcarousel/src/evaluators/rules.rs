@@ -76,6 +76,8 @@ impl Evaluator for RulesEvaluator {
             effectiveness_score,
             passed,
             judge_rationale: None,
+            judge_tokens_in: None,
+            judge_tokens_out: None,
         })
     }
 }

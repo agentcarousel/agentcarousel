@@ -1,6 +1,6 @@
 use agentcarousel_core::{
-    judge_key_candidates, judge_provider_from_model, CaseStatus, CertificationContext,
-    JudgeProvider,
+    annotate_run_cost, fmt_cost, fmt_tokens, judge_key_candidates, judge_provider_from_model,
+    prefetch_pricing, CaseStatus, CertificationContext, JudgeProvider,
 };
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_junit, print_terminal};
@@ -24,10 +24,11 @@ enum EvalExecutionMode {
     Live,
 }
 
-/// Run evaluation with mock or live generation; optionally score with an LLM judge.
+/// Run your test suite and see which cases pass, fail, or need attention.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc eval fixtures/customer-support/cases.yaml          # mock, rules evaluator\n  agc eval fixtures/ --execution-mode live               # live generation\n  agc eval fixtures/ --evaluator all --judge             # mixed rules+judge fixtures\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on all cases\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly output\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (IO, network, database)\n  5  fixture path not found"
+    long_about = "Run your test suite and see which cases pass, fail, or need attention.\n\nBy default, agc eval uses pre-recorded mock responses so no API key is required and runs finish in seconds. Switch to --execution-mode live to call a real model API. Add --judge to score outputs with an LLM judge on top of rule-based checks.\n\nToken counts and USD cost are shown automatically after each run when data is available.",
+    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly JSON output\n  agc eval fixtures/ --execution-mode live --update-golden  # update saved golden outputs\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
 )]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -252,7 +253,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         },
         mock_dir: config.runner.mock_dir.clone(),
         generation_mode,
-        generator_model: Some(generator_model),
+        generator_model: Some(generator_model.clone()),
         generator_max_tokens: if args.disable_max_tokens {
             None
         } else {
@@ -277,7 +278,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
             effective_evaluator
         },
         judge: judge_enabled,
-        judge_model: Some(judge_model),
+        judge_model: Some(judge_model.clone()),
         effectiveness_threshold: config.eval.effectiveness_threshold,
         judge_max_tokens: if args.disable_max_tokens {
             None
@@ -291,12 +292,28 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         update_golden: args.update_golden,
     };
 
+    prefetch_pricing();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
         .build()
         .expect("tokio runtime");
-    let run = runtime.block_on(run_eval(fixtures, eval_config));
+    let mut run = runtime.block_on(run_eval(fixtures, eval_config));
+
+    let judge_model_for_cost = if args.judge {
+        Some(judge_model.as_str())
+    } else {
+        None
+    };
+    annotate_run_cost(&mut run, &generator_model, judge_model_for_cost);
+    run.summary.generator_model = Some(generator_model.clone());
+    run.summary.judge_model = if judge_enabled {
+        Some(judge_model.clone())
+    } else {
+        None
+    };
+    run.summary.command_line = Some(std::env::args().collect::<Vec<_>>().join(" "));
 
     let _ = persist_run(&run);
     let format_str = format.as_str();
@@ -312,13 +329,14 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
                 if globals.quiet {
                     agentcarousel_reporters::print_terminal_summary(&run);
                 } else {
-                    print_terminal(&run);
+                    print_terminal(&run, globals.verbose > 0);
                 }
             }
         }
 
         if !globals.quiet && format_str != "json" && format_str != "junit" {
             print_postflight_hints(&run);
+            print_cost_line(&run);
         }
         if globals.quiet || format_str == "json" || format_str == "junit" {
             print_eval_saved_run_hint(
@@ -355,7 +373,7 @@ fn cli_invocation_name() -> String {
             path.file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
         })
-        .unwrap_or_else(|| "agentcarousel".to_string())
+        .unwrap_or_else(|| "agc".to_string())
 }
 
 fn print_eval_saved_run_hint(run: &agentcarousel_core::Run, to_stderr: bool) {
@@ -432,4 +450,43 @@ fn resolve_generator_key(provider: GeneratorProvider) -> Option<String> {
         .key_candidates()
         .iter()
         .find_map(|key| std::env::var(key).ok())
+}
+
+fn print_cost_line(run: &agentcarousel_core::Run) {
+    let s = &run.summary;
+    let has_gen = s.tokens_in.is_some();
+    let has_judge = s.judge_tokens_in.is_some();
+    if !has_gen && !has_judge {
+        return;
+    }
+
+    let line = if has_judge {
+        let gen = format!(
+            "gen {}↑ {}↓",
+            fmt_tokens(s.tokens_in),
+            fmt_tokens(s.tokens_out)
+        );
+        let judge = format!(
+            "judge {}↑ {}↓",
+            fmt_tokens(s.judge_tokens_in),
+            fmt_tokens(s.judge_tokens_out)
+        );
+        match s.total_cost_usd {
+            Some(_) => format!(
+                "tokens  {}  {}  ·  {} total",
+                gen,
+                judge,
+                fmt_cost(s.total_cost_usd)
+            ),
+            None => format!("tokens  {}  {}", gen, judge),
+        }
+    } else {
+        let tok = format!("{}↑ {}↓", fmt_tokens(s.tokens_in), fmt_tokens(s.tokens_out));
+        match s.total_cost_usd {
+            Some(_) => format!("tokens  {}  ·  {}", tok, fmt_cost(s.total_cost_usd)),
+            None => format!("tokens  {}", tok),
+        }
+    };
+
+    println!("  {}", style(line).dim());
 }

@@ -166,16 +166,6 @@ async fn run_case_inner(
                 }
             }
         }
-        trace.steps.push(TraceStep {
-            index: trace.steps.len() as u32,
-            kind: StepKind::AgentDecision,
-            tool: None,
-            args: None,
-            result: None,
-            latency_ms: 0,
-            tokens_in: None,
-            tokens_out: None,
-        });
     }
 
     if status == CaseStatus::Passed && evaluate_rules {

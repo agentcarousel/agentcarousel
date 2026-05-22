@@ -149,7 +149,7 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
                 if globals.quiet {
                     agentcarousel_reporters::print_terminal_summary(&run);
                 } else {
-                    print_terminal(&run);
+                    print_terminal(&run, globals.verbose > 0);
                 }
             }
         }

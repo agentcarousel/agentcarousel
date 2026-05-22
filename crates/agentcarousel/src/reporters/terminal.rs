@@ -3,8 +3,6 @@ use console::style;
 use serde_json::Value;
 
 const HUMAN_ERROR_MAX: usize = 280;
-const JUDGE_SUMMARY_MAX: usize = 160;
-const RUBRIC_SNIPPET_MAX: usize = 100;
 
 /// Human-oriented case id: segment after the last `/`, or the full id.
 fn case_label(case_id: &str) -> &str {
@@ -65,7 +63,7 @@ fn cli_binary_name() -> String {
             path.file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
         })
-        .unwrap_or_else(|| "agentcarousel".to_string())
+        .unwrap_or_else(|| "agc".to_string())
 }
 
 /// Collapse whitespace and cap length with an ellipsis (character-aware).
@@ -158,9 +156,8 @@ fn print_eval_failure_rationale(scores: &EvalScores) {
                 let snippet = rs
                     .rationale
                     .as_deref()
-                    .map(|s| truncate_human(s, RUBRIC_SNIPPET_MAX))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "no rationale".to_string());
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or("no rationale");
                 println!(
                     "             › {} · {} ({:.2}): {}",
                     scores.evaluator,
@@ -189,12 +186,8 @@ fn print_eval_failure_rationale(scores: &EvalScores) {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
             for rs in low.iter().take(2) {
-                let snippet = rs
-                    .rationale
-                    .as_deref()
-                    .map(|s| truncate_human(s, RUBRIC_SNIPPET_MAX))
-                    .unwrap_or_default();
-                if snippet.is_empty() {
+                let snippet = rs.rationale.as_deref().unwrap_or_default();
+                if snippet.trim().is_empty() {
                     continue;
                 }
                 println!(
@@ -215,11 +208,10 @@ fn judge_overall_summary_line(judge_rationale: Option<&str>) -> Option<String> {
     if jr.is_empty() {
         return None;
     }
-    let t = truncate_human(jr, JUDGE_SUMMARY_MAX);
-    if t.is_empty() || t == "judge completed without rationale" {
+    if jr.is_empty() || jr == "judge completed without rationale" {
         None
     } else {
-        Some(t)
+        Some(jr.to_string())
     }
 }
 
@@ -243,9 +235,8 @@ fn print_judge_failure_summary(scores: &EvalScores) {
         let snippet = rs
             .rationale
             .as_deref()
-            .map(|s| truncate_human(s, RUBRIC_SNIPPET_MAX))
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "no rationale".to_string());
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or("no rationale");
         println!(
             "             › judge · {} ({:.2}): {}",
             rs.rubric_id,
@@ -271,7 +262,7 @@ fn role_label(role: &Role) -> &'static str {
     }
 }
 
-fn print_case_failure_details(case: &CaseResult) {
+fn print_case_details(case: &CaseResult) {
     let is_judged = case
         .eval_scores
         .as_ref()
@@ -282,39 +273,26 @@ fn print_case_failure_details(case: &CaseResult) {
         println!("               {}", style("input:").dim().bold());
         for msg in &case.input {
             let role = role_label(&msg.role);
-            let content_line = msg.content.replace('\n', " ");
-            let snippet = if content_line.chars().count() > 160 {
-                format!("{}…", content_line.chars().take(157).collect::<String>())
-            } else {
-                content_line
-            };
-            println!(
-                "               [{}] {}",
-                style(role).bold(),
-                style(snippet).dim()
-            );
+            println!("               [{}]", style(role).bold());
+            for line in msg.content.trim().lines() {
+                println!("                 {}", style(line).dim());
+            }
         }
         println!();
     }
 
     if let Some(out) = case.trace.final_output.as_ref() {
-        if !out.is_empty() && matches!(case.status, CaseStatus::Failed | CaseStatus::Error) {
-            let one_line = out.replace('\n', " ").trim().to_string();
-            let esc = if one_line.chars().count() > 120 {
-                format!("{}…", one_line.chars().take(117).collect::<String>())
-            } else {
-                one_line
-            };
-            println!("               agent replied: \"{}\"", style(esc).dim());
+        let out = out.trim();
+        if !out.is_empty() {
+            println!("               {}", style("agent replied:").dim().bold());
+            for line in out.lines() {
+                println!("                 {}", style(line).dim());
+            }
         }
     }
 
     if let Some(scores) = case.eval_scores.as_ref() {
-        let show_eval = matches!(case.status, CaseStatus::Failed)
-            || (matches!(case.status, CaseStatus::Error | CaseStatus::TimedOut) && !scores.passed);
-        if show_eval {
-            print_eval_failure_rationale(scores);
-        }
+        print_eval_failure_rationale(scores);
     }
 
     if let Some(err) = case.error.as_ref() {
@@ -328,7 +306,7 @@ fn print_case_failure_details(case: &CaseResult) {
 }
 
 /// Full terminal report (eval/test/report): banner, case rows, summary, run id hint.
-pub fn print_terminal(run: &Run) {
+pub fn print_terminal(run: &Run, verbose: bool) {
     let skill = header_skill_label(run);
     let n = run.summary.total;
     println!(
@@ -389,9 +367,10 @@ pub fn print_terminal(run: &Run) {
         if matches!(
             case.status,
             CaseStatus::Failed | CaseStatus::Error | CaseStatus::TimedOut
-        ) {
+        ) || (verbose && matches!(case.status, CaseStatus::Passed))
+        {
             println!();
-            print_case_failure_details(case);
+            print_case_details(case);
         }
 
         if case.metrics.runs_attempted > 1 {

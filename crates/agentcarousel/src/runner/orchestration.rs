@@ -275,6 +275,8 @@ pub(super) async fn run_case_eval(
         if result.status == CaseStatus::Passed {
             match evaluate_case_result(&case, &result, config, run_id, &judge_cache).await {
                 Ok(scores) => {
+                    result.metrics.judge_tokens_in = scores.judge_tokens_in;
+                    result.metrics.judge_tokens_out = scores.judge_tokens_out;
                     result.eval_scores = Some(scores.clone());
                     let threshold = case
                         .evaluator_config

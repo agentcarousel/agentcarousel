@@ -10,8 +10,9 @@ const CREDENTIALS_FILE_NAME: &str = "credentials.toml";
 
 #[derive(Debug, Parser)]
 #[command(
-    about = "Authenticate with the registry and store credentials.",
-    after_help = "Examples:\n  agc login --token agct_abc123\n  agc login --token agct_abc123 --url https://registry.agentcarousel.com\n  agc logout"
+    about = "Save registry credentials so agc can publish and pull bundles.",
+    long_about = "Save registry credentials so agc can publish and pull bundles.\n\nYour token is stored securely in the OS credential store (macOS Keychain on Mac) and is read automatically by agc publish, agc bundle pull, and agc compare --registry. Use agc logout to remove stored credentials.",
+    after_help = "Examples:\n  agc login --token agct_abc123\n  agc login --token agct_abc123 --url https://registry.agentcarousel.com\n  agc logout    # remove stored credentials"
 )]
 pub struct LoginArgs {
     #[command(subcommand)]

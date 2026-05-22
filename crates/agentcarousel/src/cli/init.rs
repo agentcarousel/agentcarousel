@@ -3,6 +3,9 @@ use clap::Parser;
 use super::exit_codes::ExitCode;
 use super::fixture_utils::is_kebab_case;
 
+/// Create a starter fixture file for a new skill or agent.
+///
+/// agc init writes a ready-to-run fixture YAML template in the standard fixtures/ directory structure. Use --skill for a single skill with example input/output cases, or --agent for an agent with multi-turn conversation examples.
 #[derive(Debug, Parser)]
 pub struct InitArgs {
     /// Scaffold a skill fixture template (conflicts with --agent).

@@ -61,6 +61,8 @@ impl Evaluator for GoldenEvaluator {
                 effectiveness_score: 1.0,
                 passed: true,
                 judge_rationale: None,
+                judge_tokens_in: None,
+                judge_tokens_out: None,
             });
         }
 
@@ -87,6 +89,8 @@ impl Evaluator for GoldenEvaluator {
             effectiveness_score: ratio,
             passed,
             judge_rationale: None,
+            judge_tokens_in: None,
+            judge_tokens_out: None,
         })
     }
 }

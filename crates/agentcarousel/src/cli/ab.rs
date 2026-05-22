@@ -1,5 +1,6 @@
 use agentcarousel_core::{
-    judge_key_candidates, judge_provider_from_model, CaseStatus, FixtureFile, Message, Role,
+    annotate_run_cost, fmt_cost, fmt_tokens, judge_key_candidates, judge_provider_from_model,
+    prefetch_pricing, CaseStatus, FixtureFile, Message, Role,
 };
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
@@ -24,16 +25,14 @@ enum AbExecutionMode {
     Live,
 }
 
-/// Run the same fixture suite against two system prompts and produce a head-to-head comparison.
+/// Compare two system prompts on the same fixture suite and see which one wins.
 ///
-/// Point `agc ab` at your fixtures and two prompt files. It runs each variant
-/// concurrently and prints a table showing pass rates, effectiveness scores, and
-/// which cases flipped status. Both runs are saved to history.
+/// agc ab runs your test suite against two prompt variants concurrently, then prints a side-by-side table showing pass rates, effectiveness scores, and which specific cases changed between A and B. Both runs are saved to history so you can review them later.
 ///
-/// Requires live API keys when using `--execution-mode live`.
+/// Returns exit code 1 if variant B regresses relative to A (lower pass rate or effectiveness score), so you can use it as a gate in CI.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc ab --a fixtures/v1/prompt.md --b fixtures/v2/prompt.md fixtures/my-skill/\n  agc ab --a prompts/old.md --b prompts/new.md fixtures/ --execution-mode live --model gemini-2.5-flash\n  agc ab --a p1.md --b p2.md fixtures/ --evaluator all --judge --judge-model claude-haiku-4-5-20251001\n  agc ab --a p1.md --b p2.md fixtures/ --json\n\nExit codes:\n  0  B is equivalent to or better than A\n  1  B regresses relative to A (pass rate or effectiveness drops)\n  4  runtime error"
+    after_help = "Examples:\n  agc ab --a prompts/old.md --b prompts/new.md fixtures/            # mock (fast, no API key)\n  agc ab --a p1.md --b p2.md fixtures/ --execution-mode live        # live generation\n  agc ab --a p1.md --b p2.md fixtures/ --judge                      # add LLM judge scoring\n  agc ab --a p1.md --b p2.md fixtures/ --model gemini-2.5-flash     # pick a specific model\n  agc ab --a p1.md --b p2.md fixtures/ --json                       # machine-readable output\n\nExit codes:\n  0  B is equivalent to or better than A\n  1  B regresses relative to A\n  4  runtime error (network, disk, config)"
 )]
 pub struct AbArgs {
     /// Fixture files or directories to run (default: fixtures).
@@ -238,6 +237,8 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
         &generator_model,
     );
 
+    prefetch_pricing();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -284,6 +285,24 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
         (run_a, run_b)
     });
 
+    let judge_model_opt = if args.judge {
+        Some(judge_model.as_str())
+    } else {
+        None
+    };
+    let mut run_a = run_a;
+    let mut run_b = run_b;
+    annotate_run_cost(&mut run_a, &generator_model, judge_model_opt);
+    annotate_run_cost(&mut run_b, &generator_model, judge_model_opt);
+    let ab_cmd_line = std::env::args().collect::<Vec<_>>().join(" ");
+    let judge_model_str = judge_model_opt.map(|s| s.to_string());
+    run_a.summary.generator_model = Some(generator_model.clone());
+    run_b.summary.generator_model = Some(generator_model.clone());
+    run_a.summary.judge_model = judge_model_str.clone();
+    run_b.summary.judge_model = judge_model_str;
+    run_a.summary.command_line = Some(ab_cmd_line.clone());
+    run_b.summary.command_line = Some(ab_cmd_line);
+
     let _ = persist_run(&run_a);
     let _ = persist_run(&run_b);
 
@@ -294,6 +313,7 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
         JsonOutput::ok("ab", output).print();
     } else {
         print_ab_terminal(&output);
+        print_ab_cost_lines(&run_a, &run_b);
     }
 
     if regression {
@@ -650,6 +670,43 @@ fn is_judge_evaluator_active(evaluator: &str) -> bool {
 
 fn resolve_key(candidates: &[&str]) -> Option<String> {
     candidates.iter().find_map(|k| std::env::var(k).ok())
+}
+
+fn print_ab_cost_lines(run_a: &agentcarousel_core::Run, run_b: &agentcarousel_core::Run) {
+    let a = &run_a.summary;
+    let b = &run_b.summary;
+    let any = a.total_cost_usd.is_some()
+        || b.total_cost_usd.is_some()
+        || a.tokens_in.is_some()
+        || b.tokens_in.is_some();
+    if !any {
+        return;
+    }
+
+    for (label, s) in [("A", a), ("B", b)] {
+        let total_in = s
+            .tokens_in
+            .map(|g| g + s.judge_tokens_in.unwrap_or(0))
+            .or(s.judge_tokens_in);
+        let total_out = s
+            .tokens_out
+            .map(|g| g + s.judge_tokens_out.unwrap_or(0))
+            .or(s.judge_tokens_out);
+        if total_in.is_none() && s.total_cost_usd.is_none() {
+            continue;
+        }
+        let tok = format!("{}↑ {}↓", fmt_tokens(total_in), fmt_tokens(total_out));
+        let line = match s.total_cost_usd {
+            Some(_) => format!(
+                "{}  tokens {}  ·  {}",
+                label,
+                tok,
+                fmt_cost(s.total_cost_usd)
+            ),
+            None => format!("{}  tokens {}", label, tok),
+        };
+        println!("  {}", style(line).dim());
+    }
 }
 
 #[cfg(test)]

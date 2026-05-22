@@ -10,10 +10,12 @@ use super::exit_codes::ExitCode;
 use super::output::JsonOutput;
 use super::GlobalOptions;
 
-/// Show historical pass-rate trends, per-case flakiness, and latency from run history.
+/// Show trends in pass rate, latency, and flakiness across your run history.
+///
+/// agc stats reads your local run history and summarizes how each case has behaved over time — whether pass rates are trending up or down, which cases are flaky, and where latency is highest. Use --skill to focus on a specific agent or skill area.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc stats\n  agc stats --skill customer-support\n  agc stats --limit 100 --format json"
+    after_help = "Examples:\n  agc stats                                # summary across all recent runs\n  agc stats --skill customer-support       # focus on a specific skill\n  agc stats --limit 100 --format json      # last 100 runs in JSON"
 )]
 pub struct StatsArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).
