@@ -1,6 +1,6 @@
 # AgentCarousel
 
-**Unit tests for AI agents.** The only AI testing tool that produces evidence your auditors accept — run behavioral tests in CI, score with an LLM judge, gate on regressions, and export signed bundles ready for procurement teams and government regulators.
+**Unit tests for AI agents.** Run behavioral tests in CI, score outputs with an LLM judge, gate on regressions, and export signed bundles your auditors and procurement teams accept.
 
 [![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
 [![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
@@ -9,14 +9,14 @@
 
 <img width="692" height="414" alt="demo" src="https://github.com/user-attachments/assets/c55df92c-fa4a-44b6-a381-23fe0329a5c4" />
 
-AgentCarousel delivers a repeatable, automated way to assess AI agent efficacy and behavior — establishing the trust required before deployment. Tests run deterministically in CI, semantic scoring comes from an LLM-as-a-judge, and results can be certified by a domain expert with a signed attestation.
+AgentCarousel gives you a repeatable, automated way to assess AI agent behavior and build confidence before deployment. Tests run deterministically in CI, semantic scoring comes from an LLM-as-a-judge, and results can be certified by a domain expert with a signed attestation.
 
 ## Why agentcarousel
 
-- **Behavioral certainty before deployment** — Declarative YAML fixtures pin what your agent should and shouldn't say. Same inputs, same outputs, every time — without touching a live API.
-- **Evidence that stands up to scrutiny** — Every run exports a signed bundle (`.tar.gz` + minisign attestation) a domain expert can certify — ready for auditors, procurement teams, and government regulators.
-- **Semantic scoring, not just pattern matching** — An LLM-as-a-judge evaluates outputs with contextual understanding, catching regressions.
-- **Built for regulated environments** — Risk tier, data handling, and certification track are first-class fixtures. Integrates into CI and produces governance artifacts for your compliance program.
+- **Behavioral certainty before deployment:** Declarative YAML fixtures pin what your agent should and shouldn't say. Same inputs, same outputs, every time, without touching a live API.
+- **Evidence that stands up to scrutiny:** Every run exports a signed bundle (`.tar.gz` + minisign attestation) that a domain expert can certify, ready for auditors, procurement teams, and government regulators.
+- **Semantic scoring, not just pattern matching:** An LLM-as-a-judge evaluates outputs with contextual understanding, catching regressions that keyword checks miss.
+- **Built for regulated environments:** Risk tier, data handling, and certification track are first-class fixtures. Integrates into CI and produces governance artifacts for your compliance program.
 
 ## Install
 
@@ -63,7 +63,7 @@ See [`fixtures/regex-builder/`](fixtures/regex-builder/) for a complete fixture 
 
 ## Generate Fixtures
 
-`agc generate` scaffolds validated YAML fixture cases using your configured generator LLM — no hand-writing required.
+`agc generate` scaffolds validated YAML fixture cases using your configured generator LLM. No manual writing required.
 
 ```bash
 # From a skill name and description
@@ -76,15 +76,9 @@ agc generate --from-prompt fixtures/customer-support/prompt.md --count 10
 
 # Extend an existing fixture (deduplicates against existing case IDs)
 agc generate --extend fixtures/customer-support/ --count 5
-
-# Preview without writing
-agc generate --skill my-skill --description "..." --dry-run
-
-# Machine-readable output (for agent workflows)
-agc generate --skill my-skill --description "..." --dry-run --json
 ```
 
-Generated cases are validated against the fixture schema before being written. If the LLM output fails validation, the command retries once with the errors appended to the prompt. The meta-prompt lives at `templates/generate-prompt.md` — teams can customize it to specify what "good coverage" means for their domain.
+Generated cases are validated against the fixture schema before being written. If the LLM output fails validation, the command retries once with the errors appended to the prompt. The meta-prompt lives at `templates/generate-prompt.md`; teams can customize it to specify what "good coverage" means for their skill or domain.
 
 **Typical workflow:**
 
@@ -113,15 +107,17 @@ agc eval fixtures/regex-builder/ \
   --runs 1
 ```
 
-**Execution modes** — `--execution-mode live` hits real LLM APIs. Omit it (or pass `mock`) for deterministic offline runs.
+**Execution modes:** `--execution-mode live` hits real LLM APIs. Omit it (or pass `mock`) for deterministic offline runs.
 
-**Evaluators** — `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. `--evaluator mock` skips LLM calls entirely.
+**Evaluators:** `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. `--evaluator mock` skips LLM calls entirely.
 
-**Filters** — `--filter` on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`)
+**Filters:** `--filter` matches on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`).
+
+**Token and cost tracking:** After each run, `agc eval` prints token and USD cost totals (generator and judge separately) when live API data is available. The same values are saved to `run.json` and `report.md` for audit trails.
 
 ## Multi-Model Comparison
 
-`agc carousel` runs the same fixture suite against multiple models in parallel and prints a ranked comparison table — pass rate, effectiveness score, and latency p50 per model. Every model's run is saved to history so `agc compare` and the dashboard compare view work immediately.
+`agc carousel` runs the same fixture suite against multiple models in parallel and prints a ranked comparison table showing pass rate, effectiveness score, latency p50, token usage, and cost per model. Every model's run is saved to history so `agc compare` and the dashboard compare view work immediately.
 
 ```bash
 # Rank three models head-to-head
@@ -136,20 +132,43 @@ agc carousel \
   --evaluator all --judge \
   --judge-model claude-haiku-4-5-20251001
 
-# JSON output for downstream tooling
-agc carousel --models gpt-4o,gemini-2.5-flash fixtures/ --json
+# OpenRouter models (free and open-weight)
+agc carousel \
+  --models openrouter/deepseek/deepseek-chat:free,gpt-4o \
+  fixtures/my-skill/
+```
+
+**Recommended workflow for the most complete ranking:**
+
+```bash
+# 1. Record golden outputs for all your fixtures
+agc eval fixtures/ --execution-mode live --update-golden
+
+# 2. Rules-based baseline across models
+agc carousel --models m1,m2,m3 fixtures/
+
+# 3. Judge scoring for deeper signal
+agc carousel --models m1,m2,m3 fixtures/ -e judge --judge
+
+# 4. Drill into the top two
+agc compare <run-a> --baseline <run-b>
 ```
 
 ## A/B Prompt Comparison
 
-`agc ab` runs the same test (fixture) against two prompts concurrently and produces a head-to-head comparison. Pass rate, effectiveness score, and per-case winners.
+`agc ab` runs the same fixture against two prompts concurrently and produces a head-to-head comparison. Pass rate, effectiveness score, per-case winners, and cost per variant.
 
 ```bash
-# Compare two prompt variants
+# Compare two prompt variants (mock, no API key needed)
 agc ab \
-  --a fixtures/v1/prompt.md \
-  --b fixtures/v2/prompt.md \
-  fixtures/my-skill/ \
+  --a prompts/old.md \
+  --b prompts/new.md \
+  fixtures/my-skill/
+
+# Live generation
+agc ab \
+  --a prompts/old.md --b prompts/new.md \
+  fixtures/ \
   --execution-mode live \
   --model gemini-2.5-flash
 
@@ -157,14 +176,9 @@ agc ab \
 agc ab \
   --a prompts/old.md --b prompts/new.md \
   fixtures/ \
-  --evaluator all --judge \
+  --judge \
   --judge-model claude-haiku-4-5-20251001
-
-# JSON output
-agc ab --a p1.md --b p2.md fixtures/ --json
 ```
-
-The `--threshold` flag controls the effectiveness delta required to declare a winner (default `0.05`). Both runs are saved to history.
 
 ## CI Regression Gate
 
@@ -194,8 +208,6 @@ agc compare tag <run-id> --name prod-baseline
   run: agc compare -l --baseline ${{ vars.BASELINE_RUN_ID }} --threshold 0.05
 ```
 
-The JSON output includes `p_value`, `significant`, `samples_baseline`, and `samples_current` fields for downstream analysis.
-
 Exit codes: `0` = no regression, `1` = regression exceeds threshold, `4` = runtime error.
 
 ## Dashboard
@@ -208,34 +220,41 @@ agc dashboard --port 8080            # custom port
 agc dashboard --db path/to/history.db
 ```
 
+## AGC Registry Login
+
+`agc login` stores a registry token securely so `agc publish`, `agc bundle pull`, and `agc compare --registry` can authenticate without requiring `--token` on every command.
+
+```bash
+# Store a token
+agc login --token agct_abc123
+
+# Store with a specific registry URL
+agc login --token agct_abc123 --url https://registry.agentcarousel.com
+
+# Remove stored credentials
+agc logout
+```
+
+On macOS the token is kept in the Keychain. On other platforms it falls back to `~/.config/agentcarousel/credentials.toml` (mode 600). The token is also read from the `AGENTCAROUSEL_API_TOKEN` environment variable.
+
 ## Reports
 
 ```bash
 # List recent runs
 agc report list
 
-# Inspect a run
+# Inspect a run (add -v / --verbose for full case details)
 agc report show <RUN-ID>
+agc report show <RUN-ID> --verbose
 
-# Export as a signed evidence bundle
+# Export as a signed evidence bundle (always includes full detail)
 agc export <RUN-ID>
 agc export -l   # latest run
 ```
 
-## Agent Integration
+Exported runs include a comprehensive report alongside a JSON report and the minisign attestation.
 
-Every command emits structured JSON when `--json` is passed or stdout is not a TTY (piped to a file, another process, or an AI coding agent):
-
-```bash
-# Parse eval results in a pipeline
-agc eval fixtures/ --json | jq '.data.summary.pass_rate'
-
-# Machine-readable validate output
-agc validate fixtures/ --json | jq '.data.atf_summary'
-
-# Generate fixtures from an agent script
-agc generate --extend fixtures/my-skill/ --count 5 --json
-```
+## Exit Codes
 
 **Exit codes** (consistent across all commands):
 
@@ -264,7 +283,7 @@ agc bundle pack fixtures/regex-builder
 agc bundle verify fixtures/customer-support
 agc bundle verify my-bundle.tar.gz
 
-# Pull from registry
+# Pull from registry (uses stored credentials; see agc login)
 agc bundle pull customer-support-1.0.0 --url "https://api.agentcarousel.com"
 
 # Publish to registry
@@ -276,9 +295,11 @@ agc publish fixtures/customer-support \
   --all-runs --limit 5
 ```
 
+Store credentials once with `agc login --token agct_...` to avoid passing `--token` on every publish or pull.
+
 ## Trust Checks
 
-Trust checks query a skill's registry state for use in CI gates and governed workflows — verify a deployed agent is certified and untampered before it runs.
+Trust checks query an agent's registry state and confirm a deployed agent is certified and untampered. Use them in CI gates and governed workflows before the agent runs.
 
 ```bash
 # Check trust state from registry
