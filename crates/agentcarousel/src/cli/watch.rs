@@ -221,7 +221,6 @@ fn run_once(
             carousel_iteration: None,
             policy_version: None,
             progress: false,
-            update_golden: false,
         };
         runtime.block_on(run_eval(fixtures, eval_config))
     } else {

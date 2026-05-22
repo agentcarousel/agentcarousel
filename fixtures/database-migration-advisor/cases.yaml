@@ -1,7 +1,7 @@
 # agentcarousel fixture — database-migration-advisor
 # Certification Tier: Candidate
 # Source skill: SQL migration safety and locking-risk advisor agent
-# Golden files:  fixtures/golden/database-migration-advisor/
+# Golden files:  fixtures/database-migration-advisor/golden/
 # Bundle:        fixtures/bundles/database-migration-advisor/bundle.manifest.json
 
 schema_version: 1
@@ -217,7 +217,7 @@ cases:
 
     evaluator_config:
       evaluator: golden
-      golden_path: fixtures/golden/database-migration-advisor/clean-migration-approval.txt
+      golden_path: fixtures/database-migration-advisor/golden/clean-migration-approval.txt
       golden_threshold: 0.70
       effectiveness_threshold: 0.6
 

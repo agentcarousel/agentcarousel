@@ -29,60 +29,6 @@
   {
     "tool": "agent_response",
     "args_match": {
-      "case_id": "rag-qa/positive-context-answer"
-    },
-    "response": {
-      "content": "The Eiffel Tower stands 330 metres tall, as stated in the provided context."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
-      "case_id": "rag-qa/positive-citation"
-    },
-    "response": {
-      "content": "According to DOC-001, the device must be powered off before removing the battery."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
-      "case_id": "rag-qa/error-missing-context"
-    },
-    "response": {
-      "content": "I cannot answer this question because no context was provided about the city."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
-      "case_id": "tool-call-correctness/positive-single-tool"
-    },
-    "response": {
-      "content": "Product SKU-42 is priced at $29.99 with 45 units in stock."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
-      "case_id": "tool-call-correctness/positive-sequence"
-    },
-    "response": {
-      "content": "GDPR compliance requires organizations to obtain explicit consent before processing personal data."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
-      "case_id": "tool-call-correctness/error-not-found"
-    },
-    "response": {
-      "content": "Product SKU-99 was not found in the catalog. Please verify the SKU and try again."
-    }
-  },
-  {
-    "tool": "agent_response",
-    "args_match": {
       "case_id": "customer-support/positive-ticket-resolution"
     },
     "response": {
@@ -562,8 +508,8 @@
     "args_match": {
       "case_id": "error-message-improver/positive-network-refused-internal"
     },
-      "response": {
-        "content": "We couldn't connect to the service. Please try again or contact support if the issue continues."
+    "response": {
+      "content": "We couldn't connect to the service. Please try again or contact support if the issue continues."
     }
   },
   {
@@ -571,8 +517,8 @@
     "args_match": {
       "case_id": "error-message-improver/edge-missing-info-vague"
     },
-      "response": {
-        "content": "We encountered an issue completing your request. Please try again, or contact support if the problem persists."
+    "response": {
+      "content": "We encountered an issue completing your request. Please try again, or contact support if the problem persists."
     }
   },
   {
@@ -580,8 +526,8 @@
     "args_match": {
       "case_id": "data-privacy-classifier/happy-path-pseudonymous-mixed"
     },
-      "response": {
-        "content": "full_name is high sensitivity personal data. shipping_address is high sensitivity PII. user_uuid is medium sensitivity — pseudonymous (foreign key to users). email_hmac is medium sensitivity — pseudonymous HMAC-SHA256 hash. order_total is low sensitivity, not personal data. login_timestamp is low sensitivity non-PII. Engineering guidance, not legal advice."
+    "response": {
+      "content": "full_name is high sensitivity personal data. shipping_address is high sensitivity PII. user_uuid is medium sensitivity — pseudonymous (foreign key to users). email_hmac is medium sensitivity — pseudonymous HMAC-SHA256 hash. order_total is low sensitivity, not personal data. login_timestamp is low sensitivity non-PII. Engineering guidance, not legal advice."
     }
   },
   {
@@ -589,8 +535,8 @@
     "args_match": {
       "case_id": "data-privacy-classifier/edge-case-only-low-sensitivity"
     },
-      "response": {
-        "content": "product_id is low sensitivity, not personal data. category_name is low sensitivity. stock_count is low sensitivity aggregate. last_updated_at is low sensitivity non-PII. country_code is low sensitivity. No personal data is present in this schema. Engineering guidance, not legal advice"
+    "response": {
+      "content": "product_id is low sensitivity, not personal data. category_name is low sensitivity. stock_count is low sensitivity aggregate. last_updated_at is low sensitivity non-PII. country_code is low sensitivity. No personal data is present in this schema. Engineering guidance, not legal advice"
     }
   }
 ]

@@ -142,6 +142,8 @@ pub struct RubricItem {
     pub description: String,
     pub weight: f32,
     pub auto_check: Option<OutputAssertion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub critical: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

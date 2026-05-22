@@ -320,11 +320,7 @@ async fn evaluate_case_result(
     let evaluator_id = resolve_evaluator_id(case, config);
     match evaluator_id.as_str() {
         "rules" => RulesEvaluator.evaluate(case, result),
-        "golden" => {
-            let mut evaluator = GoldenEvaluator::from_case(case)?;
-            evaluator.update = config.update_golden;
-            evaluator.evaluate(case, result)
-        }
+        "golden" => GoldenEvaluator::from_case(case)?.evaluate(case, result),
         "process" => ProcessEvaluator::from_case(case)?.evaluate(case, result),
         "judge" => {
             if !config.judge {

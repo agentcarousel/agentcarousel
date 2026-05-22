@@ -1,7 +1,7 @@
 # agentcarousel fixture — github-actions-generator
 # Certification Tier: Candidate
 # Source skill: GitHub Actions CI/CD workflow generation agent
-# Golden files:  fixtures/golden/github-actions-generator/
+# Golden files:  fixtures/github-actions-generator/golden/
 # Bundle:        fixtures/bundles/github-actions-generator/bundle.manifest.json
 
 schema_version: 1
@@ -100,7 +100,7 @@ cases:
 
     evaluator_config:
       evaluator: golden
-      golden_path: fixtures/golden/github-actions-generator/push-pr-workflow.yml
+      golden_path: fixtures/github-actions-generator/golden/push-pr-workflow.txt
       golden_threshold: 0.70
       effectiveness_threshold: 0.6
 

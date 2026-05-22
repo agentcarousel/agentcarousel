@@ -1,7 +1,7 @@
 # agentcarousel fixture — sql-query-generator
 # Certification Tier: Candidate
 # Source skill: natural language to SQL query generation agent
-# Golden files:  fixtures/golden/sql-query-generator/
+# Golden files:  fixtures/sql-query-generator/golden/
 # Bundle:        fixtures/bundles/sql-query-generator/bundle.manifest.json
 
 schema_version: 1
@@ -101,7 +101,7 @@ cases:
 
     evaluator_config:
       evaluator: golden
-      golden_path: fixtures/golden/sql-query-generator/aggregation-group-by.sql
+      golden_path: fixtures/sql-query-generator/golden/aggregation-group-by.sql
       golden_threshold: 0.75
       effectiveness_threshold: 0.6
 

@@ -1,4 +1,4 @@
-use agentcarousel_core::{CaseResult, CaseStatus, EvalScores, Role, RubricScore, Run};
+use agentcarousel_core::{fmt_tokens, CaseResult, CaseStatus, EvalScores, Role, RubricScore, Run};
 use console::style;
 use serde_json::Value;
 
@@ -420,14 +420,33 @@ pub fn print_terminal(run: &Run, verbose: bool) {
     if s.tokens_in.is_some() || s.tokens_out.is_some() {
         let ti = s.tokens_in.unwrap_or(0);
         let to = s.tokens_out.unwrap_or(0);
-        let total = ti + to;
         println!();
-        println!("  {}", style("Token Consumption 🪙").bold());
-        println!("    › total: {}", style(total).cyan());
-        println!("      ├─ in:  {}", ti);
-        println!("      └─ out: {}", to);
+        println!("  {}", style("Tokens").bold());
+        println!(
+            "    gen   {} in · {} out",
+            style(fmt_tokens(s.tokens_in)).cyan(),
+            style(fmt_tokens(s.tokens_out)).cyan(),
+        );
+        if s.judge_tokens_in.is_some() {
+            println!(
+                "    judge {} in · {} out",
+                style(fmt_tokens(s.judge_tokens_in)).cyan(),
+                style(fmt_tokens(s.judge_tokens_out)).cyan(),
+            );
+        }
+        let total = ti + to + s.judge_tokens_in.unwrap_or(0) + s.judge_tokens_out.unwrap_or(0);
+        println!("    total {}", style(fmt_tokens(Some(total))).cyan().bold());
+        if let Some(cost) = s.total_cost_usd {
+            println!(
+                "    cost  {}",
+                style(format!("${:.4}", cost)).yellow().bold()
+            );
+        }
         if let Some(m) = s.mean_tokens_per_judged_case {
-            println!("    › avg tokens/judged case: {}", m);
+            println!(
+                "    avg   {} per judged case",
+                style(fmt_tokens(Some(m))).dim()
+            );
         }
     }
 

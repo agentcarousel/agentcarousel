@@ -390,7 +390,6 @@ fn build_eval_config(
         carousel_iteration: None,
         policy_version: None,
         progress: false,
-        update_golden: false,
     }
 }
 

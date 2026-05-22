@@ -9,7 +9,10 @@ mod process;
 mod rules;
 mod trait_def;
 
-pub use golden::GoldenEvaluator;
+pub use golden::{
+    evaluate_for_promotion, GoldenEvaluator, PromotionMeta, PromotionResult,
+    PROMOTE_CRITICAL_THRESHOLD, PROMOTE_EFFECTIVENESS_THRESHOLD,
+};
 pub use judge::JudgeEvaluator;
 pub use process::ProcessEvaluator;
 pub use rules::{evaluate_case, RuleEvaluation, RulesEvaluator};

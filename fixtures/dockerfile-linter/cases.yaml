@@ -1,7 +1,7 @@
 # agentcarousel fixture — dockerfile-linter
 # Certification Tier: Candidate
 # Source skill: Dockerfile security and best-practice linting agent
-# Golden files:  fixtures/golden/dockerfile-linter/
+# Golden files:  fixtures/dockerfile-linter/golden/
 # Bundle:        fixtures/bundles/dockerfile-linter/bundle.manifest.json
 
 schema_version: 1
@@ -227,7 +227,7 @@ cases:
 
     evaluator_config:
       evaluator: golden
-      golden_path: fixtures/golden/dockerfile-linter/clean-approval.txt
+      golden_path: fixtures/dockerfile-linter/golden/clean-approval.txt
       golden_threshold: 0.70
       effectiveness_threshold: 0.6
 

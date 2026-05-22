@@ -16,6 +16,7 @@ mod init;
 mod lint;
 mod login;
 mod output;
+mod promote;
 mod publish;
 mod registry_client;
 mod report;
@@ -101,6 +102,8 @@ enum Command {
     Bundle(bundle::BundleArgs),
     /// Publish a bundle and its evidence to the registry.
     Publish(publish::PublishArgs),
+    /// Promote golden files from a saved run; optionally submit to the registry.
+    Promote(promote::PromoteArgs),
     /// Export run(s) as signed evidence tarballs.
     Export(export::ExportArgs),
     /// Check a bundle's trust state in the registry and optionally verify its attestation.
@@ -169,6 +172,7 @@ fn help_template() -> String {
     let export = c("export");
     let bundle = c("bundle");
     let publish = c("publish");
+    let promote = c("promote");
     let trust_check = c("trust-check");
     let completions = c("completions");
     let update = c("update");
@@ -211,6 +215,7 @@ Usage:
 {bu}:
   {bundle}       Pack, verify, or pull fixture bundles
   {publish}      Publish a bundle and its evidence to the registry
+  {promote}      Promote golden files from a saved run; optionally submit to the registry
   {trust_check}  Check a bundle's trust state in the registry and optionally verify its attestation
 
 {to}:
@@ -250,6 +255,7 @@ pub fn run() -> i32 {
         Command::Report(a) => a.config.as_deref(),
         Command::Bundle(a) => a.config.as_deref(),
         Command::Publish(a) => a.config.as_deref(),
+        Command::Promote(a) => a.config.as_deref(),
         Command::TrustCheck(a) => a.config.as_deref(),
         Command::Doctor(a) => a.config.as_deref(),
         Command::Stats(a) => a.config.as_deref(),
@@ -296,6 +302,7 @@ pub fn run() -> i32 {
         Command::Init(args) => init::run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
+        Command::Promote(args) => promote::run_promote(args, &config, &globals),
         Command::Export(args) => export::run_export(args, &globals),
         Command::TrustCheck(args) => trust_check::run_trust_check(args, &config, &globals),
         Command::Completions(args) => completions::run_completions(args),
@@ -319,7 +326,7 @@ fn print_compact_help() {
     #[cfg(feature = "dashboard")]
     println!("COMMANDS: validate test eval carousel ab watch generate lint init report stats export bundle publish trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report stats export bundle publish trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate lint init report stats export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");

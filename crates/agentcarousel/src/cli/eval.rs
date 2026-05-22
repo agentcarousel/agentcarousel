@@ -28,7 +28,7 @@ enum EvalExecutionMode {
 #[derive(Debug, Parser)]
 #[command(
     long_about = "Run your test suite and see which cases pass, fail, or need attention.\n\nBy default, agc eval uses pre-recorded mock responses so no API key is required and runs finish in seconds. Switch to --execution-mode live to call a real model API. Add --judge to score outputs with an LLM judge on top of rule-based checks.\n\nToken counts and USD cost are shown automatically after each run when data is available.",
-    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly JSON output\n  agc eval fixtures/ --execution-mode live --update-golden  # update saved golden outputs\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
+    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly JSON output\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
 )]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -102,9 +102,6 @@ pub struct EvalArgs {
     /// Cancel the entire run after N seconds (per-case --timeout still applies per case).
     #[arg(long)]
     timeout_run: Option<u64>,
-    /// When set with --evaluator golden, write actual outputs to golden files instead of failing.
-    #[arg(long)]
-    update_golden: bool,
     /// Base URL for a custom agent endpoint (required when --model is 'custom').
     #[arg(long)]
     generator_endpoint: Option<String>,
@@ -289,7 +286,6 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         carousel_iteration: args.carousel_iteration,
         policy_version: args.policy_version,
         progress: show_progress,
-        update_golden: args.update_golden,
     };
 
     prefetch_pricing();
@@ -316,6 +312,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     run.summary.command_line = Some(std::env::args().collect::<Vec<_>>().join(" "));
 
     let _ = persist_run(&run);
+
     let format_str = format.as_str();
 
     if globals.json {
@@ -460,33 +457,32 @@ fn print_cost_line(run: &agentcarousel_core::Run) {
         return;
     }
 
-    let line = if has_judge {
-        let gen = format!(
-            "gen {}↑ {}↓",
-            fmt_tokens(s.tokens_in),
-            fmt_tokens(s.tokens_out)
-        );
-        let judge = format!(
-            "judge {}↑ {}↓",
-            fmt_tokens(s.judge_tokens_in),
-            fmt_tokens(s.judge_tokens_out)
-        );
-        match s.total_cost_usd {
-            Some(_) => format!(
-                "tokens  {}  {}  ·  {} total",
-                gen,
-                judge,
-                fmt_cost(s.total_cost_usd)
-            ),
-            None => format!("tokens  {}  {}", gen, judge),
-        }
+    let gen_part = format!(
+        "gen {} {} {}",
+        style(fmt_tokens(s.tokens_in)).cyan(),
+        style("↑").dim(),
+        style(format!("{} ↓", fmt_tokens(s.tokens_out))).cyan(),
+    );
+
+    let judge_part = if has_judge {
+        Some(format!(
+            "judge {} {} {}",
+            style(fmt_tokens(s.judge_tokens_in)).cyan(),
+            style("↑").dim(),
+            style(format!("{} ↓", fmt_tokens(s.judge_tokens_out))).cyan(),
+        ))
     } else {
-        let tok = format!("{}↑ {}↓", fmt_tokens(s.tokens_in), fmt_tokens(s.tokens_out));
-        match s.total_cost_usd {
-            Some(_) => format!("tokens  {}  ·  {}", tok, fmt_cost(s.total_cost_usd)),
-            None => format!("tokens  {}", tok),
-        }
+        None
     };
 
-    println!("  {}", style(line).dim());
+    let cost_part = s
+        .total_cost_usd
+        .map(|c| format!("· {}", style(fmt_cost(Some(c))).yellow().bold()));
+
+    let parts: Vec<String> = [Some(gen_part), judge_part, cost_part]
+        .into_iter()
+        .flatten()
+        .collect();
+
+    println!("  {}", parts.join("  "));
 }

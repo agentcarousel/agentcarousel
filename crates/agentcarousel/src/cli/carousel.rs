@@ -29,7 +29,7 @@ use super::GlobalOptions;
 ///   judge            Scores each output on a rubric using a second LLM. Richer signal, but costs more and takes longer.
 ///
 /// Recommended workflow for the most complete ranking:
-///   1. Record golden outputs:   agc eval fixtures/ --execution-mode live --update-golden
+///   1. Record golden outputs:   agc eval fixtures/ --execution-mode live --judge --promote-golden
 ///   2. Rules baseline:          agc carousel --models m1,m2,... fixtures/
 ///   3. Judge scoring:           agc carousel --models m1,m2,... fixtures/ -e judge --judge
 ///   4. Compare top two:         agc compare <run-a> --baseline <run-b>
@@ -380,7 +380,6 @@ fn build_eval_config(
         carousel_iteration: None,
         policy_version: None,
         progress: false,
-        update_golden: false,
     }
 }
 
