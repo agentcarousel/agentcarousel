@@ -179,7 +179,7 @@ async fn run_case_inner(
     metrics.total_steps = trace.steps.len() as u32;
     metrics.total_latency_ms = start.elapsed().as_millis() as u64;
 
-    let mut tracer = Tracer::new(SecretScrubber::default());
+    let mut tracer = Tracer::new(SecretScrubber);
     tracer.scrub_trace(&mut trace);
 
     CaseResult {

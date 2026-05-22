@@ -337,7 +337,14 @@ async fn evaluate_case_result(
                 config.judge_model.as_deref(),
                 config.judge_max_tokens,
             )?;
-            let scores = evaluator.evaluate(case, result)?;
+            let case_owned = case.clone();
+            let result_owned = result.clone();
+            let scores =
+                tokio::task::spawn_blocking(move || evaluator.evaluate(&case_owned, &result_owned))
+                    .await
+                    .map_err(|_| {
+                        EvaluatorError::JudgeFailed("judge task panicked".to_string())
+                    })??;
             judge_cache.lock().await.insert(cache_key, scores.clone());
             Ok(scores)
         }

@@ -4,10 +4,22 @@ use agentcarousel_core::{
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use super::assertions::check_output;
 use super::trait_def::{Evaluator, EvaluatorError, EvaluatorKind};
+
+static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+
+fn shared_blocking_client() -> &'static reqwest::blocking::Client {
+    BLOCKING_CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("reqwest blocking client")
+    })
+}
 
 struct JudgeCallOutput {
     text: String,
@@ -291,13 +303,7 @@ fn call_gemini_text(
     system_prompt: String,
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
-    let judge_key = judge_key.to_string();
-    let model = model.to_string();
-    std::thread::spawn(move || {
-        call_gemini_blocking(&judge_key, &model, max_tokens, system_prompt, user_prompt)
-    })
-    .join()
-    .map_err(|_| EvaluatorError::JudgeFailed("judge worker thread panicked".to_string()))?
+    call_gemini_blocking(judge_key, model, max_tokens, system_prompt, user_prompt)
 }
 
 fn call_gemini_blocking(
@@ -328,10 +334,7 @@ fn call_gemini_blocking(
         },
     };
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| EvaluatorError::ProcessFailed(err.to_string()))?;
+    let client = shared_blocking_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client
@@ -440,13 +443,7 @@ fn call_openai_text(
     system_prompt: String,
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
-    let judge_key = judge_key.to_string();
-    let model = model.to_string();
-    std::thread::spawn(move || {
-        call_openai_blocking(&judge_key, &model, max_tokens, system_prompt, user_prompt)
-    })
-    .join()
-    .map_err(|_| EvaluatorError::JudgeFailed("judge worker thread panicked".to_string()))?
+    call_openai_blocking(judge_key, model, max_tokens, system_prompt, user_prompt)
 }
 
 fn call_openai_blocking(
@@ -474,10 +471,7 @@ fn call_openai_blocking(
             format_type: "json_object".to_string(),
         }),
     };
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| EvaluatorError::ProcessFailed(err.to_string()))?;
+    let client = shared_blocking_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client
@@ -563,13 +557,7 @@ fn call_anthropic_text(
     system_prompt: String,
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
-    let judge_key = judge_key.to_string();
-    let model = model.to_string();
-    std::thread::spawn(move || {
-        call_anthropic_blocking(&judge_key, &model, max_tokens, system_prompt, user_prompt)
-    })
-    .join()
-    .map_err(|_| EvaluatorError::JudgeFailed("judge worker thread panicked".to_string()))?
+    call_anthropic_blocking(judge_key, model, max_tokens, system_prompt, user_prompt)
 }
 
 fn call_anthropic_blocking(
@@ -594,10 +582,7 @@ fn call_anthropic_blocking(
         }],
         temperature: 0.2,
     };
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| EvaluatorError::ProcessFailed(err.to_string()))?;
+    let client = shared_blocking_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client
@@ -651,13 +636,7 @@ fn call_openrouter_text(
     system_prompt: String,
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
-    let judge_key = judge_key.to_string();
-    let model = model.to_string();
-    std::thread::spawn(move || {
-        call_openrouter_blocking(&judge_key, &model, max_tokens, system_prompt, user_prompt)
-    })
-    .join()
-    .map_err(|_| EvaluatorError::JudgeFailed("judge worker thread panicked".to_string()))?
+    call_openrouter_blocking(judge_key, model, max_tokens, system_prompt, user_prompt)
 }
 
 fn call_openrouter_blocking(
@@ -685,10 +664,7 @@ fn call_openrouter_blocking(
             format_type: "json_object".to_string(),
         }),
     };
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| EvaluatorError::ProcessFailed(err.to_string()))?;
+    let client = shared_blocking_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client

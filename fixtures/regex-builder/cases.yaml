@@ -316,3 +316,133 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(12345.*match|12345-6789.*match|1234.*not|123456.*not|match.*12345)'
+
+  # ── Judge: Explanation and example quality ──────────────────────────────────
+  - id: regex-builder/judge-explanation-quality
+    description: >
+      Request for a phone number regex supporting E.164 international format.
+      Judge scores whether the agent explains each part of the pattern, tests
+      it against provided examples, and addresses the optional country-code prefix.
+    tags: [regex, judge, certification]
+    seed: 6090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a regular-expression expert judge. Score each rubric item 0.0–1.0.
+        Domain: E.164 phone format (+[country][number]), anchoring, optional groups.
+        A perfect response provides the pattern, breaks down each component (\\+, \\d,
+        {}, ?), tests against the examples in the prompt, and explains what the pattern
+        rejects. Penalise patterns that only match US numbers or ignore the + prefix.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex for international phone numbers in E.164 format.
+
+            Must match: +14155552671 | +442071838750 | +33123456789 | +8613800138000
+            Must NOT match: 4155552671 | +1 | +0 | +12345678901234 | abc+123
+
+            The pattern should be anchored for full-string matching.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '\\\\\\+|\\\\+'
+        - kind: regex
+          value: '(?i)(anchor|\\^|\\$|full.*string)'
+      rubric:
+        - id: pattern-handles-plus-prefix
+          description: >
+            Pattern requires the leading + and handles variable-length country codes
+            (1–3 digits) followed by subscriber number (minimum 7 digits total).
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(\\\\\\+|\\\\+|plus.*prefix|country.*code|E\.164)'
+        - id: examples-verified
+          description: >
+            Agent tests the provided positive examples against the pattern and confirms
+            they match. Negative examples are shown to fail.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(\\+14155|\\+44207|match|fail|reject|test)'
+        - id: pattern-explained
+          description: >
+            Each part of the regex is explained — the \\+ literal, digit ranges, length
+            constraints. Not just the pattern in a code block with no commentary.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(country.*code|subscriber|digit|optional|1.*3.*digit|7.*15)'
+
+  # ── Process: Pattern and test examples present ──────────────────────────────
+  - id: regex-builder/process-pattern-and-examples
+    description: >
+      Request for a ZIP code regex. Process verifies the response contains a regex
+      pattern, at least one positive test example, and an anchoring mention.
+    tags: [regex, process, certification]
+    seed: 6091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "\\\\d|\\[0-9\\]",
+                    "match|example|test|\\b[0-9]{5}\\b|90210|10001",
+                    "anchor|\\^|\\$|full|start|end"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex for US ZIP codes. Support both 5-digit (90210) and
+            ZIP+4 format (90210-1234). Must be anchored.
+
+            Must match: 90210 | 10001 | 90210-1234 | 00501
+            Must NOT match: 9021 | 902100 | 90210-123 | 90210-12345
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '\\\\d{5}|\\[0-9\\]{5}'
+        - kind: regex
+          value: '(?i)(anchor|\\^|\\$|-\\d{4}|-[0-9]{4})'
+
+  # ── Golden: URL validation pattern ──────────────────────────────────────────
+  - id: regex-builder/golden-url-validation
+    description: >
+      Build a regex matching common HTTP/HTTPS URLs. Golden captures the pattern,
+      per-component breakdown, and verified test examples.
+    tags: [regex, golden, certification]
+    seed: 6092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/regex-builder/golden/url-validation.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Build a regex for common HTTP/HTTPS URLs.
+
+            Must match: https://example.com | http://sub.example.org/path | https://example.com/path?q=1#section
+            Must NOT match: ftp://example.com | //example.com | example.com | https://
+
+            The pattern should capture the scheme, host, and optional path/query.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(https?|scheme|protocol)'
+        - kind: regex
+          value: '(?i)(host|domain|\\[\\^\\]|\\\\w)'

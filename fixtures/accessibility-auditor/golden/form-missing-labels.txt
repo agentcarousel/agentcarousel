@@ -1,0 +1,40 @@
+## Accessibility Audit — Login Form
+
+### Violation 1 — Missing Labels (WCAG 1.3.1 · Level A)
+
+**Element:** `<input type="email" placeholder="Email address" />`
+**Issue:** No `<label>`, `aria-label`, or `aria-labelledby`. Placeholder text disappears on input and is not announced as the field's accessible name by all screen readers.
+**Fix:**
+```html
+<label for="email">Email address</label>
+<input id="email" type="email" placeholder="Email address" />
+```
+
+### Violation 2 — Missing Labels (WCAG 1.3.1 · Level A)
+
+**Element:** `<input type="password" placeholder="Password" />`
+**Issue:** Same as above — placeholder is not a substitute for a programmatic label.
+**Fix:**
+```html
+<label for="password">Password</label>
+<input id="password" type="password" />
+```
+
+### Violation 3 — Unlabelled Submit Button (WCAG 4.1.2 · Level A)
+
+**Element:** `<input type="submit" />`
+**Issue:** No `value` attribute means some browsers render a locale-dependent default ("Submit Query"). Use an explicit label.
+**Fix:**
+```html
+<input type="submit" value="Sign in" />
+```
+
+### Summary
+
+| # | Criterion | Level | Element | Severity |
+|---|-----------|-------|---------|----------|
+| 1 | 1.3.1 Info and Relationships | A | `input[type=email]` | High |
+| 2 | 1.3.1 Info and Relationships | A | `input[type=password]` | High |
+| 3 | 4.1.2 Name, Role, Value | A | `input[type=submit]` | Medium |
+
+All three violations affect screen-reader users. Placeholder text is not an accessible label — it disappears as soon as the user starts typing and is not reliably announced as the field name.

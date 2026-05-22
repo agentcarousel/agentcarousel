@@ -29,7 +29,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "3bf09367523b63b4cd5093d1defa01909b856c391dc22cbec20773af7a8a0292"
+      "sha256": "8871fec0e2cbb086d1c3ec86b531d93c0f57f58fcec512e720376ab75f3de94d"
     },
     {
       "path": "golden/aggregation-group-by.sql",

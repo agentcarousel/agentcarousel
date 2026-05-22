@@ -386,3 +386,132 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(provide|paste|share).*(migration|SQL|content)'
+
+  # ── Judge: Locking-risk analysis quality ─────────────────────────────────────
+  - id: database-migration-advisor/judge-locking-risk
+    description: >
+      Migration adds a NOT NULL column without a DEFAULT on a 50-million-row table in
+      PostgreSQL 11. Judge scores whether the agent explains the table-rewrite lock,
+      names the safer two-step approach, and mentions the Postgres version constraint.
+    tags: [database, judge, certification]
+    seed: 6090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a PostgreSQL database reliability expert judge. Score 0.0–1.0.
+        Domain: ALTER TABLE locking behaviour, NOT NULL constraints, table rewrites.
+        In PostgreSQL <12, adding NOT NULL without DEFAULT causes a full table rewrite
+        holding AccessExclusiveLock. In PG12+, adding NOT NULL with a validated CHECK
+        constraint avoids the rewrite. Award full marks for mentioning the version
+        difference and the two-step (add nullable, backfill, set NOT NULL) approach.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration for a 50M-row orders table on PostgreSQL 11:
+
+            -- Migration: add_fulfilled_at_not_null.sql
+            ALTER TABLE orders ADD COLUMN fulfilled_at TIMESTAMP NOT NULL;
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(lock|rewrite|AccessExclusive|block|downtime)'
+        - kind: regex
+          value: '(?i)(nullable|two.*step|backfill|default|safer)'
+      rubric:
+        - id: lock-explained
+          description: >
+            Agent explains that this causes a table rewrite under AccessExclusiveLock
+            on PostgreSQL 11, blocking reads and writes for the duration.
+          weight: 0.40
+          critical: true
+          auto_check:
+            kind: regex
+            value: '(?i)(table.*rewrite|rewrite.*table|AccessExclusive|lock.*reads|reads.*writes.*blocked)'
+        - id: two-step-recommended
+          description: >
+            Agent recommends: (1) add as nullable, (2) backfill, (3) add NOT NULL
+            constraint — or equivalent zero-downtime approach.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(nullable.*backfill|backfill.*NOT NULL|two.*step|three.*step|add.*null.*then)'
+        - id: version-context
+          description: >
+            Agent notes the PostgreSQL version matters (PG12+ has improved behaviour)
+            or gives advice specific to PG11.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(postgres.*11|PG11|version.*12|12.*improved|older.*postgres)'
+
+  # ── Process: Safety guidance present ─────────────────────────────────────────
+  - id: database-migration-advisor/process-safety-guidance
+    description: >
+      Migration renames a column used by application code. Process verifies the
+      response contains risk identification, a mitigation strategy, and a backup
+      or rollback recommendation.
+    tags: [database, process, certification]
+    seed: 6091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "risk|danger|break|dependent|application",
+                    "view|alias|backwards.compat|dual.write|transition|two.*step",
+                    "backup|rollback|revert|test.*staging"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration for our production PostgreSQL database:
+
+            -- Rename user_name to display_name in the users table
+            ALTER TABLE users RENAME COLUMN user_name TO display_name;
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(break|dependent|application.*code|queries.*using|column.*name)'
+        - kind: regex
+          value: '(?i)(view|alias|backwards|compat|transition)'
+
+  # ── Golden: CREATE INDEX CONCURRENTLY recommendation ─────────────────────────
+  - id: database-migration-advisor/golden-create-index-concurrent
+    description: >
+      Migration creates a plain index on a large production table with no CONCURRENTLY
+      keyword. Golden captures the full advisory: lock risk, CONCURRENTLY fix, and
+      monitoring steps.
+    tags: [database, golden, certification]
+    seed: 6092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/database-migration-advisor/golden/create-index-concurrent.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this migration before running on production (PostgreSQL 15, ~80M rows):
+
+            -- Migration: add_index_orders_status.sql
+            CREATE INDEX idx_orders_status ON orders(status);
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(CONCURRENTLY|lock|block|ShareLock)'
+        - kind: regex
+          value: '(?i)(CREATE INDEX CONCURRENTLY|concurrent)'

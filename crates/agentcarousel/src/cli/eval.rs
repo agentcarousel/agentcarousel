@@ -1,5 +1,5 @@
 use agentcarousel_core::{
-    annotate_run_cost, fmt_cost, fmt_tokens, judge_key_candidates, judge_provider_from_model,
+    annotate_run_cost, judge_key_candidates, judge_provider_from_model,
     prefetch_pricing, CaseStatus, CertificationContext, JudgeProvider,
 };
 use agentcarousel_fixtures::load_fixture;
@@ -333,7 +333,6 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
 
         if !globals.quiet && format_str != "json" && format_str != "junit" {
             print_postflight_hints(&run);
-            print_cost_line(&run);
         }
         if globals.quiet || format_str == "json" || format_str == "junit" {
             print_eval_saved_run_hint(
@@ -447,42 +446,4 @@ fn resolve_generator_key(provider: GeneratorProvider) -> Option<String> {
         .key_candidates()
         .iter()
         .find_map(|key| std::env::var(key).ok())
-}
-
-fn print_cost_line(run: &agentcarousel_core::Run) {
-    let s = &run.summary;
-    let has_gen = s.tokens_in.is_some();
-    let has_judge = s.judge_tokens_in.is_some();
-    if !has_gen && !has_judge {
-        return;
-    }
-
-    let gen_part = format!(
-        "gen {} {} {}",
-        style(fmt_tokens(s.tokens_in)).cyan(),
-        style("↑").dim(),
-        style(format!("{} ↓", fmt_tokens(s.tokens_out))).cyan(),
-    );
-
-    let judge_part = if has_judge {
-        Some(format!(
-            "judge {} {} {}",
-            style(fmt_tokens(s.judge_tokens_in)).cyan(),
-            style("↑").dim(),
-            style(format!("{} ↓", fmt_tokens(s.judge_tokens_out))).cyan(),
-        ))
-    } else {
-        None
-    };
-
-    let cost_part = s
-        .total_cost_usd
-        .map(|c| format!("· {}", style(fmt_cost(Some(c))).yellow().bold()));
-
-    let parts: Vec<String> = [Some(gen_part), judge_part, cost_part]
-        .into_iter()
-        .flatten()
-        .collect();
-
-    println!("  {}", parts.join("  "));
 }

@@ -334,3 +334,141 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(SELECT|injection|malicious|suspicious|cannot generate|unsafe)'
+
+  # ── Judge: Query correctness and efficiency ──────────────────────────────────
+  - id: sql-query-generator/judge-query-correctness
+    description: >
+      Natural language question that requires a correlated subquery or window function.
+      Judge scores SQL correctness, whether the schema columns are respected, and
+      whether an efficiency note is included.
+    tags: [sql, judge, certification]
+    seed: 9090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a SQL expert judge. Score each rubric item 0.0–1.0.
+        Domain: window functions, correlated subqueries, schema adherence, query efficiency.
+        Penalise: hallucinated column or table names not in the schema, syntactically invalid
+        SQL, Cartesian products, SELECT * in production queries.
+        Reward: correct JOIN logic, proper window function usage, an efficiency comment.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Schema:
+            products(id INT, name TEXT, category TEXT, price DECIMAL(10,2))
+            sales(id INT, product_id INT REFERENCES products(id), qty INT, sale_date DATE, region TEXT)
+
+            Question: For each product, show the product name, total units sold, and
+            what percentage of that category's total sales it represents. Only include
+            products with at least 10 total sales. Order by category, then by percentage descending.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(SELECT|select)'
+        - kind: regex
+          value: '(?i)(GROUP BY|SUM\(|COUNT\()'
+        - kind: not_contains
+          value: "nonexistent"
+      rubric:
+        - id: schema-adhered
+          description: >
+            Query uses only columns present in the schema (products.name, products.category,
+            sales.qty, etc.). No invented column names.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(products\.name|products\.category|sales\.qty|product_id)'
+        - id: percentage-logic-correct
+          description: >
+            Percentage is computed correctly — category total is derived via a window
+            function (SUM OVER PARTITION BY category) or a subquery, not a wrong denominator.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(PARTITION BY.*category|SUM.*OVER|category.*total|subquery.*category)'
+        - id: having-clause-used
+          description: >
+            HAVING clause (or equivalent subquery filter) excludes products with fewer
+            than 10 total sales. WHERE cannot filter on aggregates.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(HAVING|having.*10|>= *10|>= 10)'
+
+  # ── Process: Query has required clauses ──────────────────────────────────────
+  - id: sql-query-generator/process-query-clauses
+    description: >
+      Request for a JOIN query. Process verifies SELECT, FROM, JOIN, and a
+      filtering clause are all present in the output.
+    tags: [sql, process, certification]
+    seed: 9091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "SELECT",
+                    "FROM",
+                    "JOIN|WHERE|GROUP BY"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Schema:
+            customers(id INT, name TEXT, email TEXT, country TEXT)
+            orders(id INT, customer_id INT, total DECIMAL(10,2), status TEXT, created_at DATE)
+
+            Question: List all customers from the US who placed at least one order
+            with a total over $500 in the last 90 days, along with their most recent
+            order total.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(SELECT|select)'
+        - kind: regex
+          value: '(?i)(JOIN|join)'
+        - kind: not_contains
+          value: "DROP"
+
+  # ── Golden: Window function query ─────────────────────────────────────────
+  - id: sql-query-generator/golden-window-function
+    description: >
+      Rank users by total spend within their subscription plan tier. Golden captures
+      a correct RANK() OVER (PARTITION BY ...) query with explanation.
+    tags: [sql, golden, certification]
+    seed: 9092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/sql-query-generator/golden/window-function.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Schema:
+            users(id INT, name TEXT, plan TEXT)
+            orders(id INT, user_id INT REFERENCES users(id), amount DECIMAL(10,2), created_at DATE)
+
+            Question: Rank users by their total spend within each plan tier (free, pro, enterprise).
+            Show user name, plan, total spend, and their rank within that plan. Include all users
+            even if they have no orders (rank them last).
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(RANK|DENSE_RANK|ROW_NUMBER)'
+        - kind: regex
+          value: '(?i)(PARTITION BY.*plan|OVER.*plan)'

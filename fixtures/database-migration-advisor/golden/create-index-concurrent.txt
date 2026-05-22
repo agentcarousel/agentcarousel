@@ -1,0 +1,48 @@
+## Migration Advisory — CREATE INDEX on 80M-row Table
+
+### ⚠️ Risk: Table Lock During Index Build
+
+`CREATE INDEX` (without `CONCURRENTLY`) acquires a **ShareLock** on the `orders` table for the full duration of the index build. On an 80-million-row table this could take minutes, during which:
+
+- All `INSERT`, `UPDATE`, and `DELETE` statements on `orders` will **block**.
+- Long-running read queries will complete but new ones may queue behind the lock.
+- In a busy production environment this will likely cause a visible outage or timeout cascade.
+
+### ✅ Recommended Fix
+
+Use `CREATE INDEX CONCURRENTLY` instead:
+
+```sql
+-- Safe version: no table lock, index built in the background
+CREATE INDEX CONCURRENTLY idx_orders_status ON orders(status);
+```
+
+`CONCURRENTLY` builds the index in two passes without holding a lock that blocks writes. Trade-offs:
+- Takes approximately 2–3× longer to complete.
+- Cannot run inside a transaction block — run it as a standalone statement.
+- If the build fails (e.g. cancelled), a partially-built index is left behind; drop it with `DROP INDEX CONCURRENTLY` before retrying.
+
+### Migration Checklist
+
+1. **Backup:** Verify a recent point-in-time backup exists before running.
+2. **Timing:** Schedule during low-traffic hours even with `CONCURRENTLY` — it still adds I/O load.
+3. **Monitor:** Watch `pg_stat_progress_create_index` while the index builds:
+   ```sql
+   SELECT phase, blocks_done, blocks_total
+   FROM pg_stat_progress_create_index
+   WHERE relid = 'orders'::regclass;
+   ```
+4. **Validate after:** Confirm the index is valid and not marked `invalid`:
+   ```sql
+   SELECT indexname, indisvalid
+   FROM pg_indexes
+   JOIN pg_index ON indexrelid = pg_class.oid
+   JOIN pg_class ON relname = 'orders'
+   WHERE indexname = 'idx_orders_status';
+   ```
+
+### Rollback
+
+```sql
+DROP INDEX CONCURRENTLY IF EXISTS idx_orders_status;
+```

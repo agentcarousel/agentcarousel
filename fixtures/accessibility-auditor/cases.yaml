@@ -362,3 +362,230 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(change.*h2|replace.*h2|h3.*to.*h2|add.*h2|visually.hidden.*h2)'
+
+  # ── Judge: Focus management quality ──────────────────────────────────────────
+  - id: accessibility-auditor/judge-focus-management
+    description: >
+      SPA that changes routes via React Router without restoring focus to the top of
+      the new page. A screen-reader user pressing Tab after navigation lands mid-page.
+      Judge scores how well the agent explains focus management and WCAG 2.4.3.
+    tags: [a11y, judge, certification]
+    seed: 4090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a WCAG 2.1 accessibility expert judge. Score each rubric item 0.0–1.0.
+        Domain: focus management in SPAs — WCAG 2.4.3 Focus Order, WCAG 2.1.1 Keyboard.
+        Penalise generic advice not tied to the React/SPA context given.
+        Reward concrete code examples (e.g. useEffect + ref.focus(), skip-nav links).
+        Return JSON: {rubric:[{rubric_id, score, rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this React Router page transition for accessibility issues:
+
+            ```jsx
+            function App() {
+              return (
+                <Router>
+                  <nav>
+                    <Link to="/home">Home</Link>
+                    <Link to="/about">About</Link>
+                    <Link to="/contact">Contact</Link>
+                  </nav>
+                  <Routes>
+                    <Route path="/home" element={<Home />} />
+                    <Route path="/about" element={<About />} />
+                    <Route path="/contact" element={<Contact />} />
+                  </Routes>
+                </Router>
+              );
+            }
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(focus|2\.4\.3|screen reader|keyboard)'
+      rubric:
+        - id: focus-restoration-addressed
+          description: >
+            Agent explains that focus is not moved to the new page content on route
+            change, and recommends a concrete fix (useEffect + ref.focus(), skip-nav,
+            or an aria-live announcement).
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(focus.*route|route.*focus|useEffect.*focus|ref.*focus|skip.*nav|live.*region)'
+        - id: wcag-criterion-cited
+          description: >
+            WCAG 2.4.3 (Focus Order) or 2.4.1 (Bypass Blocks) is cited with a correct
+            description of why it applies to SPA navigation.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(2\.4\.[13]|Focus Order|Bypass Block)'
+        - id: code-fix-provided
+          description: >
+            A code example or pseudocode illustrates how to implement the fix — not
+            just a prose description.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(useEffect|useRef|ref\.current|\.focus\(\)|aria-live)'
+
+  # ── Judge: Color-contrast analysis quality ─────────────────────────────────
+  - id: accessibility-auditor/judge-color-contrast
+    description: >
+      CSS snippet with text that fails WCAG AA contrast ratio. Judge scores whether
+      the agent correctly calculates (or approximates) relative luminance, cites the
+      correct WCAG criterion, and suggests a compliant replacement.
+    tags: [a11y, judge, certification]
+    seed: 4091
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a WCAG 2.1 color contrast expert judge. Score each rubric 0.0–1.0.
+        Domain: WCAG 1.4.3 (AA 4.5:1 for normal text, 3:1 for large text), 1.4.6 (AAA 7:1).
+        Award full marks only if the agent references the correct minimum ratio for the
+        text size described. Penalise if the agent says the color "looks fine" or skips ratio.
+        Return JSON: {rubric:[{rubric_id, score, rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this CSS for WCAG color contrast compliance. The text renders at 14px
+            normal weight:
+
+            ```css
+            .status-label {
+              color: #777777;
+              background-color: #f5f5f5;
+              font-size: 14px;
+            }
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(contrast|ratio|4\.5|1\.4\.3|WCAG)'
+        - kind: not_contains
+          value: "looks fine"
+      rubric:
+        - id: ratio-computed
+          description: >
+            Agent identifies that #777777 on #f5f5f5 is approximately 3.95:1 — below the
+            4.5:1 AA minimum for 14px normal-weight text. A perfect score names the
+            approximate ratio and identifies the failure level.
+          weight: 0.50
+          auto_check:
+            kind: regex
+            value: '(?i)(3\.[0-9]+.*:.*1|4\.[0-9]+.*:.*1|ratio.*3\.|contrast.*fail|below.*4\.5)'
+        - id: wcag-level-cited
+          description: >
+            WCAG 1.4.3 AA (4.5:1) is cited correctly. Agent does not confuse with AAA (7:1)
+            or use an incorrect threshold.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(1\.4\.3|4\.5.*:.*1|AA.*4\.5|minimum.*4\.5)'
+        - id: replacement-suggested
+          description: >
+            Agent suggests a specific compliant color replacement (darker hex value or
+            a specific higher-contrast alternative) — not just "use a darker color".
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(#[0-9a-f]{6}|#[0-9a-f]{3}|darker|contrast.*tool|checker)'
+
+  # ── Process: Violation structure check ─────────────────────────────────────
+  - id: accessibility-auditor/process-violation-structure
+    description: >
+      Component with a missing form label, a focusable element with no visible focus
+      ring, and an empty button. Process harness verifies output names all three
+      violations with a WCAG criterion and a fix recommendation.
+    tags: [a11y, process, certification]
+    seed: 4092
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "WCAG|criterion|SC ",
+                    "label|focus|button",
+                    "fix|should|recommend|add|replace"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Audit this component for WCAG 2.1 violations:
+
+            ```jsx
+            function SearchForm() {
+              return (
+                <form>
+                  <input type="text" placeholder="Search..." />
+                  <div tabIndex={0} className="custom-btn" onClick={handleSearch}>
+                    Go
+                  </div>
+                  <button style={{ outline: 'none' }}></button>
+                </form>
+              );
+            }
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(label|1\.3\.1|placeholder)'
+        - kind: regex
+          value: '(?i)(outline.*none|focus.*ring|2\.4\.7|focus.*visible)'
+        - kind: regex
+          value: '(?i)(empty.*button|button.*label|accessible.*name|4\.1\.2)'
+
+  # ── Golden: Form with missing labels ───────────────────────────────────────
+  - id: accessibility-auditor/golden-form-missing-labels
+    description: >
+      Login form where every input is identified only by placeholder text — no
+      <label> elements, no aria-label, no aria-labelledby. Golden captures a
+      structured audit with per-violation WCAG reference and fix.
+    tags: [a11y, golden, certification]
+    seed: 4093
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/accessibility-auditor/golden/form-missing-labels.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Audit this login form for WCAG 2.1 accessibility issues:
+
+            ```html
+            <form action="/login" method="post">
+              <input type="email" placeholder="Email address" />
+              <input type="password" placeholder="Password" />
+              <input type="submit" />
+            </form>
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(label|aria-label|labelledby|1\.3\.1)'
+        - kind: regex
+          value: '(?i)(placeholder.*not|not.*label|insufficient)'

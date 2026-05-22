@@ -1,0 +1,69 @@
+```python
+import pytest
+from email_validator import EmailValidator
+
+
+@pytest.fixture
+def validator():
+    return EmailValidator()
+
+
+# ── Happy path ────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("email", [
+    "user@example.com",
+    "user.name+tag@sub.domain.org",
+    "USER@EXAMPLE.COM",
+    "u@x.io",
+    "  user@example.com  ",   # leading/trailing whitespace stripped
+])
+def test_valid_emails(validator, email):
+    assert validator.is_valid(email) is True
+
+
+# ── Invalid formats ───────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("email", [
+    "not-an-email",
+    "missing@tld",
+    "@example.com",
+    "user@",
+    "user @example.com",       # space in local part
+    "user@exa mple.com",       # space in domain
+    "user@example.c",          # TLD too short (1 char)
+    "",
+    "user@@example.com",
+])
+def test_invalid_emails(validator, email):
+    assert validator.is_valid(email) is False
+
+
+# ── Edge cases ────────────────────────────────────────────────────────────────
+
+def test_non_string_raises_type_error(validator):
+    with pytest.raises(TypeError, match="email must be a string"):
+        validator.is_valid(None)
+
+
+def test_integer_raises_type_error(validator):
+    with pytest.raises(TypeError):
+        validator.is_valid(12345)
+
+
+def test_whitespace_only_is_invalid(validator):
+    assert validator.is_valid("   ") is False
+
+
+def test_very_long_local_part(validator):
+    # 64-char local part is the RFC maximum
+    long_local = "a" * 64 + "@example.com"
+    assert validator.is_valid(long_local) is True
+
+
+def test_two_char_tld(validator):
+    assert validator.is_valid("user@example.io") is True
+
+
+def test_new_long_tld(validator):
+    assert validator.is_valid("user@example.museum") is True
+```

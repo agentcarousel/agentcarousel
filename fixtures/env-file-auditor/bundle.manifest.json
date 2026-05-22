@@ -28,7 +28,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "c67abd71874a16453b8f685dbd5fc88de559439bac55182dc2e250380da610a5"
+      "sha256": "97809f2fff59134aa8de14ebb06370fef16e793138d2bd68b3254c5ef07c5071"
     },
     {
       "path": "golden/clean-approval.txt",

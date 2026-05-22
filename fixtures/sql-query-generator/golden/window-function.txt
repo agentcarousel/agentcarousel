@@ -1,0 +1,34 @@
+## SQL Query — Rank Users by Spend Within Plan Tier
+
+### Query
+
+```sql
+SELECT
+    u.name,
+    u.plan,
+    COALESCE(SUM(o.amount), 0)                           AS total_spend,
+    RANK() OVER (
+        PARTITION BY u.plan
+        ORDER BY COALESCE(SUM(o.amount), 0) DESC
+    )                                                    AS rank_within_plan
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+GROUP BY u.id, u.name, u.plan
+ORDER BY u.plan, rank_within_plan;
+```
+
+### How It Works
+
+| Clause | Purpose |
+|--------|---------|
+| `LEFT JOIN orders` | Includes users with no orders (their `amount` is NULL, coalesced to 0) |
+| `COALESCE(SUM(o.amount), 0)` | Treats users with no orders as $0 spend |
+| `RANK() OVER (PARTITION BY u.plan ORDER BY ... DESC)` | Resets the rank counter for each plan tier; users with equal spend share the same rank |
+| `GROUP BY u.id, u.name, u.plan` | Aggregates orders per user before the window function sees the data |
+| `ORDER BY u.plan, rank_within_plan` | Final sort: alphabetical by plan, then rank 1 first within each tier |
+
+### Notes
+
+- `RANK()` leaves gaps after ties (1, 1, 3, 4…). Use `DENSE_RANK()` for no gaps (1, 1, 2, 3…).
+- The window function is evaluated **after** the `GROUP BY` aggregation, so `SUM(o.amount)` is already computed when `RANK()` sees it.
+- Compatible with PostgreSQL, MySQL 8+, SQL Server, and SQLite 3.25+.

@@ -425,3 +425,139 @@ cases:
             Message is brief and does not fabricate specifics — no invented service
             names, operation details, or technical terms.
           weight: 0.2
+
+  # ── Judge: UX quality of improved message ───────────────────────────────────
+  - id: error-message-improver/judge-ux-quality
+    description: >
+      Raw PostgreSQL unique-constraint violation shown to end-users. Judge scores
+      whether the improved message uses plain language, gives a clear next step, and
+      contains no database internals.
+    tags: [dx, errors, judge, certification]
+    seed: 1090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a UX writing and developer experience judge. Score each rubric item 0.0–1.0.
+        Domain: error message clarity, actionability, no-internal-leak rule.
+        A perfect improved message: uses plain user language (no SQL, no constraint names),
+        explains what went wrong in one sentence, gives a single clear next action,
+        and is under 50 words. Penalise messages that repeat the original technical text.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error that appears in our web app when a user tries to
+            register with an email that already exists:
+
+            Current error: "ERROR: duplicate key value violates unique constraint
+            \"users_email_key\" DETAIL: Key (email)=(john@example.com) already exists."
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: not_contains
+          value: "duplicate key"
+        - kind: not_contains
+          value: "users_email_key"
+        - kind: regex
+          value: '(?i)(email.*already|account.*exists|sign in|log in|already.*registered)'
+      rubric:
+        - id: no-db-internals
+          description: >
+            Improved message contains no SQL error text, constraint names, or
+            database-specific language from the original.
+          weight: 0.40
+          critical: true
+          auto_check:
+            kind: not_contains
+            value: "users_email_key"
+        - id: user-language
+          description: >
+            Message explains the situation in plain terms a non-technical user
+            understands — "email already registered" or equivalent.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(email.*already|already.*registered|account.*exists|sign.*in|log.*in)'
+        - id: next-action-clear
+          description: >
+            Message includes a specific next step — "sign in", "reset password",
+            or "use a different email" — not just "try again".
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(sign in|log in|reset.*password|different.*email|forgot.*password)'
+
+  # ── Process: Message structure completeness ──────────────────────────────────
+  - id: error-message-improver/process-message-structure
+    description: >
+      Cryptic HTTP 500 error. Process verifies the improved response includes a
+      user-facing message, an explanation of what happened, and a next step.
+    tags: [dx, errors, process, certification]
+    seed: 1091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "\"[^\"]{10,}\"|improved|suggested|new.*message|user.*message",
+                    "because|when|occurred|happened|went wrong",
+                    "try again|contact|refresh|wait|support"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this error message shown to users in our checkout flow:
+
+            Current: "500 Internal Server Error"
+
+            Context: This fires when our payment processor times out after 10 seconds.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: not_contains
+          value: "500 Internal"
+        - kind: regex
+          value: '(?i)(payment|checkout|process|order)'
+        - kind: regex
+          value: '(?i)(try again|retry|contact|support)'
+
+  # ── Golden: Rate-limit error ──────────────────────────────────────────────
+  - id: error-message-improver/golden-rate-limit-error
+    description: >
+      Raw HTTP 429 Too Many Requests shown in a developer-facing API response.
+      Golden captures both a user-facing message variant and a developer-facing
+      variant with Retry-After guidance.
+    tags: [dx, errors, golden, certification]
+    seed: 1092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/error-message-improver/golden/rate-limit-error.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Improve this API error message. We need both a user-facing version and a
+            developer-facing version:
+
+            Current: "429 Too Many Requests"
+
+            Context: API rate limit is 100 requests per minute per API key. The
+            Retry-After header is set with the seconds until the limit resets.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(rate limit|too many|limit.*reached|requests.*per|minute)'
+        - kind: regex
+          value: '(?i)(retry|wait|Retry-After|backoff|slow down)'

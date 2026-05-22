@@ -27,7 +27,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "bc6d75b580e18e1533cb345a4fd2619289b4c8158e6a3128b22e57c4c0867af8"
+      "sha256": "5f0c5f9bdb178969e5728928f7a48e35e41a7fa822fd827525eae1013a5ce17d"
     },
     {
       "path": "golden/sample-resolution.json",

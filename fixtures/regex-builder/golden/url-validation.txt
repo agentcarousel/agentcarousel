@@ -1,0 +1,36 @@
+## URL Validation Regex
+
+### Pattern
+
+```
+^https?://[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(/[^\s]*)?$
+```
+
+### Component Breakdown
+
+| Part | Pattern | Meaning |
+|------|---------|---------|
+| Scheme | `^https?://` | Matches `http://` or `https://`; anchored to start |
+| Hostname start | `[a-zA-Z0-9]` | Must start with alphanumeric (not a hyphen) |
+| Hostname middle | `([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?` | Up to 63-char label per RFC 1123 |
+| Subdomains | `(\.[a-zA-Z0-9]...)*` | Zero or more additional dot-separated labels |
+| TLD | `\.[a-zA-Z]{2,}` | Requires at least a 2-char TLD |
+| Path/query | `(/[^\s]*)?` | Optional — any non-whitespace after the first `/` |
+| Anchor | `$` | Full-string match |
+
+### Test Results
+
+| Input | Result | Reason |
+|-------|--------|--------|
+| `https://example.com` | ✅ Match | Valid HTTPS, no path |
+| `http://sub.example.org/path` | ✅ Match | HTTP with subdomain and path |
+| `https://example.com/path?q=1#section` | ✅ Match | Query string and fragment included |
+| `ftp://example.com` | ❌ No match | Scheme must be http or https |
+| `//example.com` | ❌ No match | Missing scheme |
+| `example.com` | ❌ No match | No scheme |
+| `https://` | ❌ No match | Missing host |
+
+### Caveats
+
+- This pattern handles common URLs but does not cover all edge cases in RFC 3986 (IPv6 addresses, percent-encoded characters, port numbers). For production use consider a battle-tested library like Python's `urllib.parse` or JavaScript's `URL` constructor rather than a single regex.
+- To also match URLs with port numbers, extend the host group: `(:[0-9]{1,5})?` after the TLD.

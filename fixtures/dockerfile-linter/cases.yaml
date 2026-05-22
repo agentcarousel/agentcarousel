@@ -403,3 +403,155 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(provide|paste|share).*(Dockerfile|content)'
+
+  # ── Judge: Severity ordering and completeness ─────────────────────────────────
+  - id: dockerfile-linter/judge-severity-completeness
+    description: >
+      Dockerfile with four distinct issues at different severity levels: root user,
+      latest tag, secret in ENV, and no HEALTHCHECK. Judge scores whether all four
+      are found and whether they are ordered highest-severity first.
+    tags: [security, devops, judge, certification]
+    seed: 5090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a container security expert judge. Score each rubric item 0.0–1.0.
+        Domain: Dockerfile best practices — secrets in ENV, root user, mutable tags,
+        HEALTHCHECK, COPY vs ADD, layer ordering.
+        Rank: secrets-in-ENV > root-user > mutable-tag > missing-HEALTHCHECK by severity.
+        Award full marks if all four issues are identified and secrets-in-ENV is called
+        CRITICAL or the most severe. Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this Dockerfile for security and best-practice issues:
+
+            ```dockerfile
+            FROM node:latest
+            WORKDIR /app
+            ENV DATABASE_PASSWORD=supersecret123
+            ENV API_KEY=sk-prod-abc123def456
+            COPY . .
+            RUN npm install
+            EXPOSE 3000
+            CMD ["node", "server.js"]
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(ENV.*secret|secret.*ENV|password.*ENV|API_KEY|CRITICAL|environment.*variable.*secret)'
+        - kind: regex
+          value: '(?i)(root|USER|non-root)'
+        - kind: regex
+          value: '(?i)(latest|pin|tag|digest)'
+      rubric:
+        - id: secrets-in-env-flagged
+          description: >
+            DATABASE_PASSWORD and API_KEY in ENV are flagged as CRITICAL — they are
+            baked into the image layer and visible in `docker inspect` and image history.
+          weight: 0.40
+          critical: true
+          auto_check:
+            kind: regex
+            value: '(?i)(DATABASE_PASSWORD|API_KEY|ENV.*secret|baked.*image|docker inspect|layer|image.*history)'
+        - id: all-four-issues-found
+          description: >
+            All four issues are identified: secrets in ENV, running as root, mutable
+            :latest tag, and no HEALTHCHECK directive.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(root|USER).*(latest|pin).*(HEALTH|healthcheck)|secrets?.*(root|USER)'
+        - id: remediation-for-secrets
+          description: >
+            Agent recommends BuildKit secrets, Docker secrets, or runtime env injection
+            (not baking secrets into the image).
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(BuildKit|--secret|docker secret|runtime|mount.*secret|inject.*runtime|\.env.*runtime)'
+
+  # ── Process: Findings and remediations present ──────────────────────────────
+  - id: dockerfile-linter/process-findings-and-remediations
+    description: >
+      Dockerfile that runs as root and installs packages without pinned versions.
+      Process verifies the output contains a USER directive recommendation and a
+      package pinning recommendation.
+    tags: [security, devops, process, certification]
+    seed: 5091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "USER|non-root|root.*privilege|privilege.*root",
+                    "pin|version|specific|=|apt-get.*install",
+                    "fix|instead|should|add|change|replace|recommend"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this Dockerfile:
+
+            ```dockerfile
+            FROM ubuntu:22.04
+            RUN apt-get update && apt-get install -y curl git vim
+            COPY app/ /opt/app/
+            CMD ["/opt/app/start.sh"]
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(root|USER|non-root|privilege)'
+        - kind: regex
+          value: '(?i)(pin|version|curl=|git=|specific.*version)'
+
+  # ── Golden: Multi-stage build review ─────────────────────────────────────────
+  - id: dockerfile-linter/golden-multistage-best-practices
+    description: >
+      Multi-stage Dockerfile that correctly separates build and runtime stages but
+      still has issues: COPY --chown not used, no HEALTHCHECK, and RUN with apt-get
+      not cleaned up. Golden captures the structured review.
+    tags: [security, devops, golden, certification]
+    seed: 5092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/dockerfile-linter/golden/multistage-best-practices.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this multi-stage Dockerfile:
+
+            ```dockerfile
+            FROM golang:1.22 AS builder
+            WORKDIR /build
+            COPY . .
+            RUN go build -o app ./cmd/server
+
+            FROM debian:bookworm-slim
+            RUN apt-get update && apt-get install -y ca-certificates
+            COPY --from=builder /build/app /usr/local/bin/app
+            EXPOSE 8080
+            CMD ["/usr/local/bin/app"]
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(apt-get.*clean|cache|layer|rm.*lists)'
+        - kind: regex
+          value: '(?i)(USER|non-root|HEALTHCHECK)'
