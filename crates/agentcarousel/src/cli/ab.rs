@@ -532,9 +532,6 @@ fn print_ab_terminal(output: &AbOutput) {
     let sep_w = 3 + 2 + label_w + 2 + 9 + 2 + 7 + 2 + 10;
     println!("  {}", "─".repeat(sep_w));
 
-    let run_a_prefix: String = output.run_id_a.chars().take(10).collect();
-    let run_b_prefix: String = output.run_id_b.chars().take(10).collect();
-
     let score_a = output
         .effectiveness_a
         .map(|s| format!("{s:.2}"))
@@ -550,7 +547,7 @@ fn print_ab_terminal(output: &AbOutput) {
         prompt_a_short,
         output.pass_rate_a * 100.0,
         score_a,
-        run_a_prefix,
+        output.run_id_a,
     );
     println!(
         "  {:<3}  {:<label_w$}  {:>8.0}%  {:>7}  {}",
@@ -558,7 +555,7 @@ fn print_ab_terminal(output: &AbOutput) {
         prompt_b_short,
         output.pass_rate_b * 100.0,
         score_b,
-        run_b_prefix,
+        output.run_id_b,
     );
     println!("  {}", "─".repeat(sep_w));
 

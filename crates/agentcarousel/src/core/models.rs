@@ -21,7 +21,8 @@ pub enum CoreError {
 }
 
 pub fn new_run_id() -> RunId {
-    RunId(Ulid::new().to_string())
+    // Skip the 10-char timestamp prefix; take 10 chars from the random portion of the ULID.
+    RunId(Ulid::new().to_string()[10..20].to_string())
 }
 
 /// Opaque identifier for a single **run** (persisted history, exports, registry).

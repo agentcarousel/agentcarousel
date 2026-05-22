@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2 - May 2026
+
+### Changes
+
+- **Run ID format** — Run IDs are now 10-character uppercase strings (e.g. `3NDEKTSV4R`) drawn from the random portion of a ULID. Replaces the previous 26-character full ULID. IDs fit untruncated in all table columns (`agc carousel`, `agc ab`, `agc report list`). Existing IDs in local history remain accessible; `agc report show` supports prefix matching as a fallback.
+- **Registry SSL** — Postgres connections now use SSL by default (`rejectUnauthorized: false`). Set `AGENTCAROUSEL_REGISTRY_DB_SSL=false` to disable for local dev.
+
 ## 0.6.1 - May 2026
 
 ### Features
