@@ -109,7 +109,7 @@ agc eval fixtures/regex-builder/ \
 
 **Execution modes:** `--execution-mode live` hits real LLM APIs. Omit it (or pass `mock`) for deterministic offline runs.
 
-**Evaluators:** `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. `--evaluator mock` skips LLM calls entirely.
+**Evaluators:** `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. Omit `--evaluator` (or pass `rules`) for assertion-based scoring with no LLM judge calls.
 
 **Filters:** `--filter` matches on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`).
 
@@ -141,8 +141,9 @@ agc carousel \
 **Recommended workflow for the most complete ranking:**
 
 ```bash
-# 1. Record golden outputs for all your fixtures
-agc eval fixtures/ --execution-mode live --update-golden
+# 1. Record and promote golden outputs for all your fixtures
+agc eval fixtures/ --execution-mode live --judge
+agc promote <run-id>
 
 # 2. Rules-based baseline across models
 agc carousel --models m1,m2,m3 fixtures/
@@ -241,9 +242,12 @@ agc report show <RUN-ID> --verbose
 # Export as a signed evidence bundle (always includes full detail)
 agc export <RUN-ID>
 agc export -l   # latest run
+
+# Compare two runs or gate on regressions
+agc compare -l --baseline <run-id>
 ```
 
-Exported runs include a comprehensive report alongside a JSON report and the minisign attestation.
+Exported runs include a comprehensive report alongside a JSON report and the minisign attestation. To diff two runs or run a statistical regression gate, use `agc compare`.
 
 ## Exit Codes
 

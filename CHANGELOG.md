@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- **`agc report diff` removed** — Use `agc compare` instead. `compare` covers the same two-run diff with the addition of Mann-Whitney significance testing, registry baselines, and proper CI exit codes. The `agc report` command retains `list` and `show`.
+- **Shared provider types** — `GeminiRequest/Response`, `OpenAiRequest/Response`, and `AnthropicRequest/Response` structs were duplicated between `evaluators/judge.rs` and `runner/generator.rs`. Extracted into a new `providers` module as the single canonical definition; both callers import from there. No behavior change.
+
+### Chores
+
+- Removed `#[allow(dead_code)]` from `exit_codes.rs`; all `ExitCode` variants are actively used.
+
+---
+
 ## 0.6.2 - May 2026
 
 ### Features
