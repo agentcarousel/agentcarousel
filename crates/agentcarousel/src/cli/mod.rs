@@ -14,7 +14,6 @@ mod fixture_utils;
 mod generate;
 mod init;
 mod lint;
-mod credentials;
 mod output;
 mod promote;
 mod publish;
