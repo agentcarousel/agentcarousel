@@ -11,7 +11,9 @@ use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
 
-/// List/show/diff runs in the local history DB (same DB as test/eval; see config).
+/// Browse past runs, inspect individual results, or export them for sharing.
+///
+/// Every run from agc eval, agc carousel, agc ab, and agc watch is saved to a local history database. agc report lets you list those runs, view a detailed breakdown of any run, and export results to JSON.
 #[derive(Debug, Parser)]
 pub struct ReportArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).
@@ -44,7 +46,9 @@ enum ReportCommand {
 pub fn run_report(args: ReportArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     match args.command {
         ReportCommand::List { limit, json } => report_list(limit, json || globals.json),
-        ReportCommand::Show { run_id, json } => report_show(&run_id, json, globals.json),
+        ReportCommand::Show { run_id, json } => {
+            report_show(&run_id, json, globals.json, globals.verbose > 0)
+        }
         ReportCommand::Diff { run_id_a, run_id_b } => {
             report_diff(&run_id_a, &run_id_b, config.report.regression_threshold)
         }
@@ -98,7 +102,7 @@ fn load_run_for_show(run_ref: &str) -> Result<Run, String> {
     }
 }
 
-fn report_show(run_id: &str, json: bool, envelope: bool) -> i32 {
+fn report_show(run_id: &str, json: bool, envelope: bool, verbose: bool) -> i32 {
     match load_run_for_show(run_id) {
         Ok(run) => {
             if envelope {
@@ -107,7 +111,7 @@ fn report_show(run_id: &str, json: bool, envelope: bool) -> i32 {
             } else if json {
                 print_json(&run);
             } else {
-                print_terminal(&run);
+                print_terminal(&run, verbose);
             }
             ExitCode::Ok.as_i32()
         }

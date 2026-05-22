@@ -10,10 +10,14 @@ use super::GlobalOptions;
 
 const DEFAULT_THRESHOLD: f32 = 0.05;
 
-/// Compare eval runs and gate on regressions.
+/// Check whether a new run is better or worse than a saved baseline.
+///
+/// agc compare looks at pass rate, effectiveness scores, and per-case status changes between two runs and reports any regressions. Use it as a CI gate to catch quality drops before they reach production.
+///
+/// Use `agc compare tag` to save a run as a named baseline, then compare future runs against it. Tags can be stored in the local history database or pushed to the shared registry.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc compare -l --baseline <run-id>\n  agc compare -l --baseline <run-id> --threshold 0.05\n  agc compare <run-id> --baseline <run-id>\n  agc compare <run-id> --registry              # fetch baseline from registry\n  agc compare tag <run-id> --name prod-baseline\n  agc compare tag <run-id> --name prod-baseline --registry  # push to registry\n  agc compare -l  # auto-baseline: previous run for same skill\n\nExit codes:\n  0  no regression (or improvement)\n  1  regression exceeds threshold\n  4  runtime error (IO, database)\n  5  run not found in history"
+    after_help = "Examples:\n  agc compare -l --baseline <run-id>                     # compare latest run to a saved baseline\n  agc compare -l --baseline <run-id> --threshold 0.05   # allow up to 5% regression\n  agc compare <run-id> --baseline <run-id>               # compare two specific runs\n  agc compare <run-id> --registry                        # fetch baseline from the shared registry\n  agc compare tag <run-id> --name prod-baseline          # save a run as a named baseline\n  agc compare tag <run-id> --name prod-baseline --registry  # push baseline to registry\n\nExit codes:\n  0  no regression detected (or improvement)\n  1  regression exceeds threshold\n  4  runtime error (disk, database)\n  5  run not found in history"
 )]
 pub struct CompareArgs {
     #[command(subcommand)]
@@ -165,8 +169,8 @@ fn run_tag(
                     globals,
                     "compare tag",
                     "no_token",
-                    "Registry token required for --registry. Run `agc login --token <token>` or set AGENTCAROUSEL_API_TOKEN.",
-                    vec!["agc login --token <your-token>".to_string()],
+                    "Registry token required for --registry. Set AGENTCAROUSEL_API_TOKEN.",
+                    vec!["export AGENTCAROUSEL_API_TOKEN=<your-token>".to_string()],
                     String::new(),
                 );
                 return ExitCode::ValidationFailed.as_i32();
@@ -530,6 +534,14 @@ fn synthetic_baseline_run(
         latency_p50_ms: None,
         latency_p95_ms: None,
         latency_p99_ms: None,
+        judge_tokens_in: None,
+        judge_tokens_out: None,
+        gen_cost_usd: None,
+        judge_cost_usd: None,
+        total_cost_usd: None,
+        generator_model: None,
+        judge_model: None,
+        command_line: None,
     };
     Run {
         id: RunId(run_id.to_string()),

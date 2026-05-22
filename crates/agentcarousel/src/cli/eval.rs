@@ -1,9 +1,9 @@
 use agentcarousel_core::{
-    judge_key_candidates, judge_provider_from_model, CaseStatus, CertificationContext,
-    JudgeProvider,
+    annotate_run_cost, judge_key_candidates, judge_provider_from_model, prefetch_pricing,
+    CaseStatus, CertificationContext, JudgeProvider,
 };
 use agentcarousel_fixtures::load_fixture;
-use agentcarousel_reporters::{persist_run, print_json, print_junit, print_terminal};
+use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
 use clap::{ArgAction, Parser, ValueEnum};
 use console::style;
@@ -24,10 +24,11 @@ enum EvalExecutionMode {
     Live,
 }
 
-/// Run evaluation with mock or live generation; optionally score with an LLM judge.
+/// Run your test suite and see which cases pass, fail, or need attention.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc eval fixtures/customer-support/cases.yaml          # mock, rules evaluator\n  agc eval fixtures/ --execution-mode live               # live generation\n  agc eval fixtures/ --evaluator all --judge             # mixed rules+judge fixtures\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on all cases\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly output\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (IO, network, database)\n  5  fixture path not found"
+    long_about = "Run your test suite and see which cases pass, fail, or need attention.\n\nBy default, agc eval uses pre-recorded mock responses so no API key is required and runs finish in seconds. Switch to --execution-mode live to call a real model API. Add --judge to score outputs with an LLM judge on top of rule-based checks.\n\nToken counts and USD cost are shown automatically after each run when data is available.",
+    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly JSON output\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
 )]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -74,7 +75,7 @@ pub struct EvalArgs {
     /// Per-case timeout in seconds.
     #[arg(short = 't', long)]
     timeout: Option<u64>,
-    /// Output format: `human` (default), `json`, or `junit`.
+    /// Output format: `human` (default) or `json`.
     #[arg(short = 'f', long)]
     format: Option<String>,
     /// Glob matched against full case ids (`skill/case-id`). Example: `my-skill/judge-*` to run only judge-named cases; combine with `--evaluator all --judge`.
@@ -92,7 +93,7 @@ pub struct EvalArgs {
     /// Policy version string stamped into the run record (e.g. `v1.2`).
     #[arg(short = 'p', long)]
     policy_version: Option<String>,
-    /// Show a case-level progress bar on stderr (default: on for non-JSON/JUnit output when stderr is a TTY; use with `--format json` so only stderr shows progress).
+    /// Show a case-level progress bar on stderr (default: on for non-JSON output when stderr is a TTY; use with `--format json` so only stderr shows progress).
     #[arg(short = 'P', long, action = ArgAction::SetTrue)]
     progress: bool,
     /// Never show the eval case progress bar.
@@ -101,9 +102,6 @@ pub struct EvalArgs {
     /// Cancel the entire run after N seconds (per-case --timeout still applies per case).
     #[arg(long)]
     timeout_run: Option<u64>,
-    /// When set with --evaluator golden, write actual outputs to golden files instead of failing.
-    #[arg(long)]
-    update_golden: bool,
     /// Base URL for a custom agent endpoint (required when --model is 'custom').
     #[arg(long)]
     generator_endpoint: Option<String>,
@@ -232,8 +230,8 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         .unwrap_or_else(|| config.output.format.clone());
     let show_progress = !args.no_progress
         && !globals.quiet
-        && (args.progress || ((format != "json" && format != "junit") && stderr().is_terminal()));
-    if !globals.quiet && format != "json" && format != "junit" && args.judge && !judge_enabled {
+        && (args.progress || (format != "json" && stderr().is_terminal()));
+    if !globals.quiet && format != "json" && args.judge && !judge_enabled {
         eprintln!(
             "{} --judge is set but no judge evaluator is active (--evaluator is {:?}). \
 For fixtures that set judge per case, use --evaluator all (and keep --judge).",
@@ -252,7 +250,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         },
         mock_dir: config.runner.mock_dir.clone(),
         generation_mode,
-        generator_model: Some(generator_model),
+        generator_model: Some(generator_model.clone()),
         generator_max_tokens: if args.disable_max_tokens {
             None
         } else {
@@ -277,7 +275,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
             effective_evaluator
         },
         judge: judge_enabled,
-        judge_model: Some(judge_model),
+        judge_model: Some(judge_model.clone()),
         effectiveness_threshold: config.eval.effectiveness_threshold,
         judge_max_tokens: if args.disable_max_tokens {
             None
@@ -288,17 +286,33 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         carousel_iteration: args.carousel_iteration,
         policy_version: args.policy_version,
         progress: show_progress,
-        update_golden: args.update_golden,
     };
+
+    prefetch_pricing();
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
         .build()
         .expect("tokio runtime");
-    let run = runtime.block_on(run_eval(fixtures, eval_config));
+    let mut run = runtime.block_on(run_eval(fixtures, eval_config));
+
+    let judge_model_for_cost = if args.judge {
+        Some(judge_model.as_str())
+    } else {
+        None
+    };
+    annotate_run_cost(&mut run, &generator_model, judge_model_for_cost);
+    run.summary.generator_model = Some(generator_model.clone());
+    run.summary.judge_model = if judge_enabled {
+        Some(judge_model.clone())
+    } else {
+        None
+    };
+    run.summary.command_line = Some(std::env::args().collect::<Vec<_>>().join(" "));
 
     let _ = persist_run(&run);
+
     let format_str = format.as_str();
 
     if globals.json {
@@ -307,24 +321,20 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     } else {
         match format_str {
             "json" => print_json(&run),
-            "junit" => print_junit(&run),
             _ => {
                 if globals.quiet {
                     agentcarousel_reporters::print_terminal_summary(&run);
                 } else {
-                    print_terminal(&run);
+                    print_terminal(&run, globals.verbose > 0);
                 }
             }
         }
 
-        if !globals.quiet && format_str != "json" && format_str != "junit" {
+        if !globals.quiet && format_str != "json" {
             print_postflight_hints(&run);
         }
-        if globals.quiet || format_str == "json" || format_str == "junit" {
-            print_eval_saved_run_hint(
-                &run,
-                globals.quiet || format_str == "json" || format_str == "junit",
-            );
+        if globals.quiet || format_str == "json" {
+            print_eval_saved_run_hint(&run, globals.quiet || format_str == "json");
         }
     }
 
@@ -355,7 +365,7 @@ fn cli_invocation_name() -> String {
             path.file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
         })
-        .unwrap_or_else(|| "agentcarousel".to_string())
+        .unwrap_or_else(|| "agc".to_string())
 }
 
 fn print_eval_saved_run_hint(run: &agentcarousel_core::Run, to_stderr: bool) {

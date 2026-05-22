@@ -1,4 +1,5 @@
 use crate::core::hex_util::hex_lower;
+use agentcarousel_core::{CaseStatus, Role, Run};
 use agentcarousel_reporters::{fetch_run, list_runs};
 use chrono::Utc;
 use clap::Parser;
@@ -19,7 +20,9 @@ const SKILL_DEFINITION_SCHEMA: &str = include_str!(concat!(
 use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
-/// Export run(s) as evidence .tar.gz (run.json + fingerprints per run).
+/// Export run results as a signed evidence archive for audits or sharing.
+///
+/// agc export packages one or more run records (including results, traces, and cryptographic fingerprints) into a .tar.gz archive. Use this to share evidence with auditors, upload to compliance systems, or archive a set of results outside the local history database.
 #[derive(Debug, Parser)]
 pub struct ExportArgs {
     /// Run id to export (from `report list` or eval/test hint lines; omit with `--last`).
@@ -239,6 +242,12 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     file.write_all(b"Redaction policy: trace outputs are scrubbed of common secrets and tokens.\n")
         .map_err(|err| err.to_string())?;
 
+    let report_md_path = root.join("report.md");
+    let report_md = render_markdown_report(&run);
+    let mut file = fs::File::create(&report_md_path).map_err(|err| err.to_string())?;
+    file.write_all(report_md.as_bytes())
+        .map_err(|err| err.to_string())?;
+
     let manifest_path = root.join("MANIFEST.json");
     let manifest = build_manifest(&root)?;
     write_json(&manifest_path, &manifest)?;
@@ -254,6 +263,241 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     tar.finish().map_err(|err| err.to_string())?;
     fs::remove_dir_all(&root).ok();
     Ok(out_path)
+}
+
+fn render_markdown_report(run: &Run) -> String {
+    use std::fmt::Write as _;
+    let mut md = String::new();
+
+    let skill = run.skill_or_agent.as_deref().unwrap_or("unknown");
+    let _ = writeln!(md, "# agentcarousel Evidence Report — {skill}");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "**Run ID:** {}", run.id.0);
+    if let Some(cmd_line) = run.summary.command_line.as_ref() {
+        let _ = writeln!(md, "**Command:** `{cmd_line}`");
+    } else {
+        let _ = writeln!(md, "**Command:** {}", run.command);
+    }
+    let _ = writeln!(
+        md,
+        "**Started:** {}",
+        run.started_at.format("%Y-%m-%d %H:%M:%S UTC")
+    );
+    if let Some(finished) = run.finished_at {
+        let _ = writeln!(
+            md,
+            "**Finished:** {}",
+            finished.format("%Y-%m-%d %H:%M:%S UTC")
+        );
+    }
+    let _ = writeln!(
+        md,
+        "**agentcarousel version:** {}",
+        run.agentcarousel_version
+    );
+    let _ = writeln!(md);
+
+    let s = &run.summary;
+    let _ = writeln!(md, "## Summary");
+    let _ = writeln!(md);
+
+    let result_icon = if s.failed == 0 && s.errored == 0 && s.timed_out == 0 {
+        "✅"
+    } else {
+        "❌"
+    };
+    let pass_rate_pct = s.pass_rate * 100.0;
+    let _ = writeln!(
+        md,
+        "{result_icon} **{}/{} passed** ({pass_rate_pct:.1}%)",
+        s.passed, s.total
+    );
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Metric | Value |");
+    let _ = writeln!(md, "|--------|-------|");
+    let _ = writeln!(md, "| Total | {} |", s.total);
+    let _ = writeln!(md, "| Passed | {} |", s.passed);
+    let _ = writeln!(md, "| Failed | {} |", s.failed);
+    if s.errored > 0 {
+        let _ = writeln!(md, "| Errored | {} |", s.errored);
+    }
+    if s.timed_out > 0 {
+        let _ = writeln!(md, "| Timed out | {} |", s.timed_out);
+    }
+    if let Some(eff) = s.mean_effectiveness_score {
+        let _ = writeln!(md, "| Effectiveness score | {eff:.2} / 1.00 |");
+    }
+    let _ = writeln!(md, "| Mean latency | {:.0}ms |", s.mean_latency_ms);
+    if let (Some(p50), Some(p95), Some(p99)) =
+        (s.latency_p50_ms, s.latency_p95_ms, s.latency_p99_ms)
+    {
+        let _ = writeln!(
+            md,
+            "| Latency p50 / p95 / p99 | {p50:.0}ms / {p95:.0}ms / {p99:.0}ms |"
+        );
+    }
+    let _ = writeln!(md);
+
+    // Models section
+    if s.generator_model.is_some() || s.judge_model.is_some() {
+        let _ = writeln!(md, "### Models");
+        let _ = writeln!(md);
+        if let Some(gen_model) = s.generator_model.as_ref() {
+            let gen_tokens = match (s.tokens_in, s.tokens_out) {
+                (Some(i), Some(o)) => format!("  ({i} in / {o} out tokens)"),
+                _ => String::new(),
+            };
+            let gen_cost = s
+                .gen_cost_usd
+                .map(|c| format!("  · ${c:.4}"))
+                .unwrap_or_default();
+            let _ = writeln!(md, "- **Generator:** `{gen_model}`{gen_tokens}{gen_cost}");
+        }
+        if let Some(judge_model) = s.judge_model.as_ref() {
+            let judge_tokens = match (s.judge_tokens_in, s.judge_tokens_out) {
+                (Some(i), Some(o)) => format!("  ({i} in / {o} out tokens)"),
+                _ => String::new(),
+            };
+            let judge_cost = s
+                .judge_cost_usd
+                .map(|c| format!("  · ${c:.4}"))
+                .unwrap_or_default();
+            let _ = writeln!(md, "- **Judge:** `{judge_model}`{judge_tokens}{judge_cost}");
+        }
+        if let Some(total_cost) = s.total_cost_usd {
+            let _ = writeln!(md, "- **Total cost:** ${total_cost:.4}");
+        }
+        let _ = writeln!(md);
+    } else {
+        if let (Some(gin), Some(gout)) = (s.tokens_in, s.tokens_out) {
+            let _ = writeln!(md, "- Generator tokens: {gin} in / {gout} out");
+        }
+        if let (Some(jin), Some(jout)) = (s.judge_tokens_in, s.judge_tokens_out) {
+            let _ = writeln!(md, "- Judge tokens: {jin} in / {jout} out");
+        }
+        if let Some(cost) = s.gen_cost_usd {
+            let _ = writeln!(md, "- Generator cost: ${cost:.4}");
+        }
+        if let Some(cost) = s.judge_cost_usd {
+            let _ = writeln!(md, "- Judge cost: ${cost:.4}");
+        }
+        if let Some(cost) = s.total_cost_usd {
+            let _ = writeln!(md, "- Total cost: ${cost:.4}");
+        }
+        let _ = writeln!(md);
+    }
+
+    let _ = writeln!(md, "---");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Cases");
+    let _ = writeln!(md);
+
+    for case in &run.cases {
+        let id = &case.case_id.0;
+        let (status_icon, status_label) = match case.status {
+            CaseStatus::Passed => ("✅", "Passed"),
+            CaseStatus::Failed => ("❌", "Failed"),
+            CaseStatus::Error => ("⚠️", "Error"),
+            CaseStatus::TimedOut => ("⏱️", "Timed Out"),
+            CaseStatus::Skipped => ("⏭️", "Skipped"),
+            CaseStatus::Flaky => ("⚠️", "Flaky"),
+        };
+        let latency_ms = case.metrics.total_latency_ms;
+        let eff_str = case
+            .eval_scores
+            .as_ref()
+            .map(|s| format!(" · effectiveness {:.2}", s.effectiveness_score))
+            .unwrap_or_default();
+        let _ = writeln!(
+            md,
+            "### {status_icon} {id}  <sup>{status_label} · {latency_ms}ms{eff_str}</sup>"
+        );
+        let _ = writeln!(md);
+
+        if !case.input.is_empty() {
+            let _ = writeln!(md, "**Input:**");
+            let _ = writeln!(md);
+            for msg in &case.input {
+                let role = match msg.role {
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::System => "system",
+                    Role::Tool => "tool",
+                };
+                let _ = writeln!(md, "**[{role}]**");
+                for line in msg.content.trim().lines() {
+                    let _ = writeln!(md, "> {line}");
+                }
+                let _ = writeln!(md);
+            }
+        }
+
+        if let Some(reply) = case.trace.final_output.as_ref() {
+            let reply = reply.trim();
+            if !reply.is_empty() {
+                let _ = writeln!(md, "**Agent replied:**");
+                let _ = writeln!(md);
+                for line in reply.lines() {
+                    let _ = writeln!(md, "> {line}");
+                }
+                let _ = writeln!(md);
+            }
+        }
+
+        if let Some(scores) = case.eval_scores.as_ref() {
+            if !scores.rubric_scores.is_empty() {
+                let _ = writeln!(md, "**Rubric:**");
+                let _ = writeln!(md);
+                let _ = writeln!(md, "|  | Criterion | Score | Weight |");
+                let _ = writeln!(md, "|--|-----------|-------|--------|");
+                for rs in &scores.rubric_scores {
+                    let icon = if rs.score >= 0.9 {
+                        "✅"
+                    } else if rs.score >= 0.5 {
+                        "⚠️"
+                    } else {
+                        "❌"
+                    };
+                    let _ = writeln!(
+                        md,
+                        "| {icon} | {} | {:.2} | {:.2} |",
+                        rs.rubric_id, rs.score, rs.weight
+                    );
+                }
+                let _ = writeln!(md);
+            }
+            if let Some(rationale) = scores.judge_rationale.as_ref() {
+                let rationale = rationale.trim();
+                if !rationale.is_empty() {
+                    let _ = writeln!(md, "**Judge:** {rationale}");
+                    let _ = writeln!(md);
+                }
+            }
+            let case_result_icon = match case.status {
+                CaseStatus::Passed => "✅",
+                CaseStatus::Failed => "❌",
+                _ => "⚠️",
+            };
+            let _ = writeln!(
+                md,
+                "{case_result_icon} **Effectiveness: {:.2}**",
+                scores.effectiveness_score
+            );
+            let _ = writeln!(md);
+        }
+
+        if let Some(err) = case.error.as_ref() {
+            if !err.is_empty() {
+                let _ = writeln!(md, "**Error:** {err}");
+                let _ = writeln!(md);
+            }
+        }
+
+        let _ = writeln!(md, "---");
+        let _ = writeln!(md);
+    }
+
+    md
 }
 
 fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
@@ -284,6 +528,7 @@ fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
         "fixture_bundle.lock",
         "environment_fingerprint.json",
         "REDACTION_POLICY.md",
+        "report.md",
     ];
     let mut files = Vec::new();
     for name in tracked {

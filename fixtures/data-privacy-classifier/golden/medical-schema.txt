@@ -1,0 +1,25 @@
+## Privacy Classification — patient_records
+
+> ⚠️ This table contains **GDPR Article 9 special category data** (health information). Processing requires explicit consent or another lawful basis under Art. 9(2). All fields below should be treated as healthcare-regulated data under HIPAA in the US context.
+
+| Field | Classification | Sensitivity | Notes |
+|-------|---------------|-------------|-------|
+| `record_id` | Non-personal (pseudonym) | LOW | UUID alone doesn't identify a patient without linkage |
+| `patient_name` | Personal Data | HIGH | Direct identifier — GDPR Art. 4(1) |
+| `date_of_birth` | Personal Data | HIGH | Combined with name is near-unique; can identify with zip code |
+| `icd10_diagnosis_code` | **Special Category** | CRITICAL | Health data — GDPR Art. 9; reveals medical conditions |
+| `medication_list` | **Special Category** | CRITICAL | Health data — infers diagnosis, disability, mental health |
+| `attending_physician_id` | Personal Data (indirect) | MEDIUM | Identifies a data subject in the physician role; linkable to patient |
+| `insurance_policy_number` | Personal Data | HIGH | Financial + health identifier; enables re-identification |
+| `visit_date` | Personal Data | MEDIUM | Combined with diagnosis creates a health timeline |
+| `notes` | **Special Category** | CRITICAL | Free-text clinical notes — may contain diagnosis, mental health, sexual health data |
+
+### Key Obligations
+
+1. **Lawful basis (Art. 9(2)):** Document explicit patient consent or rely on Art. 9(2)(h) (medical treatment) for each processing purpose.
+2. **Access control:** `icd10_diagnosis_code`, `medication_list`, and `notes` must be restricted to clinical staff only — not accessible to billing or analytics teams without pseudonymisation.
+3. **Encryption at rest:** All CRITICAL fields must be encrypted at the column or tablespace level.
+4. **Retention:** Apply a documented retention schedule; medical records typically have statutory minimum retention periods.
+5. **Data minimisation:** If analytics are needed, derive aggregate statistics rather than storing raw diagnosis codes or medication lists.
+
+*This classification reflects engineering guidance based on GDPR and CCPA frameworks; consult your Data Protection Officer for legal advice.*

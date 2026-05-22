@@ -372,3 +372,169 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(assert.*Report|assert.*record|captured|out\.read|assert.*print)'
+
+  # ── Judge: Coverage and assertion quality ───────────────────────────────────
+  - id: unit-test-generator/judge-coverage-quality
+    description: >
+      Agent generates tests for a class with two public methods — one with a
+      happy path, one with an exception path. Judge scores whether boundary values
+      are tested, assertions are specific, and the exception type is verified.
+    tags: [testing, judge, certification]
+    seed: 8090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a software testing expert judge. Score each rubric item 0.0–1.0.
+        Domain: unit test coverage, assertion specificity, boundary values, exception testing.
+        Penalise: assertTrue(result is not None) — too vague. Reward: assertEqual(result, expected_value).
+        A perfect test file has: happy path, at least 2 boundary values, the exception
+        type asserted (not just "an exception"), and no mocking of the unit under test itself.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate pytest unit tests for this class:
+
+            ```python
+            class BoundedStack:
+                """A stack with a maximum capacity. Raises OverflowError on push when full,
+                IndexError on pop when empty."""
+
+                def __init__(self, capacity: int):
+                    if capacity <= 0:
+                        raise ValueError("capacity must be positive")
+                    self._capacity = capacity
+                    self._data: list = []
+
+                def push(self, item) -> None:
+                    if len(self._data) >= self._capacity:
+                        raise OverflowError(f"Stack is full (capacity={self._capacity})")
+                    self._data.append(item)
+
+                def pop(self):
+                    if not self._data:
+                        raise IndexError("pop from empty stack")
+                    return self._data.pop()
+
+                @property
+                def size(self) -> int:
+                    return len(self._data)
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(def test_|@pytest\.mark)'
+        - kind: regex
+          value: '(?i)(OverflowError|IndexError)'
+        - kind: regex
+          value: '(?i)(pytest\.raises|assertRaises)'
+      rubric:
+        - id: exception-types-asserted
+          description: >
+            Tests use pytest.raises(OverflowError) and pytest.raises(IndexError) — the
+            specific exception types. Not just `with pytest.raises(Exception)`.
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(pytest\.raises\(OverflowError\)|pytest\.raises\(IndexError\)|raises.*OverflowError|raises.*IndexError)'
+        - id: boundary-values-covered
+          description: >
+            Tests cover: push to full (capacity boundary), pop from empty, and capacity=0
+            constructor rejection (or capacity=1 edge case).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(capacity|full|empty|capacity.*0|capacity.*1|boundary)'
+        - id: assertions-specific
+          description: >
+            Assertions check specific values — `assert stack.size == 2`, not just
+            `assert stack.size`. No `assert result is not None` style vague checks.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(assert.*size.*==|assert.*==.*[0-9]|assertEqual.*[0-9])'
+
+  # ── Process: Test functions and assertions ───────────────────────────────────
+  - id: unit-test-generator/process-test-functions-exist
+    description: >
+      Simple pure function. Process verifies the output contains at least one test
+      function definition and at least one assertion statement.
+    tags: [testing, process, certification]
+    seed: 8091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "def test_|it\\(|describe\\(|@Test|test\\(",
+                    "assert|expect|should|assertEqual|toBe|raises"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate unit tests for this function:
+
+            ```python
+            def celsius_to_fahrenheit(celsius: float) -> float:
+                """Convert Celsius to Fahrenheit. Raises ValueError for below absolute zero."""
+                if celsius < -273.15:
+                    raise ValueError(f"{celsius} is below absolute zero")
+                return celsius * 9/5 + 32
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(def test_|@pytest)'
+        - kind: regex
+          value: '(?i)(32|212|celsius|fahrenheit)'
+
+  # ── Golden: Email validator tests ────────────────────────────────────────────
+  - id: unit-test-generator/golden-email-validator-tests
+    description: >
+      EmailValidator class with is_valid() method. Golden captures a full pytest
+      suite with valid emails, invalid formats, edge cases, and parametrize usage.
+    tags: [testing, golden, certification]
+    seed: 8092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/unit-test-generator/golden/email-validator-tests.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate comprehensive pytest tests for this class:
+
+            ```python
+            import re
+
+            class EmailValidator:
+                EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+                def is_valid(self, email: str) -> bool:
+                    """Return True if email matches basic RFC-5321 format."""
+                    if not isinstance(email, str):
+                        raise TypeError("email must be a string")
+                    return bool(self.EMAIL_REGEX.match(email.strip()))
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(def test_|@pytest\.mark\.parametrize)'
+        - kind: regex
+          value: '(?i)(is_valid|EmailValidator)'
+        - kind: regex
+          value: '(?i)(True|False|assert)'

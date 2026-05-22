@@ -134,4 +134,7 @@ agentcarousel.toml
 .bv/
 
 .claude/
+AGENTS.md
 CLAUDE.md
+repo-info.md
+packs/

@@ -1,6 +1,6 @@
 use agentcarousel_core::CaseStatus;
 use agentcarousel_fixtures::load_fixture;
-use agentcarousel_reporters::{persist_run, print_json, print_junit, print_terminal};
+use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{run_fixtures, GenerationMode, RunnerConfig};
 use clap::Parser;
 use std::path::PathBuf;
@@ -144,12 +144,11 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
     } else {
         match format.as_str() {
             "json" => print_json(&run),
-            "junit" => print_junit(&run),
             _ => {
                 if globals.quiet {
                     agentcarousel_reporters::print_terminal_summary(&run);
                 } else {
-                    print_terminal(&run);
+                    print_terminal(&run, globals.verbose > 0);
                 }
             }
         }

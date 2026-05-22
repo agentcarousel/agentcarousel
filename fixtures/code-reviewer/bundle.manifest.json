@@ -27,7 +27,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "af5112c73acca495fce37ef33b895112f73b67d4c681e50463b96fe83faa0fbb"
+      "sha256": "5902c2f6c097b9e8c60857ca975876f54a54d8e92c0adc76f9b2b914fef897b2"
     },
     {
       "path": "golden/sample-security-finding.json",
@@ -39,7 +39,7 @@
   "mocks": [
     {
       "path": "../../mocks/agent-response.json",
-      "sha256": "52552371381535f54223fb1862223c366ac673d5ce3ca24b5c8010c7fe196c07"
+      "sha256": "6c2596186f40fab3b5f78d6e92cfa39d1987e88b2b16dcd00b8e2d7c6961481d"
     }
   ],
   "negative_cases": [],

@@ -79,8 +79,6 @@ pub struct EvalConfig {
     pub policy_version: Option<String>,
     /// Case-level progress bar on stderr (indicatif).
     pub progress: bool,
-    /// When true, write actual case output to golden files instead of failing on mismatch.
-    pub update_golden: bool,
 }
 
 /// Execute all cases from the given fixtures using [`RunnerConfig`] and return a completed [`Run`].

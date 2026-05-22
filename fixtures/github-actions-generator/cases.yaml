@@ -1,7 +1,7 @@
 # agentcarousel fixture — github-actions-generator
 # Certification Tier: Candidate
 # Source skill: GitHub Actions CI/CD workflow generation agent
-# Golden files:  fixtures/golden/github-actions-generator/
+# Golden files:  fixtures/github-actions-generator/golden/
 # Bundle:        fixtures/bundles/github-actions-generator/bundle.manifest.json
 
 schema_version: 1
@@ -100,7 +100,7 @@ cases:
 
     evaluator_config:
       evaluator: golden
-      golden_path: fixtures/golden/github-actions-generator/push-pr-workflow.yml
+      golden_path: fixtures/github-actions-generator/golden/push-pr-workflow.txt
       golden_threshold: 0.70
       effectiveness_threshold: 0.6
 
@@ -405,3 +405,126 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(language|test command|trigger|what.*run|what.*stack|tell me)'
+
+  # ── Judge: Security hardening quality ──────────────────────────────────────
+  - id: github-actions-generator/judge-security-hardening
+    description: >
+      Request for a workflow that deploys to AWS. Judge scores whether the generated
+      workflow uses OIDC instead of long-lived keys, minimal permissions, and pinned
+      action SHAs.
+    tags: [ci-cd, security, judge, certification]
+    seed: 4090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a GitHub Actions security expert judge. Score each rubric item 0.0–1.0.
+        Domain: OIDC federation, minimal permissions, pinned action SHA, secret handling.
+        Prefer OIDC (aws-actions/configure-aws-credentials with role-to-assume) over
+        AWS_ACCESS_KEY_ID/SECRET stored as secrets — they expire automatically.
+        Pinned actions must use @SHA not @v1 or @main. Permissions block must be present.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate a GitHub Actions workflow that deploys a Docker image to AWS ECS
+            when a new tag is pushed. The workflow should follow security best practices.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(on:|push:|tags:)'
+        - kind: regex
+          value: '(?i)(permissions:|aws|ecs|deploy)'
+      rubric:
+        - id: oidc-or-secrets-handled
+          description: >
+            Workflow uses OIDC (role-to-assume) or clearly documents that AWS credentials
+            should be stored as secrets — not hard-coded in the YAML.
+          critical: true
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(role-to-assume|OIDC|aws-actions|secrets\.|AWS_ACCESS_KEY_ID.*secrets)'
+        - id: permissions-block-present
+          description: >
+            A `permissions:` block is present, scoped to the minimum needed
+            (e.g. `id-token: write` for OIDC, `contents: read`).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(permissions:|id-token:|contents:)'
+        - id: actions-pinned
+          description: >
+            Third-party actions are pinned to a commit SHA, not a mutable tag like
+            @v1, @v2, or @main/master.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(@[0-9a-f]{40}|pinned|SHA|commit.*hash)'
+
+  # ── Process: Workflow YAML structure ─────────────────────────────────────────
+  - id: github-actions-generator/process-workflow-structure
+    description: >
+      Simple Node.js test workflow request. Process verifies the generated YAML
+      contains the required top-level sections: on, jobs, and at least one step.
+    tags: [ci-cd, process, certification]
+    seed: 4091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "on:",
+                    "jobs:",
+                    "steps:|uses:|run:"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate a GitHub Actions workflow to run Python tests with pytest on
+            every push and pull request. Use Python 3.12.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(on:|push:|pull_request:)'
+        - kind: regex
+          value: '(?i)(pytest|python|pip)'
+
+  # ── Golden: Release-tag deploy workflow ─────────────────────────────────────
+  - id: github-actions-generator/golden-release-tag-deploy
+    description: >
+      Deploy to staging on every release tag. Golden captures a complete, secure
+      workflow with OIDC, minimal permissions, and pinned actions.
+    tags: [ci-cd, golden, certification]
+    seed: 4092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/github-actions-generator/golden/release-tag-deploy.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate a GitHub Actions workflow that triggers when a release tag
+            (v*.*.*) is pushed and deploys to a staging environment via SSH.
+            Use minimal permissions and follow security best practices.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: "tags:"
+        - kind: regex
+          value: '(?i)(SSH|deploy|staging)'
+        - kind: regex
+          value: '(?i)(permissions:|secret)'

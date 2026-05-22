@@ -166,16 +166,6 @@ async fn run_case_inner(
                 }
             }
         }
-        trace.steps.push(TraceStep {
-            index: trace.steps.len() as u32,
-            kind: StepKind::AgentDecision,
-            tool: None,
-            args: None,
-            result: None,
-            latency_ms: 0,
-            tokens_in: None,
-            tokens_out: None,
-        });
     }
 
     if status == CaseStatus::Passed && evaluate_rules {
@@ -189,7 +179,7 @@ async fn run_case_inner(
     metrics.total_steps = trace.steps.len() as u32;
     metrics.total_latency_ms = start.elapsed().as_millis() as u64;
 
-    let mut tracer = Tracer::new(SecretScrubber::default());
+    let mut tracer = Tracer::new(SecretScrubber);
     tracer.scrub_trace(&mut trace);
 
     CaseResult {

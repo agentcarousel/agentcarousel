@@ -18,20 +18,14 @@ use super::GlobalOptions;
 
 const DEBOUNCE_MS: u64 = 200;
 
-/// Run tests automatically whenever you save a fixture file.
+/// Re-run your tests automatically every time you save a fixture file.
 ///
-/// Keep your editor open and keep editing. Every time you save a fixture YAML,
-/// agc runs the cases from that file and prints the results — no need to switch
-/// to a terminal and type agc test manually. Only the file you just saved gets
-/// re-run, not the entire suite.
+/// Leave this running in a terminal while you write fixtures. Every time you save a YAML file, agc re-runs only the cases in that file and prints the result immediately — no need to switch windows and type a command. Runs are saved to history so you can review them with agc report.
 ///
-/// Runs in test mode (mock generation, no API keys needed) by default.
-/// Use --eval to switch to the eval pipeline.
-///
-/// Press Ctrl-C to stop watching.
+/// Uses mock generation by default (no API key needed). Add --eval to switch to the full eval pipeline. Press Ctrl-C to stop.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc watch fixtures/my-skill/             # tests run on every save\n  agc watch fixtures/ --filter-tags smoke  # only run smoke-tagged cases\n  agc watch fixtures/my-skill/ --eval      # use eval pipeline instead of test\n\nExit codes:\n  0  stopped (Ctrl-C)\n  4  could not set up the file watcher"
+    after_help = "Examples:\n  agc watch fixtures/my-skill/               # re-run cases on every save (no API key needed)\n  agc watch fixtures/ --filter-tags smoke    # only re-run smoke-tagged cases\n  agc watch fixtures/my-skill/ --eval        # use the full eval pipeline instead of basic test\n  agc watch fixtures/ --timeout 60           # set a 60-second per-case timeout\n\nExit codes:\n  0  stopped normally (Ctrl-C)\n  4  could not set up the file watcher"
 )]
 pub struct WatchArgs {
     /// Fixture files or directories to watch (default: fixtures).
@@ -212,7 +206,8 @@ fn run_once(
         run_id: None,
     };
 
-    let run = if args.eval {
+    let generator_model = config.generator.model.clone();
+    let mut run = if args.eval {
         let eval_config = EvalConfig {
             runner: runner_config,
             runs: 1,
@@ -226,19 +221,20 @@ fn run_once(
             carousel_iteration: None,
             policy_version: None,
             progress: false,
-            update_golden: false,
         };
         runtime.block_on(run_eval(fixtures, eval_config))
     } else {
         runtime.block_on(run_fixtures(fixtures, runner_config))
     };
+    run.summary.generator_model = Some(generator_model);
+    run.summary.command_line = Some(std::env::args().collect::<Vec<_>>().join(" "));
 
     let _ = persist_run(&run);
 
     if globals.quiet {
         print_terminal_summary(&run);
     } else {
-        print_terminal(&run);
+        print_terminal(&run, globals.verbose > 0);
     }
 }
 

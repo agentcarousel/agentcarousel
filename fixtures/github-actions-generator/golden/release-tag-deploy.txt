@@ -1,0 +1,53 @@
+```yaml
+name: Deploy to Staging on Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@dc588b651fe13d2bfaa6db26f5a9c2e9ae3e8e8a  # v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+
+      - name: Add staging host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to staging
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        run: |
+          ssh "${STAGING_USER}@${STAGING_HOST}" \
+            "cd ${DEPLOY_PATH} && \
+             git fetch --tags && \
+             git checkout ${GITHUB_REF_NAME} && \
+             ./scripts/deploy.sh"
+
+      - name: Notify on success
+        if: success()
+        run: echo "Deployed ${GITHUB_REF_NAME} to staging"
+```
+
+**Security notes:**
+
+- `permissions: contents: read` — minimal scope; no write access needed for a deploy.
+- Actions are pinned to commit SHAs to prevent supply-chain attacks from mutable tags.
+- SSH private key is stored in GitHub Secrets, never in the workflow file.
+- `ssh-keyscan` is run at deploy time to populate `known_hosts` — avoids `StrictHostKeyChecking=no`.
+- The `staging` environment adds a required-reviewer gate before the job runs (configure in Settings → Environments).

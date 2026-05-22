@@ -291,3 +291,218 @@ cases:
           auto_check:
             kind: not_contains
             value: "logout"
+
+  # ── Judge: Security severity and fix quality ─────────────────────────────────
+  - id: code-reviewer/judge-security-severity
+    description: >
+      Diff introduces an XSS via direct innerHTML assignment from unsanitised user
+      input. Judge scores whether the agent correctly classifies severity, cites the
+      CWE, and provides a safe alternative.
+    tags: [security, code-review, judge, certification]
+    seed: 8090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a application security engineer judge. Score each rubric item 0.0–1.0.
+        Domain: XSS (CWE-79), DOM injection, innerHTML safety, output encoding.
+        A correct severity for a reflected XSS via innerHTML is HIGH or CRITICAL.
+        Accept textContent, DOMPurify, or CSP as valid mitigations. Penalise "sanitise
+        with regex" as insufficient. Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this frontend diff for security issues:
+
+            ```diff
+            --- a/src/components/SearchResults.js
+            +++ b/src/components/SearchResults.js
+            @@ -8,6 +8,10 @@
+            +function renderQuery(query) {
+            +  const el = document.getElementById('search-heading');
+            +  el.innerHTML = `Showing results for: ${query}`;
+            +}
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(XSS|cross.site script|innerHTML|CWE.79|injection)'
+        - kind: regex
+          value: '(?i)(HIGH|CRITICAL|severe|dangerous)'
+      rubric:
+        - id: xss-identified
+          description: >
+            Agent correctly identifies innerHTML with untrusted input as a reflected XSS
+            vulnerability (CWE-79) and labels it HIGH or CRITICAL.
+          weight: 0.45
+          critical: true
+          auto_check:
+            kind: regex
+            value: '(?i)(XSS|cross.site|CWE.79|innerHTML.*unsafe|reflected)'
+        - id: safe-alternative-given
+          description: >
+            Agent recommends textContent, DOMPurify, or template literals with encoding
+            instead of innerHTML. Regex-based sanitisation is penalised.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(textContent|DOMPurify|encode|escape|innerText)'
+        - id: severity-correct
+          description: >
+            Severity is rated HIGH or CRITICAL. MEDIUM or LOW is incorrect for a
+            direct innerHTML XSS accepting attacker-controlled input.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(HIGH|CRITICAL)'
+
+  # ── Judge: Scope discipline ──────────────────────────────────────────────────
+  - id: code-reviewer/judge-scope-discipline
+    description: >
+      Diff changes one function; nearby file has unrelated legacy code. Judge scores
+      whether the agent stays within the diff rather than reviewing out-of-scope code.
+    tags: [code-review, judge, certification]
+    seed: 8091
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a code review quality judge. Score each rubric item 0.0–1.0.
+        Key criterion: a reviewer should comment only on lines present in the diff.
+        Penalise responses that spend more than one sentence commenting on code
+        outside the added/removed lines. Reward precise, line-referenced feedback.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff. Focus only on the changed lines:
+
+            ```diff
+            --- a/src/auth/token.py
+            +++ b/src/auth/token.py
+            @@ -1,15 +1,18 @@
+             import jwt
+             import os
+            -TOKEN_EXPIRY = 3600
+            +TOKEN_EXPIRY = int(os.environ.get('TOKEN_EXPIRY_SECS', 3600))
+
+             def generate_token(user_id: str) -> str:
+                 payload = {'sub': user_id, 'exp': time.time() + TOKEN_EXPIRY}
+                 return jwt.encode(payload, os.environ['JWT_SECRET'], algorithm='HS256')
+
+             # Legacy function — do not use in new code
+             def old_generate_token(user_id):
+                 return jwt.encode({'sub': user_id}, 'hardcoded-secret', algorithm='HS256')
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(TOKEN_EXPIRY|environment|env|os\.environ)'
+      rubric:
+        - id: diff-focused
+          description: >
+            Review comments target the changed line (TOKEN_EXPIRY env var). Agent does
+            not spend a paragraph criticising old_generate_token which is outside the diff.
+          weight: 0.50
+          auto_check:
+            kind: not_contains
+            value: "old_generate_token should be"
+        - id: env-var-feedback-quality
+          description: >
+            Agent comments meaningfully on the env-var defaulting pattern — whether the
+            default is reasonable, whether a missing var is handled, etc.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(default|fallback|missing.*env|env.*missing|3600|validation)'
+        - id: note-legacy-appropriately
+          description: >
+            If the agent mentions old_generate_token at all, it is a single brief note
+            (e.g. "out of scope but note the hardcoded secret") — not a full review.
+          weight: 0.20
+
+  # ── Process: Finding structure check ────────────────────────────────────────
+  - id: code-reviewer/process-finding-structure
+    description: >
+      Diff with a hardcoded AWS access key. Process harness verifies the response
+      contains a severity classification, a line reference, and a remediation.
+    tags: [security, code-review, process, certification]
+    seed: 8092
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "CRITICAL|HIGH|severity|secret|credential",
+                    "line|L[0-9]|hardcoded|hard-coded",
+                    "environment variable|secret manager|vault|rotate|remove"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff for security issues:
+
+            ```diff
+            --- a/config/deploy.py
+            +++ b/config/deploy.py
+            @@ -3,4 +3,5 @@
+             import boto3
+            +AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"
+            +AWS_SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+             client = boto3.client('s3', region_name='us-east-1')
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(CRITICAL|HIGH|secret|credential|access key)'
+        - kind: regex
+          value: '(?i)(environment|secret manager|vault|rotate|remove)'
+
+  # ── Golden: XSS via innerHTML ────────────────────────────────────────────
+  - id: code-reviewer/golden-xss-innerhtml
+    description: >
+      Diff adds innerHTML assignment from a URL query parameter. Golden captures a
+      structured finding: severity, affected code, explanation, and safe fix.
+    tags: [security, code-review, golden, certification]
+    seed: 8093
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/code-reviewer/golden/xss-innerhtml.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Review this diff for security vulnerabilities:
+
+            ```diff
+            --- a/src/pages/welcome.js
+            +++ b/src/pages/welcome.js
+            @@ -5,4 +5,7 @@
+            +const params = new URLSearchParams(window.location.search);
+            +const name = params.get('name');
+            +document.getElementById('greeting').innerHTML = `Welcome, ${name}!`;
+            ```
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(XSS|innerHTML|cross.site|CWE.79)'
+        - kind: regex
+          value: '(?i)(textContent|DOMPurify|encode|escape)'

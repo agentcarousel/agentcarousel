@@ -1,4 +1,7 @@
-use agentcarousel_core::{judge_key_candidates, judge_provider_from_model, FixtureFile};
+use agentcarousel_core::{
+    annotate_run_cost, fmt_cost, fmt_tokens, judge_key_candidates, judge_provider_from_model,
+    prefetch_pricing, FixtureFile,
+};
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
@@ -16,17 +19,25 @@ use super::fixture_utils::{apply_case_filter, apply_tag_filter, collect_fixture_
 use super::output::JsonOutput;
 use super::GlobalOptions;
 
-/// Run the same fixture suite against multiple models and get a ranked comparison.
+/// Run the same fixtures against multiple models and rank them side-by-side.
 ///
-/// Point carousel at your fixtures and give it a list of models. It runs each
-/// model in parallel and prints a table showing which model scored highest,
-/// how many cases passed, and how fast each one was. Every model's run is
-/// saved to history, so you can use `agc compare` or the dashboard afterward.
+/// agc carousel runs every model in parallel and prints a ranked table showing pass rate, effectiveness score, latency, token usage, and USD cost per model. Every run is saved to history so you can dig into individual results with agc report or agc compare afterward.
 ///
-/// Requires live API keys for each provider in the model list.
+/// There are two main evaluation modes — choose the one that fits your goal:
+///
+///   rules (default)  Checks pass/fail based on assertions in the fixture. Fast and free — no extra API calls.
+///   judge            Scores each output on a rubric using a second LLM. Richer signal, but costs more and takes longer.
+///
+/// Recommended workflow for the most complete ranking:
+///   1. Record golden outputs:   agc eval fixtures/ --execution-mode live --judge --promote-golden
+///   2. Rules baseline:          agc carousel --models m1,m2,... fixtures/
+///   3. Judge scoring:           agc carousel --models m1,m2,... fixtures/ -e judge --judge
+///   4. Compare top two:         agc compare <run-a> --baseline <run-b>
+///
+/// Requires live API keys for every provider in --models.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc carousel --models gpt-4o,gemini-2.5-flash,claude-sonnet-4-6 fixtures/my-skill/\n  agc carousel --models gpt-4o,gemini-2.5-flash fixtures/ --evaluator all --judge\n  agc carousel --models gpt-4o,gpt-4o-mini fixtures/my-skill/ --json\n\nExit codes:\n  0  all models passed\n  1  one or more models had failures\n  4  runtime error"
+    after_help = "Examples:\n  agc carousel --models gpt-4o,gemini-2.5-flash,claude-sonnet-4-6 fixtures/my-skill/\n  agc carousel --models gpt-4o,gemini-2.5-flash fixtures/ -e judge --judge\n  agc carousel --models gpt-4o,gpt-4o-mini fixtures/my-skill/ --json\n  agc carousel --models openrouter/deepseek/deepseek-chat:free fixtures/ -e judge --judge\n\nOpenRouter models: prefix with 'openrouter/' or use the slash-separated model id directly.\n  Example: openrouter/deepseek/deepseek-chat:free\n\nExit codes:\n  0  all models passed\n  1  one or more models had failures\n  4  runtime error"
 )]
 pub struct CarouselArgs {
     /// Fixture files or directories to run (default: fixtures).
@@ -93,6 +104,13 @@ pub struct ModelRow {
     pub effectiveness_score: Option<f32>,
     pub latency_p50_ms: Option<f64>,
     pub any_failures: bool,
+    pub gen_tokens_in: Option<u64>,
+    pub gen_tokens_out: Option<u64>,
+    pub judge_tokens_in: Option<u64>,
+    pub judge_tokens_out: Option<u64>,
+    pub gen_cost_usd: Option<f64>,
+    pub judge_cost_usd: Option<f64>,
+    pub total_cost_usd: Option<f64>,
 }
 
 pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -174,6 +192,8 @@ pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &Globa
         && !globals.json
         && (args.progress || stderr().is_terminal());
 
+    prefetch_pricing();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -235,8 +255,20 @@ pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &Globa
         return ExitCode::RuntimeError.as_i32();
     }
 
-    // Persist all runs.
-    for (_, run) in &results {
+    let judge_model_for_cost = if judge_active {
+        Some(judge_model.as_str())
+    } else {
+        None
+    };
+
+    // Annotate cost and persist all runs.
+    let mut results = results;
+    let carousel_cmd_line = std::env::args().collect::<Vec<_>>().join(" ");
+    for (model, run) in &mut results {
+        annotate_run_cost(run, model, judge_model_for_cost);
+        run.summary.generator_model = Some(model.clone());
+        run.summary.judge_model = judge_model_for_cost.map(|s| s.to_string());
+        run.summary.command_line = Some(carousel_cmd_line.clone());
         let _ = persist_run(run);
     }
 
@@ -255,6 +287,13 @@ pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &Globa
                 effectiveness_score: s.mean_effectiveness_score,
                 latency_p50_ms: s.latency_p50_ms,
                 any_failures: s.failed > 0 || s.errored > 0 || s.timed_out > 0,
+                gen_tokens_in: s.tokens_in,
+                gen_tokens_out: s.tokens_out,
+                judge_tokens_in: s.judge_tokens_in,
+                judge_tokens_out: s.judge_tokens_out,
+                gen_cost_usd: s.gen_cost_usd,
+                judge_cost_usd: s.judge_cost_usd,
+                total_cost_usd: s.total_cost_usd,
             }
         })
         .collect();
@@ -341,25 +380,52 @@ fn build_eval_config(
         carousel_iteration: None,
         policy_version: None,
         progress: false,
-        update_golden: false,
     }
 }
 
 fn print_table(rows: &[ModelRow], total_cases: u32) {
+    let has_cost = rows
+        .iter()
+        .any(|r| r.total_cost_usd.is_some() || r.gen_tokens_in.is_some());
     let model_w = rows.iter().map(|r| r.model.len()).max().unwrap_or(5).max(5);
-    let run_id_w = 10; // show first 10 chars of run id
+    let run_id_w = 10;
+    let cost_w = if has_cost { 22 } else { 0 };
+    let sep_w = 4
+        + 2
+        + model_w
+        + 2
+        + 10
+        + 2
+        + 9
+        + 2
+        + 11
+        + if has_cost { 2 + cost_w } else { 0 }
+        + 2
+        + run_id_w;
 
     println!();
-    println!(
-        "  {:<4}  {:<model_w$}  {:>10}  {:>9}  {:>11}  {}",
-        style("Rank").bold(),
-        style("Model").bold(),
-        style("Passed").bold(),
-        style("Score").bold(),
-        style("Latency p50").bold(),
-        style("Run ID").bold(),
-    );
-    let sep_w = 4 + 2 + model_w + 2 + 10 + 2 + 9 + 2 + 11 + 2 + run_id_w;
+    if has_cost {
+        println!(
+            "  {:<4}  {:<model_w$}  {:>10}  {:>9}  {:>11}  {:<cost_w$}  {}",
+            style("Rank").bold(),
+            style("Model").bold(),
+            style("Passed").bold(),
+            style("Score").bold(),
+            style("Latency p50").bold(),
+            style("Tokens / Cost ($USD)").bold(),
+            style("Run ID").bold(),
+        );
+    } else {
+        println!(
+            "  {:<4}  {:<model_w$}  {:>10}  {:>9}  {:>11}  {}",
+            style("Rank").bold(),
+            style("Model").bold(),
+            style("Passed").bold(),
+            style("Score").bold(),
+            style("Latency p50").bold(),
+            style("Run ID").bold(),
+        );
+    }
     println!("  {}", "─".repeat(sep_w));
 
     for row in rows {
@@ -389,9 +455,38 @@ fn print_table(rows: &[ModelRow], total_cases: u32) {
             row.model.clone()
         };
 
-        println!(
-            "  {rank_col:<4}  {model_col:<model_w$}  {passed_str:>10}  {score_str:>9}  {latency_str:>11}  {run_prefix}",
-        );
+        if has_cost {
+            let total_in = row
+                .gen_tokens_in
+                .map(|g| g + row.judge_tokens_in.unwrap_or(0))
+                .or(row.judge_tokens_in);
+            let total_out = row
+                .gen_tokens_out
+                .map(|g| g + row.judge_tokens_out.unwrap_or(0))
+                .or(row.judge_tokens_out);
+            let tok_str = format!("↑{} ↓{}", fmt_tokens(total_in), fmt_tokens(total_out));
+            let cost_str = fmt_cost(row.total_cost_usd);
+            let cost_col = if row.rank == 1 {
+                format!(
+                    "{} {}",
+                    style(&tok_str).cyan(),
+                    style(&cost_str).green().bold()
+                )
+            } else {
+                format!(
+                    "{} {}",
+                    style(&tok_str).cyan().dim(),
+                    style(&cost_str).yellow()
+                )
+            };
+            println!(
+                "  {rank_col:<4}  {model_col:<model_w$}  {passed_str:>10}  {score_str:>9}  {latency_str:>11}  {cost_col:<cost_w$}  {run_prefix}",
+            );
+        } else {
+            println!(
+                "  {rank_col:<4}  {model_col:<model_w$}  {passed_str:>10}  {score_str:>9}  {latency_str:>11}  {run_prefix}",
+            );
+        }
     }
 
     println!("  {}", "─".repeat(sep_w));
@@ -420,6 +515,7 @@ fn print_table(rows: &[ModelRow], total_cases: u32) {
             b,
         );
     }
+
     println!();
 }
 

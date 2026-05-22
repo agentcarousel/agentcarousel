@@ -28,7 +28,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "efccb096ed5649bfe69c905f74965d1e2f41c3ea84f2a4e765e9f49758af6b04"
+      "sha256": "0ec31228564a1714d9791416505d392896b116cbf3cdfcb10dc9f8eb8d6b94a1"
     },
     {
       "path": "golden/oom-diagnosis.txt",

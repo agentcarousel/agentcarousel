@@ -1,9 +1,21 @@
 use agentcarousel_core::{compute_backoff_ms, is_retryable_status, retry_policy, Case, Role};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use super::RunnerConfig;
+
+static ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+fn shared_client() -> &'static reqwest::Client {
+    ASYNC_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("reqwest async client")
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneratorProvider {
@@ -284,10 +296,7 @@ async fn generate_with_gemini(
             max_output_tokens: max_tokens,
         },
     };
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| err.to_string())?;
+    let client = shared_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client
@@ -396,10 +405,7 @@ async fn generate_with_openai(
         temperature: 0.2,
         max_tokens,
     };
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| err.to_string())?;
+    let client = shared_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client
@@ -494,10 +500,7 @@ async fn generate_with_anthropic(
             content: prompt.to_string(),
         }],
     };
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| err.to_string())?;
+    let client = shared_client();
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
         let response = client
@@ -547,10 +550,7 @@ async fn generate_with_openrouter(
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, String> {
     let openrouter_model = model.strip_prefix("openrouter/").unwrap_or(model);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| err.to_string())?;
+    let client = shared_client();
     let candidates = openrouter_model_candidates(openrouter_model);
     let mut last_error = None;
     for candidate in candidates {

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.2 - May 2026
+
+### Features
+
+- **`agc promote <run_id>`** — Promotes golden files from a saved run without re-executing anything. Loads the run from local SQLite history, loads fixture YAML from disk for rubric metadata, and applies the quality gate: effectiveness ≥ 0.90 and all critical rubric items ≥ 0.95. Writes golden files for passing cases and prints a styled summary table with effectiveness score, baseline delta (from a `.meta.json` sidecar), and promoted/blocked status. Blocked cases list each failing rubric item with its score and the required threshold. `--registry` exports the run as a signed evidence tarball and submits it to `https://api.agentcarousel.com` (`POST /v1/runs`), recording the run in the agentcarousel_registry PostgreSQL database. Token falls back to `AGENTCAROUSEL_API_TOKEN` or stored credentials from `agc login`. Exit 0 when all eligible cases promoted; exit 1 if any blocked; exit 4 on infrastructure errors.
+- **Rubric `critical` field** — Optional `critical: true` annotation on rubric items marks them as non-negotiable for promotion. `agc promote` requires all `critical: true` items to score ≥ 0.95 before writing a golden file. Fixtures without any `critical: true` items fall back to treating items with `weight ≥ 0.45` as critical. Fully backwards-compatible — all existing fixture YAML files deserialise without changes.
+- **Token and cost display** — Gen and judge token counts are now rendered in cyan with a combined total; cost renders in bold yellow. The run summary block (`agc eval`) shows gen and judge as separate rows, then a combined total and cost. The footer cost line uses the same colour scheme. Judge tokens are included in the summary even when the generator had no tokens.
+
+### Breaking changes
+
+- **`--update-golden` removed** — The eval flag that blindly overwrote golden files is gone. Use `agc eval --execution-mode live --judge` to produce a scored run, then `agc promote <run_id>` to write the golden file once the quality gate clears.
+
+### Changes
+
+- **Run ID format** — Run IDs are now 10-character uppercase strings (e.g. `3NDEKTSV4R`) drawn from the random portion of a ULID. Replaces the previous 26-character full ULID. IDs fit untruncated in all table columns (`agc carousel`, `agc ab`, `agc report list`). Existing IDs in local history remain accessible; `agc report show` supports prefix matching as a fallback.
+- **Registry SSL** — Postgres connections now use SSL by default (`rejectUnauthorized: false`). Set `AGENTCAROUSEL_REGISTRY_DB_SSL=false` to disable for local dev.
+
+### Fixes
+
+- Golden `path` values in four fixture YAML files (`github-actions-generator`, `database-migration-advisor`, `dockerfile-linter`, `sql-query-generator`) pointed to a non-existent centralised `fixtures/golden/<skill>/` layout. Corrected to the co-located `fixtures/<skill>/golden/` paths that match the actual files on disk. The `github-actions-generator` golden also had a `.yml` extension where the file is `.txt`.
+
+### Chores
+
+- Removed six orphaned stubs from `mocks/agent-response.json` for `rag-qa` and `tool-call-correctness`, which no longer have fixture directories. Rehashed bundle manifests for `customer-support`, `code-reviewer`, and `terraform-sentinel-scaffold` to match the updated mock file.
+
 ## 0.6.1 - May 2026
 
 ### Features

@@ -165,26 +165,28 @@ pub fn find_tagged_run(name: &str) -> Result<Option<String>, HistoryError> {
 pub fn fetch_run(run_id: &str) -> Result<Run, HistoryError> {
     let conn = open_connection()?;
     ensure_runs_table(&conn)?;
-    let mut stmt = conn
-        .prepare("SELECT run_json FROM runs WHERE id = ?1")
-        .map_err(|source| HistoryError::QueryError { source })?;
-    let mut rows = stmt
-        .query([run_id])
-        .map_err(|source| HistoryError::QueryError { source })?;
-    if let Some(row) = rows
-        .next()
-        .map_err(|source| HistoryError::QueryError { source })?
-    {
-        let json: String = row
-            .get(0)
-            .map_err(|source| HistoryError::QueryError { source })?;
-        let run: Run =
-            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })?;
-        Ok(run)
-    } else {
-        Err(HistoryError::QueryError {
-            source: rusqlite::Error::QueryReturnedNoRows,
+
+    // Exact match first, then prefix match (allows short prefixes for older 26-char IDs).
+    let json: Option<String> = conn
+        .query_row("SELECT run_json FROM runs WHERE id = ?1", [run_id], |row| {
+            row.get(0)
         })
+        .ok()
+        .or_else(|| {
+            let prefix = format!("{run_id}%");
+            conn.query_row(
+                "SELECT run_json FROM runs WHERE id LIKE ?1 ORDER BY started_at DESC LIMIT 1",
+                [&prefix],
+                |row| row.get(0),
+            )
+            .ok()
+        });
+
+    match json {
+        Some(j) => serde_json::from_str(&j).map_err(|source| HistoryError::ParseError { source }),
+        None => Err(HistoryError::QueryError {
+            source: rusqlite::Error::QueryReturnedNoRows,
+        }),
     }
 }
 

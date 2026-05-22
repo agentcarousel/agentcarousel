@@ -27,7 +27,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "bc6d75b580e18e1533cb345a4fd2619289b4c8158e6a3128b22e57c4c0867af8"
+      "sha256": "5f0c5f9bdb178969e5728928f7a48e35e41a7fa822fd827525eae1013a5ce17d"
     },
     {
       "path": "golden/sample-resolution.json",
@@ -39,7 +39,7 @@
   "mocks": [
     {
       "path": "../../mocks/agent-response.json",
-      "sha256": "52552371381535f54223fb1862223c366ac673d5ce3ca24b5c8010c7fe196c07"
+      "sha256": "6c2596186f40fab3b5f78d6e92cfa39d1987e88b2b16dcd00b8e2d7c6961481d"
     }
   ],
   "negative_cases": [

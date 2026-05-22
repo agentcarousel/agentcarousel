@@ -4,12 +4,13 @@ use std::path::Path;
 
 use super::config::{resolve_schema_path, ResolvedConfig};
 use super::exit_codes::ExitCode;
-use super::login::load_stored_token;
 
-/// Check environment, configuration, and fixture setup for common issues.
+/// Diagnose common setup problems before running tests.
+///
+/// agc doctor checks your environment for issues that would cause agc to fail: missing config, invalid API key format, fixture schema errors, and reachability of external services. Run it whenever something seems wrong and you're not sure why.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc doctor                    # full environment check\n  agc doctor --json             # machine-readable output"
+    after_help = "Examples:\n  agc doctor            # full environment check\n  agc doctor --json     # machine-readable output for scripting"
 )]
 pub struct DoctorArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).
@@ -165,27 +166,24 @@ fn check_api_keys() -> Check {
 }
 
 fn check_registry_token() -> Check {
-    let from_env = std::env::var("AGENTCAROUSEL_API_TOKEN")
+    let found = std::env::var("AGENTCAROUSEL_API_TOKEN")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map(|_| "env:AGENTCAROUSEL_API_TOKEN");
-    let from_store = if from_env.is_none() {
-        load_stored_token().map(|_| "credential store")
-    } else {
-        None
-    };
+        .is_some();
 
-    match from_env.or(from_store) {
-        Some(source) => Check {
+    if found {
+        Check {
             label: "Registry token",
             status: CheckStatus::Ok,
-            detail: format!("found ({source}) — publish and compare --remote will work"),
-        },
-        None => Check {
+            detail: "found (env:AGENTCAROUSEL_API_TOKEN) — publish and compare --remote will work"
+                .to_string(),
+        }
+    } else {
+        Check {
             label: "Registry token",
             status: CheckStatus::Warn,
-            detail: "no token found — run `agc login --token <token>` or set AGENTCAROUSEL_API_TOKEN to enable publish and compare --remote".to_string(),
-        },
+            detail: "no token found — set AGENTCAROUSEL_API_TOKEN to enable publish and compare --remote".to_string(),
+        }
     }
 }
 

@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::Duration;
 
 use super::config::ResolvedConfig;
-use super::login::load_stored_token;
 
 pub struct RegistryClient {
     base_url: String,
@@ -183,9 +182,9 @@ fn encode_registry_bundle_id(bundle_id: &str) -> String {
     bundle_id.replace('/', "%2F")
 }
 
-/// Resolve API token from CLI flag, environment, or OS credential store.
+/// Resolve API token from CLI flag or environment variable.
 ///
-/// Order: `--token` CLI flag → `AGENTCAROUSEL_API_TOKEN` env → credential store.
+/// Order: `--token` CLI flag → `AGENTCAROUSEL_API_TOKEN` env.
 pub fn resolve_token(token_flag: Option<&str>) -> Option<String> {
     if let Some(t) = token_flag {
         let t = t.trim();
@@ -199,7 +198,7 @@ pub fn resolve_token(token_flag: Option<&str>) -> Option<String> {
             return Some(t);
         }
     }
-    load_stored_token()
+    None
 }
 
 /// Resolve registry base URL from CLI flag, config, or environment (same rules as `publish`).

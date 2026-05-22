@@ -275,6 +275,8 @@ pub(super) async fn run_case_eval(
         if result.status == CaseStatus::Passed {
             match evaluate_case_result(&case, &result, config, run_id, &judge_cache).await {
                 Ok(scores) => {
+                    result.metrics.judge_tokens_in = scores.judge_tokens_in;
+                    result.metrics.judge_tokens_out = scores.judge_tokens_out;
                     result.eval_scores = Some(scores.clone());
                     let threshold = case
                         .evaluator_config
@@ -318,11 +320,7 @@ async fn evaluate_case_result(
     let evaluator_id = resolve_evaluator_id(case, config);
     match evaluator_id.as_str() {
         "rules" => RulesEvaluator.evaluate(case, result),
-        "golden" => {
-            let mut evaluator = GoldenEvaluator::from_case(case)?;
-            evaluator.update = config.update_golden;
-            evaluator.evaluate(case, result)
-        }
+        "golden" => GoldenEvaluator::from_case(case)?.evaluate(case, result),
         "process" => ProcessEvaluator::from_case(case)?.evaluate(case, result),
         "judge" => {
             if !config.judge {
@@ -339,7 +337,14 @@ async fn evaluate_case_result(
                 config.judge_model.as_deref(),
                 config.judge_max_tokens,
             )?;
-            let scores = evaluator.evaluate(case, result)?;
+            let case_owned = case.clone();
+            let result_owned = result.clone();
+            let scores =
+                tokio::task::spawn_blocking(move || evaluator.evaluate(&case_owned, &result_owned))
+                    .await
+                    .map_err(|_| {
+                        EvaluatorError::JudgeFailed("judge task panicked".to_string())
+                    })??;
             judge_cache.lock().await.insert(cache_key, scores.clone());
             Ok(scores)
         }

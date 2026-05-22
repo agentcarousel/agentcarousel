@@ -17,9 +17,12 @@ const EMBEDDED_PROMPT: &str = include_str!(concat!(
     "/templates/generate-prompt.md"
 ));
 
+/// Generate fixture cases from a skill description or an existing system prompt.
+///
+/// agc generate calls an LLM to create realistic test cases for your skill. You can start from a short description, expand an existing prompt file, or add more cases to a fixture directory that already has some. Generated cases are written to fixtures/<skill>/cases.yaml by default.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc generate --skill customer-support --description \"handles refunds\"\n  agc generate --from-prompt fixtures/my-skill/prompt.md --count 10\n  agc generate --extend fixtures/my-skill/ --count 5\n  agc generate --skill my-skill --description \"...\" --dry-run --json\n\nExit codes:\n  0  cases written (or printed with --dry-run)\n  2  validation failed after retry\n  3  config error (missing required flag)\n  4  runtime error (LLM call failed, IO error)"
+    after_help = "Examples:\n  agc generate --skill customer-support --description \"handles refunds and billing questions\"\n  agc generate --from-prompt fixtures/my-skill/prompt.md --count 10\n  agc generate --extend fixtures/my-skill/ --count 5    # add cases to existing fixtures\n  agc generate --skill my-skill --description \"...\" --dry-run  # preview without writing\n\nExit codes:\n  0  cases written (or shown with --dry-run)\n  2  validation failed after retry\n  3  config error (missing required flag)\n  4  runtime error (LLM call failed, disk error)"
 )]
 pub struct GenerateArgs {
     /// Skill name to generate cases for. Creates output at fixtures/<skill>/cases.yaml.

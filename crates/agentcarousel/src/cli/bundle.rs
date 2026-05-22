@@ -17,10 +17,12 @@ use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
 use super::GlobalOptions;
 
-/// Pack, verify, or pull fixture bundles.
+/// Package fixture suites for sharing, verify their integrity, or pull them from a registry.
+///
+/// Bundles let you distribute a versioned, signed set of fixtures to teammates or CI. Use `pack` to create a bundle archive, `verify` to check its integrity, and `pull` to download a bundle from a remote registry.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc bundle pack fixtures/customer-support\n  agc bundle verify fixtures/customer-support\n  agc bundle pull customer-support-1.0.0 --url https://registry.example.com"
+    after_help = "Examples:\n  agc bundle pack fixtures/customer-support          # create a versioned bundle archive\n  agc bundle verify fixtures/customer-support        # verify bundle integrity\n  agc bundle pull customer-support-1.0.0 --url https://registry.example.com"
 )]
 pub struct BundleArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).
@@ -32,7 +34,7 @@ pub struct BundleArgs {
 
 #[derive(Debug, Subcommand)]
 enum BundleCommand {
-    /// Update manifest sha256s and write a .tar.gz (default name from dir).
+    /// Update manifest sha256s and write a .tar.gz to bundle_packs/ (or -o path).
     Pack {
         /// Directory containing bundle.manifest.json (default: current directory).
         #[arg(value_name = "DIR", default_value = ".")]
@@ -254,7 +256,9 @@ fn pack_bundle(dir: &Path, out: Option<&Path>) -> Result<PathBuf, String> {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("bundle");
-        PathBuf::from(format!("{dir_name}.tar.gz"))
+        let bundle_packs = PathBuf::from("bundle_packs");
+        fs::create_dir_all(&bundle_packs).ok();
+        bundle_packs.join(format!("{dir_name}.tar.gz"))
     });
 
     let archive = fs::File::create(&out_path).map_err(|err| err.to_string())?;

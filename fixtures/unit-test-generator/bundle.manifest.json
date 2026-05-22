@@ -27,7 +27,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "53126bc2ab1c12999d53f8c5041bbaf67f3dd5b2d8c8e0a79d1e312e8c815f08"
+      "sha256": "bc01545215e1eaf6f0f5181d745c26fd0ad375178aad8e75730821ed3c3d28fe"
     },
     {
       "path": "golden/clamp-tests.py",

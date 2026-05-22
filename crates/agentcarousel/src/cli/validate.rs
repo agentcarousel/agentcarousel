@@ -14,10 +14,12 @@ use super::GlobalOptions;
 
 const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
 
-/// Check YAML/TOML fixtures against the schema (no execution). Scans `.` when no paths given.
+/// Check fixture files for schema errors without executing any tests.
+///
+/// agc validate reads your YAML fixture files and reports any structural problems — missing required fields, invalid values, unknown keys. Nothing is executed, so no API keys are needed. Run it in CI to catch broken fixtures before they block a test run.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc validate fixtures/customer-support/cases.yaml\n  agc validate fixtures/ --strict\n  agc validate --format sarif > results.sarif  # GitHub code scanning\n  agc validate                        # scans . respecting .agentcarousel-ignore\n\nExit codes:\n  0  all fixtures valid\n  2  validation errors found\n  4  runtime error (IO, schema load failure)\n  5  fixture path not found"
+    after_help = "Examples:\n  agc validate fixtures/customer-support/cases.yaml    # validate a single file\n  agc validate fixtures/                               # validate a whole directory\n  agc validate --strict                                # treat warnings as errors\n  agc validate --format sarif > results.sarif          # GitHub code-scanning format\n\nExit codes:\n  0  all fixtures are valid\n  2  one or more validation errors found\n  4  runtime error (disk, schema load failure)\n  5  fixture path not found"
 )]
 pub struct ValidateArgs {
     /// Files or dirs to scan (default: `.` if omitted).

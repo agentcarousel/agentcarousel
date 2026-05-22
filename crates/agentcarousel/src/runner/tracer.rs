@@ -1,28 +1,29 @@
 use agentcarousel_core::{ExecutionTrace, TraceStep};
 use regex::Regex;
 use serde_json::Value;
+use std::sync::OnceLock;
 
-#[derive(Debug, Clone)]
-pub struct SecretScrubber {
-    patterns: Vec<Regex>,
-}
+// Compiled once; SecretScrubber itself is a ZST (zero allocation per case).
+static SCRUBBER_PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
 
-impl Default for SecretScrubber {
-    fn default() -> Self {
-        let patterns = vec![
+fn scrubber_patterns() -> &'static [Regex] {
+    SCRUBBER_PATTERNS.get_or_init(|| {
+        vec![
             Regex::new(r"sk-[A-Za-z0-9]{16,}").unwrap(),
             Regex::new(r"ghp_[A-Za-z0-9]{16,}").unwrap(),
             Regex::new(r"Bearer\s+[A-Za-z0-9\-_\.]+").unwrap(),
-        ];
-        Self { patterns }
-    }
+        ]
+    })
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct SecretScrubber;
 
 impl SecretScrubber {
     pub fn scrub_string(&self, value: &str) -> (String, bool) {
         let mut redacted = false;
         let mut output = value.to_string();
-        for pattern in &self.patterns {
+        for pattern in scrubber_patterns() {
             if pattern.is_match(&output) {
                 redacted = true;
                 output = pattern.replace_all(&output, "[REDACTED]").to_string();

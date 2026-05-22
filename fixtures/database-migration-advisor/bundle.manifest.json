@@ -30,7 +30,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "8216875b73f002e2b1f019e9a2d33fc50887f010bd6d7bc2db2b76743224dd68"
+      "sha256": "292f405de79de4e8a68a43a2ae8b3855b2b51cb9921b16a46c163900734c3544"
     },
     {
       "path": "golden/clean-migration-approval.txt",

@@ -487,3 +487,153 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(engineering.*guidance|not.*legal.*advice)'
+
+  # ── Judge: GDPR legal-basis reasoning quality ────────────────────────────────
+  - id: data-privacy-classifier/judge-gdpr-reasoning
+    description: >
+      Schema with indirect identifiers (device fingerprint, precise GPS coords) that
+      are individually non-obvious as personal data under GDPR. Judge scores whether
+      the agent applies the "singling out" test from GDPR Recital 26.
+    tags: [privacy, judge, certification]
+    seed: 7090
+
+    evaluator_config:
+      evaluator: judge
+      effectiveness_threshold: 0.65
+      judge_prompt: |
+        You are a GDPR/CCPA privacy expert judge. Score each rubric item 0.0–1.0.
+        Domain: GDPR Recital 26 singling-out test, indirect identifiers, data minimisation.
+        Award full marks only if the agent correctly classifies device_fingerprint and
+        precise GPS coordinates as personal data (they can single out an individual).
+        Penalise "not personal data" classifications for these fields.
+        Return JSON: {rubric:[{rubric_id,score,rationale}], overall_rationale}.
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Classify each field for GDPR/CCPA sensitivity:
+
+            Table: telemetry_events
+            - event_id: UUID
+            - device_fingerprint: VARCHAR(64)  -- canvas/audio/font fingerprint hash
+            - ip_address: VARCHAR(45)
+            - gps_lat: DECIMAL(10,8)
+            - gps_lon: DECIMAL(11,8)
+            - page_url: TEXT
+            - timestamp: TIMESTAMP
+            - session_duration_ms: INTEGER
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(device_fingerprint.*personal|fingerprint.*PII|fingerprint.*identif)'
+        - kind: regex
+          value: '(?i)(gps.*personal|location.*sensitive|coordinates.*PII|precise.*location)'
+      rubric:
+        - id: fingerprint-classified-correctly
+          description: >
+            device_fingerprint classified as personal data — it can uniquely identify
+            a device/user (GDPR Recital 26 singling-out test).
+          critical: true
+          weight: 0.40
+          auto_check:
+            kind: regex
+            value: '(?i)(fingerprint.*personal|fingerprint.*PII|fingerprint.*identif|singling.out)'
+        - id: gps-classified-correctly
+          description: >
+            Precise GPS coordinates classified as personal data (and potentially sensitive
+            under GDPR Art. 9 if location reveals health/religious/political information).
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(gps.*personal|precise.*location.*personal|location.*PII|coordinates.*identif)'
+        - id: proportionality-noted
+          description: >
+            Agent recommends data minimisation — coarsening GPS to city-level, truncating
+            fingerprints, or anonymising before storage.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(minimis|coarsen|aggregate|truncat|anonymis|city.*level|less.*precise)'
+
+  # ── Process: All sensitive fields classified ──────────────────────────────
+  - id: data-privacy-classifier/process-sensitive-fields-classified
+    description: >
+      Schema with clear PII (SSN, name), pseudonymous data (hashed email), and
+      non-personal aggregates. Process verifies classification labels and regulatory
+      references appear in the response.
+    tags: [privacy, process, certification]
+    seed: 7091
+
+    evaluator_config:
+      evaluator: process
+      process_cmd: ["bash", "mocks/scripts/check-contains.sh",
+                    "PII|personal|sensitive|HIGH|CRITICAL",
+                    "GDPR|CCPA|regulation|compliance|law",
+                    "encrypt|mask|access control|minimis|protect"]
+      effectiveness_threshold: 0.65
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Classify each field for data privacy sensitivity:
+
+            Table: employees
+            - employee_id: UUID
+            - full_name: VARCHAR(255)
+            - ssn: CHAR(11)
+            - work_email: VARCHAR(255)
+            - salary: DECIMAL(10,2)
+            - department_id: INTEGER
+            - hire_date: DATE
+            - performance_score: FLOAT
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(ssn.*critical|ssn.*high|social.*security.*sensitive)'
+        - kind: regex
+          value: '(?i)(salary.*sensitive|compensation.*PII|financial)'
+
+  # ── Golden: Medical records schema ──────────────────────────────────────────
+  - id: data-privacy-classifier/golden-medical-schema
+    description: >
+      Medical records table with diagnosis codes, medications, doctor IDs, and
+      insurance details. Golden captures a full classification with GDPR Article 9
+      special category callouts.
+    tags: [privacy, golden, certification]
+    seed: 7092
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/data-privacy-classifier/golden/medical-schema.txt
+      golden_threshold: 0.85
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Classify each field in this medical records table for GDPR/CCPA sensitivity:
+
+            Table: patient_records
+            - record_id: UUID
+            - patient_name: VARCHAR(255)
+            - date_of_birth: DATE
+            - icd10_diagnosis_code: VARCHAR(10)
+            - medication_list: JSONB
+            - attending_physician_id: INTEGER
+            - insurance_policy_number: VARCHAR(50)
+            - visit_date: DATE
+            - notes: TEXT
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(special.*categor|Art.*9|GDPR.*9|health.*data|medical.*sensitive)'
+        - kind: regex
+          value: '(?i)(diagnosis|medication|icd10)'

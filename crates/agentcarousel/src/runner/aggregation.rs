@@ -66,6 +66,8 @@ fn aggregate_metrics(results: &[CaseResult], runs: u32) -> Metrics {
     let (tokens_in_sum, tokens_in_count) = sum_optional_u64(results, |m| m.tokens_in);
     let (tokens_out_sum, tokens_out_count) = sum_optional_u64(results, |m| m.tokens_out);
     let (cost_sum, cost_count) = sum_optional_f64(results, |m| m.estimated_cost_usd);
+    let (judge_in_sum, judge_in_count) = sum_optional_u64(results, |m| m.judge_tokens_in);
+    let (judge_out_sum, judge_out_count) = sum_optional_u64(results, |m| m.judge_tokens_out);
 
     let mean_latency = sum_latency as f64 / count as f64;
     metrics.total_latency_ms = mean_latency.round() as u64;
@@ -75,6 +77,8 @@ fn aggregate_metrics(results: &[CaseResult], runs: u32) -> Metrics {
     metrics.tokens_in = tokens_in_count.map(|count| tokens_in_sum / count);
     metrics.tokens_out = tokens_out_count.map(|count| tokens_out_sum / count);
     metrics.estimated_cost_usd = cost_count.map(|count| cost_sum / count as f64);
+    metrics.judge_tokens_in = judge_in_count.map(|count| judge_in_sum / count);
+    metrics.judge_tokens_out = judge_out_count.map(|count| judge_out_sum / count);
     if count > 1 {
         let latency_variance = results
             .iter()
@@ -263,12 +267,23 @@ fn aggregate_eval_scores(
         .iter()
         .find_map(|scores| scores.judge_rationale.clone());
 
+    let judge_tokens_in = collected
+        .iter()
+        .filter_map(|s| s.judge_tokens_in)
+        .reduce(|a, b| a + b);
+    let judge_tokens_out = collected
+        .iter()
+        .filter_map(|s| s.judge_tokens_out)
+        .reduce(|a, b| a + b);
+
     Some(EvalScores {
         evaluator,
         rubric_scores,
         effectiveness_score,
         passed: effectiveness_score >= effectiveness_threshold,
         judge_rationale,
+        judge_tokens_in,
+        judge_tokens_out,
     })
 }
 
@@ -306,6 +321,9 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
     let mut tokens_out_sum = 0u64;
     let mut has_tokens = false;
     let mut judged_case_count = 0u32;
+    let mut judge_tokens_in_sum = 0u64;
+    let mut judge_tokens_out_sum = 0u64;
+    let mut has_judge_tokens = false;
 
     for result in results {
         latency_sum += result.metrics.total_latency_ms;
@@ -322,6 +340,11 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
             has_tokens = true;
             tokens_in_sum += result.metrics.tokens_in.unwrap_or(0);
             tokens_out_sum += result.metrics.tokens_out.unwrap_or(0);
+        }
+        if result.metrics.judge_tokens_in.is_some() || result.metrics.judge_tokens_out.is_some() {
+            has_judge_tokens = true;
+            judge_tokens_in_sum += result.metrics.judge_tokens_in.unwrap_or(0);
+            judge_tokens_out_sum += result.metrics.judge_tokens_out.unwrap_or(0);
         }
         match result.status {
             CaseStatus::Passed => passed += 1,
@@ -375,6 +398,12 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
     let latency_p95_ms = percentile(&latencies, 95.0);
     let latency_p99_ms = percentile(&latencies, 99.0);
 
+    let (judge_tokens_in, judge_tokens_out) = if has_judge_tokens {
+        (Some(judge_tokens_in_sum), Some(judge_tokens_out_sum))
+    } else {
+        (None, None)
+    };
+
     RunSummary {
         total,
         passed,
@@ -394,6 +423,14 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
         latency_p50_ms,
         latency_p95_ms,
         latency_p99_ms,
+        judge_tokens_in,
+        judge_tokens_out,
+        gen_cost_usd: None,
+        judge_cost_usd: None,
+        total_cost_usd: None,
+        generator_model: None,
+        judge_model: None,
+        command_line: None,
     }
 }
 

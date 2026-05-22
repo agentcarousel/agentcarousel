@@ -30,7 +30,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "662ddb6062df80f208235ccaf513c08be1cd00a772e9ab80f5a1ce37696fba59"
+      "sha256": "96317ead868d3a2f141cf63df51f7c061239aac102b8173afd537dbb5968c75c"
     },
     {
       "path": "golden/push-pr-workflow.txt",

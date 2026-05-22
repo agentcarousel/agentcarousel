@@ -28,7 +28,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "f4b920e29c5bbedd1bd30ee5a71c55fee6f74b9deed956f9d5b9fe7ef69bca20"
+      "sha256": "15623415a846c04be65fe6f2cd606d2def34b51e3d82eb9bf80886d337e57544"
     },
     {
       "path": "golden/product-card-findings.txt",
