@@ -88,7 +88,7 @@ enum Command {
     Test(test::TestArgs),
     /// Run evaluation with mock or live generation; optionally score with an LLM judge.
     Eval(eval::EvalArgs),
-    /// Inspect persisted runs: list, show details, or diff two runs.
+    /// Inspect persisted runs: list recent runs or show details of a specific run.
     Report(report::ReportArgs),
     /// Generate fixture cases for a skill using an LLM.
     Generate(generate::GenerateArgs),
@@ -204,7 +204,7 @@ Usage:
   {init}         Scaffold a new skill or agent fixture template
 
 {re}:
-  {report}       Inspect persisted runs: list, show details, or diff two runs
+  {report}       List recent runs or show details of a run (to compare runs: agc compare)
   {stats}        Pass-rate trends, case flakiness, and latency across run history
   {compare}      Compare two eval runs and gate on regressions (CI regression gate)
   {export}       Export run(s) as signed evidence tarballs

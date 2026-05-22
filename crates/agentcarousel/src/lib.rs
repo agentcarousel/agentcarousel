@@ -45,6 +45,7 @@ pub mod cli;
 pub mod core;
 pub mod evaluators;
 pub mod fixtures;
+pub mod providers;
 pub mod reporters;
 pub mod runner;
 

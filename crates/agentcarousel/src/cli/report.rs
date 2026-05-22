@@ -1,7 +1,5 @@
 use agentcarousel_core::Run;
-use agentcarousel_reporters::{
-    diff_runs, fetch_run, list_runs, print_diff, print_json, print_terminal, RunListing,
-};
+use agentcarousel_reporters::{fetch_run, list_runs, print_json, print_terminal, RunListing};
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,9 +9,9 @@ use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
 
-/// Browse past runs, inspect individual results, or export them for sharing.
+/// Browse past runs and inspect individual results.
 ///
-/// Every run from agc eval, agc carousel, agc ab, and agc watch is saved to a local history database. agc report lets you list those runs, view a detailed breakdown of any run, and export results to JSON.
+/// Every run from agc eval, agc carousel, agc ab, and agc watch is saved to a local history database. To compare two runs or gate on regressions with significance testing, use `agc compare`.
 #[derive(Debug, Parser)]
 pub struct ReportArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).
@@ -39,18 +37,13 @@ enum ReportCommand {
         #[arg(short = 'j', long)]
         json: bool,
     },
-    /// Compare two runs (regressions vs configured threshold).
-    Diff { run_id_a: String, run_id_b: String },
 }
 
-pub fn run_report(args: ReportArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
+pub fn run_report(args: ReportArgs, _config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     match args.command {
         ReportCommand::List { limit, json } => report_list(limit, json || globals.json),
         ReportCommand::Show { run_id, json } => {
             report_show(&run_id, json, globals.json, globals.verbose > 0)
-        }
-        ReportCommand::Diff { run_id_a, run_id_b } => {
-            report_diff(&run_id_a, &run_id_b, config.report.regression_threshold)
         }
     }
 }
@@ -129,31 +122,6 @@ fn report_show(run_id: &str, json: bool, envelope: bool, verbose: bool) -> i32 {
             }
             ExitCode::NotFound.as_i32()
         }
-    }
-}
-
-fn report_diff(run_id_a: &str, run_id_b: &str, threshold: f32) -> i32 {
-    let run_a = match fetch_run(run_id_a) {
-        Ok(run) => run,
-        Err(err) => {
-            eprintln!("error: {err}");
-            return ExitCode::RuntimeError.as_i32();
-        }
-    };
-    let run_b = match fetch_run(run_id_b) {
-        Ok(run) => run,
-        Err(err) => {
-            eprintln!("error: {err}");
-            return ExitCode::RuntimeError.as_i32();
-        }
-    };
-
-    let diff = diff_runs(&run_a, &run_b, threshold);
-    print_diff(&diff);
-    if diff.has_regressions {
-        ExitCode::Failed.as_i32()
-    } else {
-        ExitCode::Ok.as_i32()
     }
 }
 

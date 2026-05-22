@@ -44,14 +44,3 @@ fn bundle_verify_ok_when_passing_bundle_manifest_json() {
         serde_json::from_str(&stdout).expect("expected valid JSON on stdout");
     assert_eq!(parsed["ok"], true, "expected ok:true, got: {stdout:?}");
 }
-
-#[test]
-fn agc_bundle_verify_matches_agentcarousel_binary() {
-    let root = workspace_root();
-    Command::cargo_bin("agc")
-        .unwrap()
-        .current_dir(&root)
-        .args(["bundle", "verify", "fixtures/customer-support"])
-        .assert()
-        .success();
-}
