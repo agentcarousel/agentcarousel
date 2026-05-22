@@ -18,7 +18,7 @@
 //! | [`runner`] | Async execution: [`runner::run_fixtures`], [`runner::run_eval`]. |
 //! | [`evaluators`] | Rules, golden, process, and LLM judge evaluators. |
 //! | [`fixtures`] | Load and validate fixtures; [`fixtures::MockEngine`] for stubbed tool/LLM responses. |
-//! | [`reporters`] | Terminal, JSON, JUnit, history persistence, and run diffs. |
+//! | [`reporters`] | Terminal, JSON, history persistence, and run diffs. |
 //!
 //! # Quick start (CLI)
 //!

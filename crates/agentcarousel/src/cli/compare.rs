@@ -169,8 +169,8 @@ fn run_tag(
                     globals,
                     "compare tag",
                     "no_token",
-                    "Registry token required for --registry. Run `agc login --token <token>` or set AGENTCAROUSEL_API_TOKEN.",
-                    vec!["agc login --token <your-token>".to_string()],
+                    "Registry token required for --registry. Set AGENTCAROUSEL_API_TOKEN.",
+                    vec!["export AGENTCAROUSEL_API_TOKEN=<your-token>".to_string()],
                     String::new(),
                 );
                 return ExitCode::ValidationFailed.as_i32();

@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use super::config::ResolvedConfig;
-use super::login::load_stored_token;
+use super::credentials::load_stored_token;
 
 pub struct RegistryClient {
     base_url: String,

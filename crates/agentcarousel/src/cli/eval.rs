@@ -3,7 +3,7 @@ use agentcarousel_core::{
     CaseStatus, CertificationContext, JudgeProvider,
 };
 use agentcarousel_fixtures::load_fixture;
-use agentcarousel_reporters::{persist_run, print_json, print_junit, print_terminal};
+use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
 use clap::{ArgAction, Parser, ValueEnum};
 use console::style;
@@ -75,7 +75,7 @@ pub struct EvalArgs {
     /// Per-case timeout in seconds.
     #[arg(short = 't', long)]
     timeout: Option<u64>,
-    /// Output format: `human` (default), `json`, or `junit`.
+    /// Output format: `human` (default) or `json`.
     #[arg(short = 'f', long)]
     format: Option<String>,
     /// Glob matched against full case ids (`skill/case-id`). Example: `my-skill/judge-*` to run only judge-named cases; combine with `--evaluator all --judge`.
@@ -93,7 +93,7 @@ pub struct EvalArgs {
     /// Policy version string stamped into the run record (e.g. `v1.2`).
     #[arg(short = 'p', long)]
     policy_version: Option<String>,
-    /// Show a case-level progress bar on stderr (default: on for non-JSON/JUnit output when stderr is a TTY; use with `--format json` so only stderr shows progress).
+    /// Show a case-level progress bar on stderr (default: on for non-JSON output when stderr is a TTY; use with `--format json` so only stderr shows progress).
     #[arg(short = 'P', long, action = ArgAction::SetTrue)]
     progress: bool,
     /// Never show the eval case progress bar.
@@ -230,8 +230,8 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         .unwrap_or_else(|| config.output.format.clone());
     let show_progress = !args.no_progress
         && !globals.quiet
-        && (args.progress || ((format != "json" && format != "junit") && stderr().is_terminal()));
-    if !globals.quiet && format != "json" && format != "junit" && args.judge && !judge_enabled {
+        && (args.progress || (format != "json" && stderr().is_terminal()));
+    if !globals.quiet && format != "json" && args.judge && !judge_enabled {
         eprintln!(
             "{} --judge is set but no judge evaluator is active (--evaluator is {:?}). \
 For fixtures that set judge per case, use --evaluator all (and keep --judge).",
@@ -321,7 +321,6 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     } else {
         match format_str {
             "json" => print_json(&run),
-            "junit" => print_junit(&run),
             _ => {
                 if globals.quiet {
                     agentcarousel_reporters::print_terminal_summary(&run);
@@ -331,14 +330,11 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
             }
         }
 
-        if !globals.quiet && format_str != "json" && format_str != "junit" {
+        if !globals.quiet && format_str != "json" {
             print_postflight_hints(&run);
         }
-        if globals.quiet || format_str == "json" || format_str == "junit" {
-            print_eval_saved_run_hint(
-                &run,
-                globals.quiet || format_str == "json" || format_str == "junit",
-            );
+        if globals.quiet || format_str == "json" {
+            print_eval_saved_run_hint(&run, globals.quiet || format_str == "json");
         }
     }
 

@@ -13,7 +13,7 @@ use super::GlobalOptions;
 
 /// Browse past runs, inspect individual results, or export them for sharing.
 ///
-/// Every run from agc eval, agc carousel, agc ab, and agc watch is saved to a local history database. agc report lets you list those runs, view a detailed breakdown of any run, and export results to JSON or JUnit format.
+/// Every run from agc eval, agc carousel, agc ab, and agc watch is saved to a local history database. agc report lets you list those runs, view a detailed breakdown of any run, and export results to JSON.
 #[derive(Debug, Parser)]
 pub struct ReportArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).

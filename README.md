@@ -220,22 +220,13 @@ agc dashboard --port 8080            # custom port
 agc dashboard --db path/to/history.db
 ```
 
-## AGC Registry Login
+## Registry Authentication
 
-`agc login` stores a registry token securely so `agc publish`, `agc bundle pull`, and `agc compare --registry` can authenticate without requiring `--token` on every command.
+Set `AGENTCAROUSEL_API_TOKEN` to authenticate with the registry for `agc publish`, `agc bundle pull`, and `agc compare --registry`:
 
 ```bash
-# Store a token
-agc login --token agct_abc123
-
-# Store with a specific registry URL
-agc login --token agct_abc123 --url https://registry.agentcarousel.com
-
-# Remove stored credentials
-agc logout
+export AGENTCAROUSEL_API_TOKEN=agct_abc123
 ```
-
-On macOS the token is kept in the Keychain. On other platforms it falls back to `~/.config/agentcarousel/credentials.toml` (mode 600). The token is also read from the `AGENTCAROUSEL_API_TOKEN` environment variable.
 
 ## Reports
 
@@ -283,7 +274,7 @@ agc bundle pack fixtures/regex-builder
 agc bundle verify fixtures/customer-support
 agc bundle verify my-bundle.tar.gz
 
-# Pull from registry (uses stored credentials; see agc login)
+# Pull from registry (set AGENTCAROUSEL_API_TOKEN first)
 agc bundle pull customer-support-1.0.0 --url "https://api.agentcarousel.com"
 
 # Publish to registry
@@ -295,7 +286,6 @@ agc publish fixtures/customer-support \
   --all-runs --limit 5
 ```
 
-Store credentials once with `agc login --token agct_...` to avoid passing `--token` on every publish or pull.
 
 ## Trust Checks
 

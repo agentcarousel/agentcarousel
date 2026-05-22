@@ -147,7 +147,7 @@ pub fn run_promote(args: PromoteArgs, config: &ResolvedConfig, globals: &GlobalO
         let token = match resolve_token(args.token.as_deref()) {
             Some(t) => t,
             None => {
-                let msg = "no API token found — run `agc login` or export AGENTCAROUSEL_API_TOKEN";
+                let msg = "no API token found — export AGENTCAROUSEL_API_TOKEN";
                 if globals.json {
                     JsonOutput::err("promote", JsonError::new("auth_required", msg)).print();
                 } else {

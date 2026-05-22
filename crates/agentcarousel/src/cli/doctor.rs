@@ -4,7 +4,7 @@ use std::path::Path;
 
 use super::config::{resolve_schema_path, ResolvedConfig};
 use super::exit_codes::ExitCode;
-use super::login::load_stored_token;
+use super::credentials::load_stored_token;
 
 /// Diagnose common setup problems before running tests.
 ///
@@ -186,7 +186,7 @@ fn check_registry_token() -> Check {
         None => Check {
             label: "Registry token",
             status: CheckStatus::Warn,
-            detail: "no token found — run `agc login --token <token>` or set AGENTCAROUSEL_API_TOKEN to enable publish and compare --remote".to_string(),
+            detail: "no token found — set AGENTCAROUSEL_API_TOKEN to enable publish and compare --remote".to_string(),
         },
     }
 }
