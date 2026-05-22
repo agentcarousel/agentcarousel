@@ -389,6 +389,7 @@ cases:
           description: >
             Percentage is computed correctly — category total is derived via a window
             function (SUM OVER PARTITION BY category) or a subquery, not a wrong denominator.
+          critical: true
           weight: 0.40
           auto_check:
             kind: regex

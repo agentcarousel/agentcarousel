@@ -378,6 +378,7 @@ cases:
           description: >
             Agent identifies db.teardown.test.ts closing the shared database connection
             as the cause of all four subsequent failures — not independent bugs in each test.
+          critical: true
           weight: 0.50
           auto_check:
             kind: regex

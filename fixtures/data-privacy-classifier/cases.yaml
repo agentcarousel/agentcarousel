@@ -536,6 +536,7 @@ cases:
           description: >
             device_fingerprint classified as personal data — it can uniquely identify
             a device/user (GDPR Recital 26 singling-out test).
+          critical: true
           weight: 0.40
           auto_check:
             kind: regex

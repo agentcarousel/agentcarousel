@@ -27,7 +27,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "2bbbbda5b945640c7909549abcecaebe2d69ad8468080a2ba0f56872d75d298f"
+      "sha256": "6d028e03be9a2147b6f0c212e83c157a66f4f2832a4861ec8806aed013d14211"
     }
   ],
   "judge_evaluator": false,

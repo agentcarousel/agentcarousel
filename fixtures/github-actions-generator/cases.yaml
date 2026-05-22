@@ -445,6 +445,7 @@ cases:
           description: >
             Workflow uses OIDC (role-to-assume) or clearly documents that AWS credentials
             should be stored as secrets — not hard-coded in the YAML.
+          critical: true
           weight: 0.40
           auto_check:
             kind: regex
