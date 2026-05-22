@@ -205,9 +205,6 @@ fn print_eval_failure_rationale(scores: &EvalScores) {
 /// Overall judge narrative for the terminal, omitting empty / placeholder text.
 fn judge_overall_summary_line(judge_rationale: Option<&str>) -> Option<String> {
     let jr = judge_rationale?.trim();
-    if jr.is_empty() {
-        return None;
-    }
     if jr.is_empty() || jr == "judge completed without rationale" {
         None
     } else {

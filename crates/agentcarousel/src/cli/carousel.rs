@@ -1,5 +1,5 @@
 use agentcarousel_core::{
-    compute_costs, fmt_cost, fmt_tokens, judge_key_candidates, judge_provider_from_model,
+    annotate_run_cost, fmt_cost, fmt_tokens, judge_key_candidates, judge_provider_from_model,
     prefetch_pricing, FixtureFile,
 };
 use agentcarousel_fixtures::load_fixture;
@@ -265,10 +265,7 @@ pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &Globa
     let mut results = results;
     let carousel_cmd_line = std::env::args().collect::<Vec<_>>().join(" ");
     for (model, run) in &mut results {
-        let (gc, jc, tc) = compute_costs(&run.summary, model, judge_model_for_cost);
-        run.summary.gen_cost_usd = gc;
-        run.summary.judge_cost_usd = jc;
-        run.summary.total_cost_usd = tc;
+        annotate_run_cost(run, model, judge_model_for_cost);
         run.summary.generator_model = Some(model.clone());
         run.summary.judge_model = judge_model_for_cost.map(|s| s.to_string());
         run.summary.command_line = Some(carousel_cmd_line.clone());

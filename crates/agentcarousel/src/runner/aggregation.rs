@@ -77,8 +77,8 @@ fn aggregate_metrics(results: &[CaseResult], runs: u32) -> Metrics {
     metrics.tokens_in = tokens_in_count.map(|count| tokens_in_sum / count);
     metrics.tokens_out = tokens_out_count.map(|count| tokens_out_sum / count);
     metrics.estimated_cost_usd = cost_count.map(|count| cost_sum / count as f64);
-    metrics.judge_tokens_in = judge_in_count.map(|_| judge_in_sum);
-    metrics.judge_tokens_out = judge_out_count.map(|_| judge_out_sum);
+    metrics.judge_tokens_in = judge_in_count.map(|count| judge_in_sum / count);
+    metrics.judge_tokens_out = judge_out_count.map(|count| judge_out_sum / count);
     if count > 1 {
         let latency_variance = results
             .iter()

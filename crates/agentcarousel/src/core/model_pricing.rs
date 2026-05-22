@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::core::models::{Run, RunSummary};
+use crate::core::models::Run;
 
 #[derive(Debug, Clone)]
 pub struct ModelPricing {
@@ -198,36 +198,4 @@ pub fn fmt_tokens(count: Option<u64>) -> String {
         Some(n) => n.to_string(),
         None => "N/A".to_string(),
     }
-}
-
-// ── Annotate per-model result for carousel ───────────────────────────────────
-
-/// Compute generator and judge costs for a single model's RunSummary.
-/// Returns `(gen_cost, judge_cost, total_cost)`.
-pub fn compute_costs(
-    summary: &RunSummary,
-    gen_model: &str,
-    judge_model: Option<&str>,
-) -> (Option<f64>, Option<f64>, Option<f64>) {
-    let gen_cost = lookup_pricing(gen_model).and_then(|p| {
-        let ti = summary.tokens_in?;
-        let to = summary.tokens_out?;
-        Some(p.cost(ti, to))
-    });
-
-    let judge_cost = judge_model.and_then(|jm| {
-        let p = lookup_pricing(jm)?;
-        let ti = summary.judge_tokens_in?;
-        let to = summary.judge_tokens_out?;
-        Some(p.cost(ti, to))
-    });
-
-    let total_cost = match (gen_cost, judge_cost) {
-        (Some(g), Some(j)) => Some(g + j),
-        (Some(g), None) => Some(g),
-        (None, Some(j)) => Some(j),
-        (None, None) => None,
-    };
-
-    (gen_cost, judge_cost, total_cost)
 }

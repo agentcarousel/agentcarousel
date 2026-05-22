@@ -304,14 +304,21 @@ fn file_load() -> Option<String> {
     let path = credentials_path();
     let content = std::fs::read_to_string(&path).ok()?;
     for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("token") {
-            let rest = rest.trim();
-            if let Some(rest) = rest.strip_prefix('=') {
-                let token = rest.trim().trim_matches('"').to_string();
-                if !token.is_empty() {
-                    return Some(token);
-                }
-            }
+        // Require the key to be exactly "token" — strip_prefix("token") alone also matches
+        // token_expiry, tokenizer_config, etc. We ensure the next char is whitespace or '='.
+        let trimmed = line.trim();
+        let Some(after_key) = trimmed.strip_prefix("token") else {
+            continue;
+        };
+        if !after_key.starts_with(|c: char| c.is_whitespace() || c == '=') {
+            continue;
+        }
+        let Some(after_eq) = after_key.trim_start().strip_prefix('=') else {
+            continue;
+        };
+        let token = after_eq.trim().trim_matches('"').to_string();
+        if !token.is_empty() {
+            return Some(token);
         }
     }
     None

@@ -9,8 +9,7 @@ pub mod retry;
 
 pub use judge_provider::{judge_key_candidates, judge_provider_from_model, JudgeProvider};
 pub use model_pricing::{
-    annotate_run_cost, compute_costs, fmt_cost, fmt_tokens, lookup_pricing, prefetch_pricing,
-    ModelPricing,
+    annotate_run_cost, fmt_cost, fmt_tokens, lookup_pricing, prefetch_pricing, ModelPricing,
 };
 pub use models::*;
 pub use retry::{compute_backoff_ms, is_retryable_status, retry_policy, RetryPolicy};
