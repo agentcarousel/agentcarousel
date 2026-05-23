@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.3 - May 2026
 
 ### Changes
 
@@ -10,6 +10,7 @@
 ### Chores
 
 - Removed `#[allow(dead_code)]` from `exit_codes.rs`; all `ExitCode` variants are actively used.
+- README rewritten: full command reference, fixture format field tables, architecture overview, GitHub Actions CI example, troubleshooting section.
 
 ---
 
