@@ -31,11 +31,11 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "570a41df017094066dcbd20915429b9dad9c37ea6f9be71a273719ef2ab5d40e"
+      "sha256": "bbd234c4fa71bd6f7a1a1856fb2a1496946398ceafc3a3fa66b0eb01cc5a7031"
     },
     {
       "path": "prompt.md",
-      "sha256": "e066eb5c8c3ae1680fc24f5a8e05afba4b70b4f6f8982e1ce0b2ec952de451de"
+      "sha256": "810655adbb4f70c57bdbc2d25e2b83113062c0049cf02323e2696eb24033ca90"
     },
     {
       "path": "golden/hypertension-soap.md",
