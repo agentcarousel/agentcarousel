@@ -3,12 +3,18 @@ use agentcarousel_core::{
     retry_policy, Case, CaseResult, EvalScores, JudgeProvider, RubricScore,
 };
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use super::assertions::check_output;
 use super::trait_def::{Evaluator, EvaluatorError, EvaluatorKind};
+use serde::Deserialize;
+
+use crate::providers::{
+    AnthropicMessage, AnthropicRequest, AnthropicResponse, GeminiContent, GeminiGenerationConfig,
+    GeminiPart, GeminiRequest, GeminiResponse, GeminiSystemInstruction, OpenAiMessage,
+    OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
+};
 
 static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 
@@ -50,60 +56,6 @@ impl JudgeEvaluator {
             max_tokens: judge_max_tokens,
         })
     }
-}
-
-#[derive(Debug, Serialize)]
-struct GeminiRequest {
-    #[serde(rename = "systemInstruction", skip_serializing_if = "Option::is_none")]
-    system_instruction: Option<GeminiSystemInstruction>,
-    contents: Vec<GeminiContent>,
-    #[serde(rename = "generationConfig")]
-    generation_config: GeminiGenerationConfig,
-}
-
-#[derive(Debug, Serialize)]
-struct GeminiSystemInstruction {
-    parts: Vec<GeminiPart>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiContent {
-    role: Option<String>,
-    parts: Vec<GeminiPart>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiPart {
-    text: String,
-}
-
-#[derive(Debug, Serialize)]
-struct GeminiGenerationConfig {
-    temperature: f32,
-    #[serde(rename = "maxOutputTokens", skip_serializing_if = "Option::is_none")]
-    max_output_tokens: Option<u32>,
-    #[serde(rename = "responseMimeType")]
-    response_mime_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeminiUsage {
-    #[serde(rename = "promptTokenCount")]
-    prompt_token_count: Option<u64>,
-    #[serde(rename = "candidatesTokenCount")]
-    candidates_token_count: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeminiResponse {
-    candidates: Option<Vec<GeminiCandidate>>,
-    #[serde(rename = "usageMetadata")]
-    usage_metadata: Option<GeminiUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeminiCandidate {
-    content: Option<GeminiContent>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -330,7 +282,7 @@ fn call_gemini_blocking(
         generation_config: GeminiGenerationConfig {
             temperature: 0.2,
             max_output_tokens: max_tokens,
-            response_mime_type: "application/json".to_string(),
+            response_mime_type: Some("application/json".to_string()),
         },
     };
 
@@ -389,51 +341,6 @@ fn call_gemini_blocking(
     Err(EvaluatorError::JudgeFailed(
         "gemini judge request failed after retries".to_string(),
     ))
-}
-
-#[derive(Debug, Serialize)]
-struct OpenAiMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Debug, Serialize)]
-struct OpenAiResponseFormat {
-    #[serde(rename = "type")]
-    format_type: String,
-}
-
-#[derive(Debug, Serialize)]
-struct OpenAiRequest {
-    model: String,
-    messages: Vec<OpenAiMessage>,
-    temperature: f32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OpenAiResponseFormat>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiUsage {
-    prompt_tokens: Option<u64>,
-    completion_tokens: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiResponse {
-    choices: Option<Vec<OpenAiChoice>>,
-    usage: Option<OpenAiUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiChoice {
-    message: Option<OpenAiChoiceMessage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiChoiceMessage {
-    content: Option<String>,
 }
 
 fn call_openai_text(
@@ -516,38 +423,6 @@ fn call_openai_blocking(
     Err(EvaluatorError::JudgeFailed(
         "openai judge request failed after retries".to_string(),
     ))
-}
-
-#[derive(Debug, Serialize)]
-struct AnthropicMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Debug, Serialize)]
-struct AnthropicRequest {
-    model: String,
-    max_tokens: u32,
-    system: String,
-    messages: Vec<AnthropicMessage>,
-    temperature: f32,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicUsage {
-    input_tokens: Option<u64>,
-    output_tokens: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicResponse {
-    content: Option<Vec<AnthropicContent>>,
-    usage: Option<AnthropicUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicContent {
-    text: Option<String>,
 }
 
 fn call_anthropic_text(

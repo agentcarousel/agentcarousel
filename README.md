@@ -1,6 +1,8 @@
 # AgentCarousel
 
-**Unit tests for AI agents.** Run behavioral tests in CI, score outputs with an LLM judge, gate on regressions, and export signed bundles your auditors and procurement teams accept.
+**Unit tests for AI agents.** Run behavioral tests in CI, score outputs with an LLM judge, gate on regressions, rank which model costs and performs the best, and export auditable signed bundles.
+
+[Install](#install) · [Quickstart](#quickstart) · [LLM-as-a-Judge Eval](#live-eval-with-llm-as-a-judge) · [Multi-Model Comparisons](#multi-model-comparison) · [A/B Tests](#ab-prompt-comparison) · 
 
 [![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
 [![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
@@ -8,8 +10,6 @@
 [![Latest release](https://img.shields.io/github/v/release/agentcarousel/agentcarousel)](https://github.com/agentcarousel/agentcarousel/releases)
 
 <img width="692" height="414" alt="demo" src="https://github.com/user-attachments/assets/c55df92c-fa4a-44b6-a381-23fe0329a5c4" />
-
-AgentCarousel gives you a repeatable, automated way to assess AI agent behavior and build confidence before deployment. Tests run deterministically in CI, semantic scoring comes from an LLM-as-a-judge, and results can be certified by a domain expert with a signed attestation.
 
 ## Why agentcarousel
 
@@ -32,12 +32,6 @@ brew tap agentcarousel/agentcarousel && brew install agentcarousel
 
 # Cargo (Rust)
 cargo install agentcarousel
-```
-
-Upgrade an existing installation to the full variant at any time:
-
-```bash
-agc update --feature dashboard
 ```
 
 ## Quickstart
@@ -78,9 +72,7 @@ agc generate --from-prompt fixtures/customer-support/prompt.md --count 10
 agc generate --extend fixtures/customer-support/ --count 5
 ```
 
-Generated cases are validated against the fixture schema before being written. If the LLM output fails validation, the command retries once with the errors appended to the prompt. The meta-prompt lives at `templates/generate-prompt.md`; teams can customize it to specify what "good coverage" means for their skill or domain.
-
-**Typical workflow:**
+**Typical fixture workflow:**
 
 ```bash
 agc init --skill customer-support       # scaffold directory structure
@@ -102,14 +94,14 @@ export ANTHROPIC_API_KEY=your_key     # or bring your own provider
 agc eval fixtures/regex-builder/ \
   --execution-mode live \
   --evaluator all --judge \
-  --model gemini-2.5-flash \
+  --model gemini-2.5-flash-lite \
   --judge-model claude-haiku-4-5-20251001 \
   --runs 1
 ```
 
 **Execution modes:** `--execution-mode live` hits real LLM APIs. Omit it (or pass `mock`) for deterministic offline runs.
 
-**Evaluators:** `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. `--evaluator mock` skips LLM calls entirely.
+**Evaluators:** `--evaluator all` honors each case's declared evaluator. `--evaluator judge` routes every case through the LLM judge regardless. Omit `--evaluator` (or pass `rules`) for assertion-based scoring with no LLM judge calls.
 
 **Filters:** `--filter` matches on `skill/case-id`; `--filter-tags` accepts comma-separated tags (e.g. `database, safety`).
 
@@ -141,8 +133,9 @@ agc carousel \
 **Recommended workflow for the most complete ranking:**
 
 ```bash
-# 1. Record golden outputs for all your fixtures
-agc eval fixtures/ --execution-mode live --update-golden
+# 1. Record and promote golden outputs for all your fixtures
+agc eval fixtures/ --execution-mode live --judge
+agc promote <run-id>
 
 # 2. Rules-based baseline across models
 agc carousel --models m1,m2,m3 fixtures/
@@ -182,33 +175,42 @@ agc ab \
 
 ## CI Regression Gate
 
-`agc compare` compares two eval runs and exits 1 when effectiveness regresses beyond a threshold. When at least 5 matched cases carry effectiveness scores, a [Mann-Whitney U test](https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U_test) gates the exit: the regression only triggers when the delta exceeds `--threshold` **and** the [p-value](https://en.wikipedia.org/wiki/P-value) falls below `--significance`. This prevents single-run noise from failing CI.
+`agc compare` exits `1` when effectiveness drops below a baseline. With ≥5 scored cases, a [Mann-Whitney U test](https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U_test) also requires p < `--significance` so one noisy run does not fail CI.
 
 ```bash
-# Compare the latest run to an explicit baseline
-agc compare -l --baseline <run-id> --threshold 0.05
+# Compare latest run to the previous run for the same skill (auto-baseline)
+agc compare -l --threshold 0.05
 
-# Auto-baseline: finds previous run for the same skill
-agc compare -l
-
-# Tighten the significance gate for high-stakes checks
-agc compare -l --baseline <run-id> --threshold 0.05 --significance 0.01
-
-# Tag a run as a named baseline for CI reference
+# Or pin a named local baseline
 agc compare tag <run-id> --name prod-baseline
+agc compare -l --baseline prod-baseline --threshold 0.05
 ```
 
-**GitHub Actions example:**
+**GitHub Actions (Regression Gate):**
 
 ```yaml
-- name: Eval
-  run: agc eval fixtures/ --judge --runs 5
-
-- name: Regression gate
-  run: agc compare -l --baseline ${{ vars.BASELINE_RUN_ID }} --threshold 0.05
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Persist the history DB across runs so agc compare has a previous run to diff against
+      - uses: actions/cache@v4
+        with:
+          path: .agentcarousel.db
+          key: agentcarousel-${{ github.ref }}
+          restore-keys: agentcarousel-
+      - run: curl -fsSL https://install.agentcarousel.com | sh
+      # Run 3 times per case to reduce variance from model non-determinism
+      - run: agc eval fixtures/ --execution-mode live --evaluator all --judge --runs 3
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Exit 1 if effectiveness drops >5% vs the previous run for the same skill
+      - run: agc compare -l --threshold 0.05
 ```
 
-Exit codes: `0` = no regression, `1` = regression exceeds threshold, `4` = runtime error.
+Exit codes: `0` pass, `1` regression, `4` runtime error, `5` run/baseline not found.
 
 ## Dashboard
 
@@ -218,14 +220,6 @@ Exit codes: `0` = no regression, `1` = regression exceeds threshold, `4` = runti
 agc dashboard                        # http://localhost:7421
 agc dashboard --port 8080            # custom port
 agc dashboard --db path/to/history.db
-```
-
-## Registry Authentication
-
-Set `AGENTCAROUSEL_API_TOKEN` to authenticate with the registry for `agc publish`, `agc bundle pull`, and `agc compare --registry`:
-
-```bash
-export AGENTCAROUSEL_API_TOKEN=agct_abc123
 ```
 
 ## Reports
@@ -286,7 +280,6 @@ agc publish fixtures/customer-support \
   --all-runs --limit 5
 ```
 
-
 ## Trust Checks
 
 Trust checks query an agent's registry state and confirm a deployed agent is certified and untampered. Use them in CI gates and governed workflows before the agent runs.
@@ -305,7 +298,7 @@ agc trust-check customer-support@1.0.0 \
 
 ## Contributions
 
-- Start here: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Contributing guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - Security policy: [`SECURITY.md`](SECURITY.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
 

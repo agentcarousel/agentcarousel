@@ -1,10 +1,13 @@
 use agentcarousel_core::{compute_backoff_ms, is_retryable_status, retry_policy, Case, Role};
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use super::RunnerConfig;
+use crate::providers::{
+    AnthropicMessage, AnthropicRequest, AnthropicResponse, GeminiContent, GeminiGenerationConfig,
+    GeminiPart, GeminiRequest, GeminiResponse, OpenAiMessage, OpenAiRequest, OpenAiResponse,
+};
 
 static ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
@@ -229,51 +232,6 @@ fn build_generation_prompt(case: &Case) -> String {
     prompt
 }
 
-#[derive(Debug, Serialize)]
-struct GeminiRequest {
-    contents: Vec<GeminiContent>,
-    #[serde(rename = "generationConfig")]
-    generation_config: GeminiGenerationConfig,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiContent {
-    role: Option<String>,
-    parts: Vec<GeminiPart>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiPart {
-    text: String,
-}
-
-#[derive(Debug, Serialize)]
-struct GeminiGenerationConfig {
-    temperature: f32,
-    #[serde(rename = "maxOutputTokens", skip_serializing_if = "Option::is_none")]
-    max_output_tokens: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeminiResponse {
-    candidates: Option<Vec<GeminiCandidate>>,
-    #[serde(rename = "usageMetadata")]
-    usage_metadata: Option<GeminiUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeminiCandidate {
-    content: Option<GeminiContent>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeminiUsage {
-    #[serde(rename = "promptTokenCount")]
-    prompt_token_count: Option<u64>,
-    #[serde(rename = "candidatesTokenCount")]
-    candidates_token_count: Option<u64>,
-}
-
 async fn generate_with_gemini(
     key: &str,
     model: &str,
@@ -285,6 +243,7 @@ async fn generate_with_gemini(
         model, key
     );
     let request = GeminiRequest {
+        system_instruction: None,
         contents: vec![GeminiContent {
             role: Some("user".to_string()),
             parts: vec![GeminiPart {
@@ -294,6 +253,7 @@ async fn generate_with_gemini(
         generation_config: GeminiGenerationConfig {
             temperature: 0.2,
             max_output_tokens: max_tokens,
+            response_mime_type: None,
         },
     };
     let client = shared_client();
@@ -346,43 +306,6 @@ async fn generate_with_gemini(
     Err("gemini generation failed after retries".to_string())
 }
 
-#[derive(Debug, Serialize)]
-struct OpenAiRequest {
-    model: String,
-    messages: Vec<OpenAiMessage>,
-    temperature: f32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-}
-
-#[derive(Debug, Serialize)]
-struct OpenAiMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiResponse {
-    choices: Vec<OpenAiChoice>,
-    usage: Option<OpenAiUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiChoice {
-    message: OpenAiResponseMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiResponseMessage {
-    content: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiUsage {
-    prompt_tokens: Option<u64>,
-    completion_tokens: Option<u64>,
-}
-
 async fn generate_with_openai(
     key: &str,
     model: &str,
@@ -404,6 +327,7 @@ async fn generate_with_openai(
         ],
         temperature: 0.2,
         max_tokens,
+        response_format: None,
     };
     let client = shared_client();
     let retry = retry_policy();
@@ -420,8 +344,11 @@ async fn generate_with_openai(
             let body: OpenAiResponse = response.json().await.map_err(|err| err.to_string())?;
             let output = body
                 .choices
-                .first()
-                .map(|choice| choice.message.content.trim().to_string())
+                .as_ref()
+                .and_then(|v| v.first())
+                .and_then(|c| c.message.as_ref())
+                .and_then(|m| m.content.as_deref())
+                .map(|s| s.trim().to_string())
                 .filter(|text| !text.is_empty())
                 .ok_or_else(|| "openai returned empty generation output".to_string())?;
             return Ok(GenerationResult {
@@ -446,40 +373,6 @@ async fn generate_with_openai(
         return Err(format!("openai generation failed ({status}): {body}"));
     }
     Err("openai generation failed after retries".to_string())
-}
-
-#[derive(Debug, Serialize)]
-struct AnthropicRequest {
-    model: String,
-    max_tokens: u32,
-    temperature: f32,
-    system: String,
-    messages: Vec<AnthropicMessage>,
-}
-
-#[derive(Debug, Serialize)]
-struct AnthropicMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicResponse {
-    content: Vec<AnthropicContentBlock>,
-    usage: Option<AnthropicUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicContentBlock {
-    #[serde(rename = "type")]
-    block_type: String,
-    text: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicUsage {
-    input_tokens: Option<u64>,
-    output_tokens: Option<u64>,
 }
 
 async fn generate_with_anthropic(
@@ -514,10 +407,13 @@ async fn generate_with_anthropic(
         let status = response.status();
         if status.is_success() {
             let body: AnthropicResponse = response.json().await.map_err(|err| err.to_string())?;
+            let empty: Vec<_> = Vec::new();
             let output = body
                 .content
+                .as_deref()
+                .unwrap_or(&empty)
                 .iter()
-                .find(|block| block.block_type == "text")
+                .find(|block| block.block_type.as_deref() == Some("text"))
                 .and_then(|block| block.text.as_ref())
                 .map(|text| text.trim().to_string())
                 .filter(|text| !text.is_empty())
@@ -562,6 +458,7 @@ async fn generate_with_openrouter(
             }],
             temperature: 0.2,
             max_tokens,
+            response_format: None,
         };
         let send_result = client
             .post("https://openrouter.ai/api/v1/chat/completions")
@@ -586,8 +483,11 @@ async fn generate_with_openrouter(
             let body: OpenAiResponse = response.json().await.map_err(|err| err.to_string())?;
             let output = body
                 .choices
-                .first()
-                .map(|choice| choice.message.content.trim().to_string())
+                .as_ref()
+                .and_then(|v| v.first())
+                .and_then(|c| c.message.as_ref())
+                .and_then(|m| m.content.as_deref())
+                .map(|s| s.trim().to_string())
                 .filter(|text| !text.is_empty())
                 .ok_or_else(|| "openrouter returned empty generation output".to_string())?;
             return Ok(GenerationResult {
