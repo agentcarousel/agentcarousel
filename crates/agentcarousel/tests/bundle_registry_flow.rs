@@ -95,6 +95,7 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
         runner_offline: false,
         runner_mock_strict: false,
         runner_mock_only: true,
+        prompt_audit: None,
     }
 }
 

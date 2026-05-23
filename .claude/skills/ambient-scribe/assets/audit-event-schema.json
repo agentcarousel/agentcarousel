@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ambient-scribe/schemas/audit-event.json",
+  "title": "AuditEvent",
+  "description": "Append-only audit event emitted by the ambient-scribe skill. Designed to contain no PHI: linkage to a specific encounter is via a non-reversible hash, never a medical record number or patient identifier. Required for HIPAA SRA traceability, FDA SaMD post-market monitoring, and Joint Commission leadership oversight.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "schema_version",
+    "timestamp",
+    "encounter_handle",
+    "transcript_sha256",
+    "draft_sha256",
+    "model_id",
+    "skill_version",
+    "prompt_hash",
+    "counts",
+    "dry_run",
+    "incident"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of skill completion."
+    },
+    "encounter_handle": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32,64}$",
+      "description": "Non-reversible hash linking events for the same encounter. Not the medical record number."
+    },
+    "user_handle": {
+      "type": ["string", "null"],
+      "description": "Opaque caller-supplied identifier (e.g., SSO subject claim). Skill does not validate."
+    },
+    "transcript_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "draft_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "model_id": {
+      "type": "string",
+      "description": "Inference model identifier, e.g. 'claude-opus-4-7'."
+    },
+    "skill_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "prompt_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 of SKILL.md plus all referenced files at run time."
+    },
+    "change_control": {
+      "type": ["object", "null"],
+      "description": "PCCP linkage — recorded by deploying organization.",
+      "properties": {
+        "pccp_version": { "type": "string" },
+        "change_category": {
+          "type": "string",
+          "enum": ["none", "prompt", "escalation_criteria", "medication_vocab", "scrubber_rules", "other"]
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "escalations_immediate",
+        "escalations_same_visit",
+        "escalations_follow_up",
+        "grounding_failures",
+        "unresolved_meds",
+        "verification_items"
+      ],
+      "properties": {
+        "escalations_immediate": { "type": "integer", "minimum": 0 },
+        "escalations_same_visit": { "type": "integer", "minimum": 0 },
+        "escalations_follow_up": { "type": "integer", "minimum": 0 },
+        "grounding_failures": { "type": "integer", "minimum": 0 },
+        "unresolved_meds": { "type": "integer", "minimum": 0 },
+        "verification_items": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "True if invoked in evaluation/test mode."
+    },
+    "incident": {
+      "type": "boolean",
+      "description": "True if a controls failure was detected (e.g., PHI leak in a non-clinical destination)."
+    },
+    "incident_note": {
+      "type": ["string", "null"],
+      "description": "Scrubbed (no PHI) description of the incident, if incident is true."
+    }
+  },
+  "additionalProperties": false
+}

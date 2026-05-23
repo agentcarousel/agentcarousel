@@ -188,6 +188,55 @@ pub struct Run {
     pub runner_mock_strict: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runner_mock_only: bool,
+    /// Second-pass run-level judge analysis: classifies whether failures are due to prompt
+    /// design, model capability, or fixture miscalibration, and emits actionable fixes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_audit: Option<PromptAudit>,
+}
+
+/// Root-cause classification produced by the prompt-audit judge pass.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptAuditFailureMode {
+    /// Prompt is underspecified; fixing the prompt is likely to fix the failures.
+    Prompt,
+    /// Model cannot follow these instructions at this capability level regardless of prompt wording.
+    Model,
+    /// Rubric thresholds or expectations are miscalibrated; the model output is actually reasonable.
+    Fixture,
+    /// Multiple factors are contributing.
+    Mixed,
+}
+
+/// One systematic failure pattern found across the run.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuditFinding {
+    /// Human-readable description of the systematic failure pattern (e.g. "7/7 cases missing [T####] citations").
+    pub pattern: String,
+    /// Number of cases exhibiting this pattern.
+    pub affected_case_count: u32,
+    /// What in the prompt (or model / fixture) caused this pattern.
+    pub root_cause: String,
+}
+
+/// Result of the run-level prompt-audit judge pass.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PromptAudit {
+    pub failure_mode: PromptAuditFailureMode,
+    /// Judge's confidence in the failure_mode classification (0.0–1.0).
+    pub confidence: f32,
+    pub findings: Vec<AuditFinding>,
+    /// Concrete, actionable fixes the prompt author should apply.
+    pub suggested_fixes: Vec<String>,
+    /// Fully worked prompt text for each fix — parallel to suggested_fixes.
+    /// Each element is the actual markdown content to paste into prompt.md.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_implementations: Vec<String>,
+    pub overall_rationale: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge_tokens_in: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge_tokens_out: Option<u64>,
 }
 
 /// Outcome for a single [`Case`]: status, optional error string, [`ExecutionTrace`], [`Metrics`],

@@ -17,10 +17,22 @@ pub enum EvaluatorError {
     ProcessFailed(String),
     #[error("judge evaluator failed: {0}")]
     JudgeFailed(String),
+    /// Permanent, non-retryable judge failure (e.g. 401, 403, 404 from wrong model name).
+    /// Unlike `JudgeFailed`, this error will affect every subsequent case in the run.
+    #[error("judge unavailable: {0}")]
+    JudgeUnavailable(String),
     #[error("invalid evaluator output: {0}")]
     InvalidOutput(String),
     #[error("unknown evaluator: {0}")]
     UnknownEvaluator(String),
+}
+
+impl EvaluatorError {
+    /// Returns `true` when the error is guaranteed to repeat on every subsequent case,
+    /// meaning there is no point running the generator for the rest of the run.
+    pub fn is_fatal_for_run(&self) -> bool {
+        matches!(self, Self::MissingConfig(_) | Self::JudgeUnavailable(_))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

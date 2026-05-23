@@ -8,6 +8,7 @@ use agentcarousel_evaluators::{
 use agentcarousel_fixtures::MockEngine;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, Semaphore};
@@ -224,18 +225,59 @@ pub(super) async fn run_eval_cases(
 
     let concurrency = std::cmp::max(1, config.runner.concurrency);
     let semaphore = Arc::new(Semaphore::new(concurrency));
+    let judge_unavailable = Arc::new(AtomicBool::new(false));
     let mut handles = Vec::new();
 
     for case in cases {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
+
+        // After acquiring a slot, check whether a completed task found the judge permanently
+        // broken. If so, skip the generator call for this case — no point burning tokens on
+        // generation that will always fail at eval.
+        if judge_unavailable.load(Ordering::Acquire) {
+            drop(permit);
+            let case_id = case.id.clone();
+            let pb = progress_bar.clone();
+            handles.push(tokio::spawn(async move {
+                if let Some(pb) = pb {
+                    pb.inc(1);
+                }
+                CaseResult {
+                    case_id,
+                    status: CaseStatus::Error,
+                    error: Some(
+                        "judge unavailable — generator skipped to avoid wasting tokens".to_string(),
+                    ),
+                    trace: agentcarousel_core::ExecutionTrace {
+                        steps: Vec::new(),
+                        final_output: None,
+                        redacted: false,
+                    },
+                    metrics: agentcarousel_core::Metrics::default(),
+                    eval_scores: None,
+                    input: Vec::new(),
+                }
+            }));
+            continue;
+        }
+
         let mock_engine = mock_engine.clone();
         let config = config.clone();
         let run_id = run_id.clone();
         let judge_cache = judge_cache.clone();
+        let judge_unavailable = judge_unavailable.clone();
         let pb = progress_bar.clone();
         handles.push(tokio::spawn(async move {
             let _permit = permit;
-            let result = run_case_eval(case, &mock_engine, &config, &run_id, judge_cache).await;
+            let result = run_case_eval(
+                case,
+                &mock_engine,
+                &config,
+                &run_id,
+                judge_cache,
+                judge_unavailable,
+            )
+            .await;
             if let Some(pb) = pb {
                 pb.inc(1);
             }
@@ -261,6 +303,7 @@ pub(super) async fn run_case_eval(
     config: &EvalConfig,
     run_id: &RunId,
     judge_cache: Arc<Mutex<BoundedCache>>,
+    judge_unavailable: Arc<AtomicBool>,
 ) -> CaseResult {
     let runs = std::cmp::max(1, config.runs);
     let mut per_run_results = Vec::new();
@@ -292,6 +335,12 @@ pub(super) async fn run_case_eval(
                     }
                 }
                 Err(err) => {
+                    if err.is_fatal_for_run() && !judge_unavailable.swap(true, Ordering::AcqRel) {
+                        eprintln!(
+                            "warn: judge permanently unavailable ({}), skipping generator for remaining cases",
+                            err
+                        );
+                    }
                     result.status = CaseStatus::Error;
                     result.error = Some(err.to_string());
                 }

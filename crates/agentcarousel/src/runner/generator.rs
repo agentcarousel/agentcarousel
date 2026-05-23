@@ -113,7 +113,6 @@ pub async fn generate_case_output(
         .as_ref()
         .ok_or_else(|| "generator model is not configured".to_string())?;
     let provider = GeneratorProvider::from_model(model);
-    let prompt = build_generation_prompt(case);
     let max_tokens = config.generator_max_tokens;
 
     if let GeneratorProvider::Custom = provider {
@@ -124,14 +123,20 @@ pub async fn generate_case_output(
     }
 
     let key = resolve_generator_key(provider)?;
+    let system = resolve_system_prompt(case);
+    let user_prompt = build_user_prompt(case);
     match provider {
-        GeneratorProvider::Gemini => generate_with_gemini(&key, model, &prompt, max_tokens).await,
-        GeneratorProvider::OpenAi => generate_with_openai(&key, model, &prompt, max_tokens).await,
+        GeneratorProvider::Gemini => {
+            generate_with_gemini(&key, model, &system, &user_prompt, max_tokens).await
+        }
+        GeneratorProvider::OpenAi => {
+            generate_with_openai(&key, model, &system, &user_prompt, max_tokens).await
+        }
         GeneratorProvider::Anthropic => {
-            generate_with_anthropic(&key, model, &prompt, max_tokens).await
+            generate_with_anthropic(&key, model, &system, &user_prompt, max_tokens).await
         }
         GeneratorProvider::OpenRouter => {
-            generate_with_openrouter(&key, model, &prompt, max_tokens).await
+            generate_with_openrouter(&key, model, &system, &user_prompt, max_tokens).await
         }
         GeneratorProvider::Custom => unreachable!(),
     }
@@ -210,16 +215,43 @@ fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, String> 
     Ok(key)
 }
 
-fn build_generation_prompt(case: &Case) -> String {
+/// Resolve the system prompt for a case.
+///
+/// Priority:
+///   1. An explicit `role: system` message in the fixture's input.messages.
+///   2. `fixtures/<skill>/prompt.md` where skill is the prefix of the case ID before `/`.
+///   3. A minimal generic fallback so generation still works for fixture-less cases.
+fn resolve_system_prompt(case: &Case) -> String {
+    if let Some(msg) = case.input.messages.iter().find(|m| m.role == Role::System) {
+        return msg.content.clone();
+    }
+    if let Some(text) = load_skill_prompt_for_case(case) {
+        return text;
+    }
+    "You are an AI assistant. Respond with the best answer for the task.".to_string()
+}
+
+fn load_skill_prompt_for_case(case: &Case) -> Option<String> {
+    let skill = case.id.0.split('/').next()?;
+    let path = std::path::PathBuf::from("fixtures")
+        .join(skill)
+        .join("prompt.md");
+    std::fs::read_to_string(&path)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+}
+
+/// Build the user-turn portion of the generation prompt (everything except the system message).
+fn build_user_prompt(case: &Case) -> String {
     let mut prompt = String::new();
-    prompt.push_str("You are generating the agent response for this evaluation case.\n");
-    prompt.push_str("Respond with the best final answer only.\n\n");
-    prompt.push_str("Conversation:\n");
     for message in &case.input.messages {
+        if message.role == Role::System {
+            continue; // consumed by resolve_system_prompt
+        }
         let role = match message.role {
             Role::User => "user",
             Role::Assistant => "assistant",
-            Role::System => "system",
+            Role::System => unreachable!(),
             Role::Tool => "tool",
         };
         prompt.push_str(&format!("[{role}] {}\n\n", message.content.trim()));
@@ -235,6 +267,7 @@ fn build_generation_prompt(case: &Case) -> String {
 async fn generate_with_gemini(
     key: &str,
     model: &str,
+    system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, String> {
@@ -243,7 +276,15 @@ async fn generate_with_gemini(
         model, key
     );
     let request = GeminiRequest {
-        system_instruction: None,
+        system_instruction: if system.is_empty() {
+            None
+        } else {
+            Some(crate::providers::GeminiSystemInstruction {
+                parts: vec![GeminiPart {
+                    text: system.to_string(),
+                }],
+            })
+        },
         contents: vec![GeminiContent {
             role: Some("user".to_string()),
             parts: vec![GeminiPart {
@@ -309,6 +350,7 @@ async fn generate_with_gemini(
 async fn generate_with_openai(
     key: &str,
     model: &str,
+    system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, String> {
@@ -317,8 +359,7 @@ async fn generate_with_openai(
         messages: vec![
             OpenAiMessage {
                 role: "system".to_string(),
-                content: "You are generating the best final answer for this evaluation case."
-                    .to_string(),
+                content: system.to_string(),
             },
             OpenAiMessage {
                 role: "user".to_string(),
@@ -378,6 +419,7 @@ async fn generate_with_openai(
 async fn generate_with_anthropic(
     key: &str,
     model: &str,
+    system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, String> {
@@ -387,7 +429,7 @@ async fn generate_with_anthropic(
         model: model.to_string(),
         max_tokens,
         temperature: 0.2,
-        system: "You are generating the best final answer for this evaluation case.".to_string(),
+        system: system.to_string(),
         messages: vec![AnthropicMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
@@ -442,6 +484,7 @@ async fn generate_with_anthropic(
 async fn generate_with_openrouter(
     key: &str,
     model: &str,
+    system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, String> {
@@ -450,12 +493,20 @@ async fn generate_with_openrouter(
     let candidates = openrouter_model_candidates(openrouter_model);
     let mut last_error = None;
     for candidate in candidates {
+        let mut messages = Vec::new();
+        if !system.is_empty() {
+            messages.push(OpenAiMessage {
+                role: "system".to_string(),
+                content: system.to_string(),
+            });
+        }
+        messages.push(OpenAiMessage {
+            role: "user".to_string(),
+            content: prompt.to_string(),
+        });
         let request = OpenAiRequest {
             model: candidate.to_string(),
-            messages: vec![OpenAiMessage {
-                role: "user".to_string(),
-                content: prompt.to_string(),
-            }],
+            messages,
             temperature: 0.2,
             max_tokens,
             response_format: None,
@@ -546,13 +597,17 @@ pub async fn call_llm(
     }
     let key = resolve_generator_key(provider)?;
     match provider {
-        GeneratorProvider::Gemini => generate_with_gemini(&key, model, prompt, max_tokens).await,
-        GeneratorProvider::OpenAi => generate_with_openai(&key, model, prompt, max_tokens).await,
+        GeneratorProvider::Gemini => {
+            generate_with_gemini(&key, model, "", prompt, max_tokens).await
+        }
+        GeneratorProvider::OpenAi => {
+            generate_with_openai(&key, model, "", prompt, max_tokens).await
+        }
         GeneratorProvider::Anthropic => {
-            generate_with_anthropic(&key, model, prompt, max_tokens).await
+            generate_with_anthropic(&key, model, "", prompt, max_tokens).await
         }
         GeneratorProvider::OpenRouter => {
-            generate_with_openrouter(&key, model, prompt, max_tokens).await
+            generate_with_openrouter(&key, model, "", prompt, max_tokens).await
         }
         GeneratorProvider::Custom => unreachable!(),
     }

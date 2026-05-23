@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ambient-scribe/schemas/medication-record.json",
+  "title": "MedicationRecord",
+  "description": "A single medication entry extracted from an encounter transcript by the ambient-scribe skill.",
+  "type": "object",
+  "required": [
+    "name_raw",
+    "dose_unit",
+    "route",
+    "frequency",
+    "status",
+    "citations",
+    "prescriber_intent",
+    "unresolved"
+  ],
+  "properties": {
+    "name_raw": {
+      "type": "string",
+      "description": "The drug name exactly as spoken/transcribed. Never normalized at extraction time."
+    },
+    "name_resolved": {
+      "type": ["string", "null"],
+      "description": "The RxNorm-normalized drug name, or null if no confident resolution."
+    },
+    "rxcui": {
+      "type": ["string", "null"],
+      "description": "RxNorm Concept Unique Identifier, or null."
+    },
+    "dose": {
+      "type": ["number", "null"],
+      "description": "Numeric dose as stated. Null if dose was not stated, or if the stated dose was a range/uncertain (see dose_raw)."
+    },
+    "dose_raw": {
+      "type": ["string", "null"],
+      "description": "Raw dose string from the transcript, populated when the dose is uncertain or expressed as a range."
+    },
+    "dose_unit": {
+      "type": ["string", "null"],
+      "enum": [null, "mg", "mcg", "g", "mL", "L", "units", "puffs", "drops", "sprays", "patches", "tablets", "capsules", "%", "mg/kg", "mcg/kg", "mEq", "IU"],
+      "description": "Unit of dose."
+    },
+    "route": {
+      "type": ["string", "null"],
+      "enum": [null, "PO", "IV", "IM", "SC", "SL", "PR", "topical", "inhaled", "nebulized", "intranasal", "ophthalmic", "otic", "transdermal", "vaginal", "buccal"],
+      "description": "Route of administration."
+    },
+    "frequency": {
+      "type": ["string", "null"],
+      "description": "Frequency as stated (e.g., 'once daily', 'BID', 'TID', 'QID', 'q4h', 'q6h', 'PRN', 'weekly'). Null if not stated."
+    },
+    "indication": {
+      "type": ["string", "null"],
+      "description": "Indication only if stated in the encounter. Null otherwise."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["started", "continued", "dose_changed", "discontinued", "held", "prn_added", "mentioned_only"]
+    },
+    "citations": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^T\\d{4,}$" },
+      "minItems": 1,
+      "description": "Turn IDs from the transcript supporting this entry."
+    },
+    "prescriber_intent": {
+      "type": "string",
+      "enum": ["clinician_directed", "patient_reported", "unclear"]
+    },
+    "unresolved": {
+      "type": "boolean",
+      "description": "True if the validator could not confidently resolve the drug name. Such entries appear in Needs Clinician Verification."
+    },
+    "uncertain_dose": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if the dose was stated ambiguously (e.g., '20 or 40 mg')."
+    },
+    "validator_warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Non-blocking warnings emitted by medication_validator.py (unit/route mismatch, same-class duplicate, etc.)."
+    }
+  },
+  "additionalProperties": false
+}

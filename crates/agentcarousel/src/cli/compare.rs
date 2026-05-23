@@ -563,6 +563,7 @@ fn synthetic_baseline_run(
         runner_offline: false,
         runner_mock_strict: false,
         runner_mock_only: false,
+        prompt_audit: None,
     }
 }
 

@@ -90,6 +90,7 @@ fn minimal_run(id: &str, started_at: chrono::DateTime<Utc>) -> Run {
         runner_offline: false,
         runner_mock_strict: false,
         runner_mock_only: true,
+        prompt_audit: None,
     }
 }
 

@@ -13,7 +13,7 @@ pub use golden::{
     evaluate_for_promotion, GoldenEvaluator, PromotionMeta, PromotionResult,
     PROMOTE_CRITICAL_THRESHOLD, PROMOTE_EFFECTIVENESS_THRESHOLD,
 };
-pub use judge::JudgeEvaluator;
+pub use judge::{run_prompt_audit, JudgeEvaluator};
 pub use process::ProcessEvaluator;
 pub use rules::{evaluate_case, RuleEvaluation, RulesEvaluator};
 pub use trait_def::{Evaluator, EvaluatorError, EvaluatorKind};
