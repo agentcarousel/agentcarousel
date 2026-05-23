@@ -136,6 +136,7 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         runner_offline: config.offline,
         runner_mock_strict: config.mock_strict,
         runner_mock_only: config.generation_mode == GenerationMode::MockOnly,
+        prompt_audit: None,
     }
 }
 
@@ -191,5 +192,6 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         runner_offline: config.runner.offline,
         runner_mock_strict: config.runner.mock_strict,
         runner_mock_only: config.runner.generation_mode == GenerationMode::MockOnly,
+        prompt_audit: None,
     }
 }

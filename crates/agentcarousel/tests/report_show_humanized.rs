@@ -89,6 +89,7 @@ fn run_with_embedded_api_error() -> Run {
         runner_offline: true,
         runner_mock_strict: false,
         runner_mock_only: true,
+        prompt_audit: None,
     }
 }
 

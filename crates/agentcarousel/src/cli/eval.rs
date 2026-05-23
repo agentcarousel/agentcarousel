@@ -2,6 +2,7 @@ use agentcarousel_core::{
     annotate_run_cost, judge_key_candidates, judge_provider_from_model, prefetch_pricing,
     CaseStatus, CertificationContext, JudgeProvider,
 };
+use agentcarousel_evaluators::run_prompt_audit;
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
@@ -311,6 +312,76 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     };
     run.summary.command_line = Some(std::env::args().collect::<Vec<_>>().join(" "));
 
+    // Run the prompt-audit second pass when: judge is on, >50% of cases failed, and a
+    // prompt.md exists. Skipped silently on errors (audit is best-effort).
+    let total_cases = run.summary.total;
+    let failed_cases = run.summary.failed;
+    let fail_rate = if total_cases > 0 {
+        failed_cases as f64 / total_cases as f64
+    } else {
+        0.0
+    };
+    if judge_enabled && fail_rate > 0.5 {
+        if let Some(prompt_text) = load_prompt_md(&args.paths) {
+            let show_audit_spinner =
+                !globals.quiet && format != "json" && !globals.json && stderr().is_terminal();
+            let audit_spinner: Option<indicatif::ProgressBar> = if show_audit_spinner {
+                use indicatif::{ProgressBar, ProgressStyle};
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::with_template("{spinner:.green} {msg}")
+                        .expect("spinner template")
+                        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+                );
+                pb.set_message("Running prompt audit...");
+                pb.enable_steady_tick(std::time::Duration::from_millis(120));
+                Some(pb)
+            } else {
+                None
+            };
+            let audit_max_tokens = config.judge.max_tokens.map(|t| t.max(2048));
+            match run_prompt_audit(&prompt_text, &run.cases, &judge_model, audit_max_tokens) {
+                Ok(audit) => {
+                    if let Some(ref pb) = audit_spinner {
+                        pb.finish_and_clear();
+                    }
+                    if let Some(ref mut cost) = run.summary.total_cost_usd {
+                        if let Some(ti) = audit.judge_tokens_in {
+                            if let Some(pricing) = agentcarousel_core::lookup_pricing(&judge_model)
+                            {
+                                *cost += pricing.prompt_usd_per_token * ti as f64
+                                    + pricing.completion_usd_per_token
+                                        * audit.judge_tokens_out.unwrap_or(0) as f64;
+                            }
+                        }
+                    }
+                    run.prompt_audit = Some(audit);
+                }
+                Err(err) => {
+                    if let Some(ref pb) = audit_spinner {
+                        pb.finish_and_clear();
+                    }
+                    if globals.verbose > 0 {
+                        eprintln!("prompt audit skipped: {err}");
+                    }
+                }
+            }
+        }
+    } else if judge_enabled && failed_cases > 1 {
+        // Hint when there are multiple failures but not enough to auto-trigger the audit.
+        if !globals.quiet && format != "json" && !globals.json {
+            let bin = cli_invocation_name();
+            let id = run.id.0.as_str();
+            println!(
+                "{} {} case(s) failed; run `{} audit run {}` to analyse the prompt",
+                style("hint:").yellow().bold(),
+                failed_cases,
+                bin,
+                id
+            );
+        }
+    }
+
     let _ = persist_run(&run);
 
     let format_str = format.as_str();
@@ -442,4 +513,22 @@ fn resolve_generator_key(provider: GeneratorProvider) -> Option<String> {
         .key_candidates()
         .iter()
         .find_map(|key| std::env::var(key).ok())
+}
+
+/// Look for a `prompt.md` adjacent to the fixture paths and return its contents.
+fn load_prompt_md(paths: &[PathBuf]) -> Option<String> {
+    for path in paths {
+        let dir = if path.is_dir() {
+            path.clone()
+        } else {
+            path.parent()?.to_path_buf()
+        };
+        let candidate = dir.join("prompt.md");
+        if let Ok(text) = std::fs::read_to_string(&candidate) {
+            if !text.trim().is_empty() {
+                return Some(text);
+            }
+        }
+    }
+    None
 }

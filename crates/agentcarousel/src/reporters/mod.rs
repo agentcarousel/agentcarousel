@@ -12,7 +12,7 @@ pub use history::{
     fetch_run, find_previous_run, find_tagged_run, list_full_runs, list_runs, persist_run, tag_run,
     HistoryError, RunListing,
 };
-pub use terminal::{print_terminal, print_terminal_summary};
+pub use terminal::{print_audit, print_terminal, print_terminal_summary};
 
 pub fn print_json(run: &agentcarousel_core::Run) {
     let payload = serde_json::to_string_pretty(run).unwrap_or_else(|_| "{}".to_string());

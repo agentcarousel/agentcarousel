@@ -1,4 +1,7 @@
-use agentcarousel_core::{fmt_tokens, CaseResult, CaseStatus, EvalScores, Role, RubricScore, Run};
+use agentcarousel_core::{
+    fmt_cost, fmt_tokens, lookup_pricing, CaseResult, CaseStatus, EvalScores,
+    PromptAuditFailureMode, Role, RubricScore, Run,
+};
 use console::style;
 use serde_json::Value;
 
@@ -53,6 +56,14 @@ fn case_duration_secs(case: &CaseResult) -> f64 {
         0.1
     } else {
         ms
+    }
+}
+
+fn fmt_duration(ms: f64) -> String {
+    if ms < 1000.0 {
+        format!("{:.0}ms", ms)
+    } else {
+        format!("{:.1}s", ms / 1000.0)
     }
 }
 
@@ -127,13 +138,17 @@ fn humanize_error_line(err: &str) -> String {
 
 fn print_eval_failure_rationale(scores: &EvalScores) {
     match scores.evaluator.as_str() {
-        "judge" => print_judge_failure_summary(scores),
+        "judge" => {
+            print_section_header_yellow("JUDGE");
+            print_judge_failure_summary(scores);
+        }
         "rules" => {
             for rs in &scores.rubric_scores {
                 if rs.rubric_id == "rules" {
                     if let Some(rat) = rs.rationale.as_ref() {
+                        print_section_header_yellow("RULES");
                         println!(
-                            "             › rules: {}",
+                            "        {}",
                             style(truncate_human(rat, HUMAN_ERROR_MAX)).dim()
                         );
                     }
@@ -141,7 +156,7 @@ fn print_eval_failure_rationale(scores: &EvalScores) {
                 }
             }
         }
-        "golden" | "process" => {
+        evaluator => {
             let mut failing: Vec<&RubricScore> = scores
                 .rubric_scores
                 .iter()
@@ -152,50 +167,32 @@ fn print_eval_failure_rationale(scores: &EvalScores) {
                     .partial_cmp(&b.score)
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
-            for rs in failing.iter().take(3) {
+            if !failing.is_empty() || !scores.passed {
+                print_section_header_yellow(&evaluator.to_uppercase());
+            }
+            for rs in failing.iter().take(4) {
                 let snippet = rs
                     .rationale
                     .as_deref()
                     .filter(|s| !s.trim().is_empty())
                     .unwrap_or("no rationale");
+                let score_str = format!("{:.2}", rs.score);
+                let score_styled = if rs.score < 0.5 {
+                    style(score_str).red().bold()
+                } else {
+                    style(score_str).yellow().bold()
+                };
                 println!(
-                    "             › {} · {} ({:.2}): {}",
-                    scores.evaluator,
-                    rs.rubric_id,
-                    rs.score,
+                    "        {} ({})  {}",
+                    style(format!("· {}", rs.rubric_id)).bold(),
+                    score_styled,
                     style(snippet).dim()
                 );
             }
             if failing.is_empty() && !scores.passed {
                 println!(
-                    "             › {}: {}",
-                    scores.evaluator,
-                    style("below effectiveness threshold or aggregate failure").dim()
-                );
-            }
-        }
-        other => {
-            let mut low: Vec<&RubricScore> = scores
-                .rubric_scores
-                .iter()
-                .filter(|r| r.score < 1.0 - f32::EPSILON)
-                .collect();
-            low.sort_by(|a, b| {
-                a.score
-                    .partial_cmp(&b.score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            for rs in low.iter().take(2) {
-                let snippet = rs.rationale.as_deref().unwrap_or_default();
-                if snippet.trim().is_empty() {
-                    continue;
-                }
-                println!(
-                    "             › {} · {} ({:.2}): {}",
-                    other,
-                    rs.rubric_id,
-                    rs.score,
-                    style(snippet).dim()
+                    "        {}",
+                    style("· below effectiveness threshold or aggregate failure").dim()
                 );
             }
         }
@@ -214,7 +211,7 @@ fn judge_overall_summary_line(judge_rationale: Option<&str>) -> Option<String> {
 
 fn print_judge_failure_summary(scores: &EvalScores) {
     if let Some(line) = judge_overall_summary_line(scores.judge_rationale.as_deref()) {
-        println!("             › judge: {}", style(line).dim());
+        println!("        {}", line);
     }
 
     let mut low: Vec<&RubricScore> = scores
@@ -228,24 +225,33 @@ fn print_judge_failure_summary(scores: &EvalScores) {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    for rs in low.iter().take(2) {
+    if !low.is_empty() {
+        println!();
+    }
+    for rs in low.iter().take(4) {
         let snippet = rs
             .rationale
             .as_deref()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or("no rationale");
+        let score_str = format!("{:.2}", rs.score);
+        let score_styled = if rs.score < 0.5 {
+            style(score_str).red().bold()
+        } else {
+            style(score_str).yellow().bold()
+        };
         println!(
-            "             › judge · {} ({:.2}): {}",
-            rs.rubric_id,
-            rs.score,
+            "        {} ({})  {}",
+            style(format!("· {}", rs.rubric_id)).bold(),
+            score_styled,
             style(snippet).dim()
         );
     }
 
     if low.is_empty() && !scores.passed {
         println!(
-            "             › judge: {}",
-            style("scores did not meet pass threshold").dim()
+            "        {}",
+            style("· scores did not meet pass threshold").dim()
         );
     }
 }
@@ -259,6 +265,29 @@ fn role_label(role: &Role) -> &'static str {
     }
 }
 
+fn print_section_header_dim(label: &str) {
+    let rule = "─".repeat(54_usize.saturating_sub(label.len()));
+    println!("        {} {}", style(label).bold(), style(rule).dim());
+}
+
+fn print_section_header_cyan(label: &str) {
+    let rule = "─".repeat(54_usize.saturating_sub(label.len()));
+    println!(
+        "        {} {}",
+        style(label).bold().cyan(),
+        style(rule).dim()
+    );
+}
+
+fn print_section_header_yellow(label: &str) {
+    let rule = "─".repeat(54_usize.saturating_sub(label.len()));
+    println!(
+        "        {} {}",
+        style(label).bold().yellow(),
+        style(rule).dim()
+    );
+}
+
 fn print_case_details(case: &CaseResult) {
     let is_judged = case
         .eval_scores
@@ -267,12 +296,12 @@ fn print_case_details(case: &CaseResult) {
         .unwrap_or(false);
 
     if is_judged && !case.input.is_empty() {
-        println!("               {}", style("input:").dim().bold());
+        print_section_header_dim("INPUT");
         for msg in &case.input {
             let role = role_label(&msg.role);
-            println!("               [{}]", style(role).bold());
+            println!("        {}", style(format!("[{}]", role)).bold());
             for line in msg.content.trim().lines() {
-                println!("                 {}", style(line).dim());
+                println!("          {}", style(line).dim());
             }
         }
         println!();
@@ -281,10 +310,11 @@ fn print_case_details(case: &CaseResult) {
     if let Some(out) = case.trace.final_output.as_ref() {
         let out = out.trim();
         if !out.is_empty() {
-            println!("               {}", style("agent replied:").dim().bold());
+            print_section_header_cyan("AGENT REPLIED");
             for line in out.lines() {
-                println!("                 {}", style(line).dim());
+                println!("          {}", line);
             }
+            println!();
         }
     }
 
@@ -296,10 +326,11 @@ fn print_case_details(case: &CaseResult) {
         if !err.is_empty() {
             let human = humanize_error_line(err);
             if !human.is_empty() {
-                println!("             › {}", style(human).dim());
+                println!("        {}", style(human).bold().red());
             }
         }
     }
+    println!();
 }
 
 /// Full terminal report (eval/test/report): banner, case rows, summary, run id hint.
@@ -373,7 +404,7 @@ pub fn print_terminal(run: &Run, verbose: bool) {
         if case.metrics.runs_attempted > 1 {
             let mut stat_parts = Vec::new();
             if let Some(stddev) = case.metrics.latency_stddev_ms {
-                stat_parts.push(format!("latency σ={stddev:.0}ms"));
+                stat_parts.push(format!("latency σ={}", fmt_duration(stddev)));
             }
             if let Some(stddev) = case.metrics.effectiveness_stddev {
                 stat_parts.push(format!("effectiveness σ={stddev:.3}"));
@@ -391,29 +422,46 @@ pub fn print_terminal(run: &Run, verbose: bool) {
     let passed = s.passed;
     let total = s.total;
     let failed = s.failed;
+    let errored = s.errored;
 
     println!();
     println!("  ──────────────────────────────────────────────────────");
-    if failed > 0 {
-        let fw = if failed == 1 { "failure" } else { "failures" };
+    if failed > 0 || errored > 0 {
+        let mut parts: Vec<String> = Vec::new();
+        if failed > 0 {
+            let fw = if failed == 1 { "failure" } else { "failures" };
+            parts.push(format!("{} {}", failed, fw));
+        }
+        if errored > 0 {
+            let ew = if errored == 1 { "error" } else { "errors" };
+            parts.push(format!("{} {}", errored, ew));
+        }
         println!(
-            "  Results   {} / {} passed   {} {}",
-            passed, total, failed, fw
+            "  Results   {} / {} passed   {}",
+            passed,
+            total,
+            parts.join("   ")
         );
     } else {
         println!("  Results   {} / {} passed", passed, total);
     }
 
     if let Some(mean) = s.mean_effectiveness_score {
-        println!("  Effectiveness score: {:.2} / 1.00", mean);
+        println!(
+            "  Effectiveness score: {:.2} / 1.00  {}",
+            mean,
+            style("(weighted mean of rubric pass rates; 1.0 = perfect)").dim()
+        );
     }
 
     if let (Some(p50), Some(p95), Some(p99)) =
         (s.latency_p50_ms, s.latency_p95_ms, s.latency_p99_ms)
     {
         println!(
-            "  Latency p50/p95/p99  {:.0}ms / {:.0}ms / {:.0}ms",
-            p50, p95, p99
+            "  Latency p50/p95/p99  {} / {} / {}",
+            fmt_duration(p50),
+            fmt_duration(p95),
+            fmt_duration(p99)
         );
     }
 
@@ -468,6 +516,118 @@ pub fn print_terminal(run: &Run, verbose: bool) {
     println!("  run id: {}", id);
     println!("  Next:   {} report show {}", bin, id);
     println!("  ──────────────────────────────────────────────────────");
+
+    if let Some(audit) = &run.prompt_audit {
+        print_prompt_audit(audit, run.summary.judge_model.as_deref());
+    }
+}
+
+/// Print the prompt-audit section standalone (used by `agc audit`).
+pub fn print_audit(run: &Run) {
+    if let Some(audit) = &run.prompt_audit {
+        let skill = header_skill_label(run);
+        println!(
+            "Prompt audit  ·  {}  ·  run {}",
+            skill,
+            &run.id.0[..run.id.0.len().min(12)]
+        );
+        println!();
+        print_prompt_audit(audit, run.summary.judge_model.as_deref());
+    } else {
+        println!("no prompt audit attached to this run");
+    }
+}
+
+fn print_prompt_audit(audit: &agentcarousel_core::PromptAudit, judge_model: Option<&str>) {
+    println!();
+    println!(
+        "  {}",
+        style("── Prompt Audit ──────────────────────────────────────").dim()
+    );
+
+    let mode_label = match audit.failure_mode {
+        PromptAuditFailureMode::Prompt => style("prompt").yellow().bold(),
+        PromptAuditFailureMode::Model => style("model").red().bold(),
+        PromptAuditFailureMode::Fixture => style("fixture").cyan().bold(),
+        PromptAuditFailureMode::Mixed => style("mixed").yellow().bold(),
+    };
+    println!(
+        "  Failure mode: {}  (confidence {:.0}%)",
+        mode_label,
+        audit.confidence * 100.0
+    );
+    println!();
+
+    if !audit.findings.is_empty() {
+        println!("  {}", style("Findings:").bold());
+        for f in &audit.findings {
+            println!("    • {}", f.pattern);
+            println!("      {}", style(&f.root_cause).dim());
+        }
+        println!();
+    }
+
+    if !audit.suggested_fixes.is_empty() {
+        println!("  {}", style("Suggested fixes:").bold());
+        for (i, fix) in audit.suggested_fixes.iter().enumerate() {
+            println!("    {}. {}", i + 1, fix);
+        }
+        println!();
+    }
+
+    println!(
+        "  {}",
+        style(wrap_to_width(&audit.overall_rationale, 72)).dim()
+    );
+
+    if audit.judge_tokens_in.is_some() || audit.judge_tokens_out.is_some() {
+        let audit_cost: Option<f64> = judge_model.and_then(|m| {
+            let pricing = lookup_pricing(m)?;
+            let ti = audit.judge_tokens_in?;
+            let to = audit.judge_tokens_out.unwrap_or(0);
+            Some(
+                pricing.prompt_usd_per_token * ti as f64
+                    + pricing.completion_usd_per_token * to as f64,
+            )
+        });
+        let cost_str = if let Some(c) = audit_cost {
+            format!("  cost {}", style(fmt_cost(Some(c))).yellow().bold())
+        } else {
+            String::new()
+        };
+        println!(
+            "  Audit tokens  {} in · {} out{}",
+            style(fmt_tokens(audit.judge_tokens_in)).cyan(),
+            style(fmt_tokens(audit.judge_tokens_out)).cyan(),
+            cost_str,
+        );
+    }
+
+    println!(
+        "  {}",
+        style("──────────────────────────────────────────────────────").dim()
+    );
+}
+
+fn wrap_to_width(text: &str, width: usize) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in words {
+        if current.is_empty() {
+            current.push_str(word);
+        } else if current.len() + 1 + word.len() <= width {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(current.clone());
+            current = word.to_string();
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines.join("\n  ")
 }
 
 /// Quiet / condensed output: banner + pass-rate line + optional provider errors.

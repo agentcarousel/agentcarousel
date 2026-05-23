@@ -1,6 +1,7 @@
 use agentcarousel_core::{
     compute_backoff_ms, is_retryable_status, judge_key_candidates, judge_provider_from_model,
-    retry_policy, Case, CaseResult, EvalScores, JudgeProvider, RubricScore,
+    retry_policy, AuditFinding, Case, CaseResult, CaseStatus, EvalScores, JudgeProvider,
+    PromptAudit, PromptAuditFailureMode, RubricScore,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -331,11 +332,16 @@ fn call_gemini_blocking(
             continue;
         }
 
-        return Err(EvaluatorError::JudgeFailed(format!(
+        let msg = format!(
             "gemini judge request failed ({}): {}",
             status,
             redact_api_key(body.trim())
-        )));
+        );
+        return Err(if retryable {
+            EvaluatorError::JudgeFailed(msg)
+        } else {
+            EvaluatorError::JudgeUnavailable(msg)
+        });
     }
 
     Err(EvaluatorError::JudgeFailed(
@@ -414,11 +420,16 @@ fn call_openai_blocking(
             std::thread::sleep(Duration::from_millis(backoff_ms));
             continue;
         }
-        return Err(EvaluatorError::JudgeFailed(format!(
+        let msg = format!(
             "openai judge request failed ({}): {}",
             status,
             redact_api_key(body.trim())
-        )));
+        );
+        return Err(if retryable {
+            EvaluatorError::JudgeFailed(msg)
+        } else {
+            EvaluatorError::JudgeUnavailable(msg)
+        });
     }
     Err(EvaluatorError::JudgeFailed(
         "openai judge request failed after retries".to_string(),
@@ -443,8 +454,9 @@ fn call_anthropic_blocking(
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
     let Some(max_tokens) = max_tokens else {
-        return Err(EvaluatorError::JudgeFailed(
-            "anthropic judge requires max_tokens".to_string(),
+        return Err(EvaluatorError::JudgeUnavailable(
+            "anthropic judge requires max_tokens — set judge.max_tokens in agentcarousel.toml"
+                .to_string(),
         ));
     };
     let request = AnthropicRequest {
@@ -493,11 +505,16 @@ fn call_anthropic_blocking(
             std::thread::sleep(Duration::from_millis(backoff_ms));
             continue;
         }
-        return Err(EvaluatorError::JudgeFailed(format!(
+        let msg = format!(
             "anthropic judge request failed ({}): {}",
             status,
             redact_api_key(body.trim())
-        )));
+        );
+        return Err(if retryable {
+            EvaluatorError::JudgeFailed(msg)
+        } else {
+            EvaluatorError::JudgeUnavailable(msg)
+        });
     }
     Err(EvaluatorError::JudgeFailed(
         "anthropic judge request failed after retries".to_string(),
@@ -580,11 +597,16 @@ fn call_openrouter_blocking(
             std::thread::sleep(Duration::from_millis(backoff_ms));
             continue;
         }
-        return Err(EvaluatorError::JudgeFailed(format!(
+        let msg = format!(
             "openrouter judge request failed ({}): {}",
             status,
             redact_api_key(body.trim())
-        )));
+        );
+        return Err(if retryable {
+            EvaluatorError::JudgeFailed(msg)
+        } else {
+            EvaluatorError::JudgeUnavailable(msg)
+        });
     }
     Err(EvaluatorError::JudgeFailed(
         "openrouter judge request failed after retries".to_string(),
@@ -675,4 +697,252 @@ fn looks_truncated_json(value: &str) -> bool {
     let trimmed = value.trim();
     let has_json_start = trimmed.starts_with('{') || trimmed.starts_with("```");
     has_json_start && trimmed.contains("\"rubric\"") && !trimmed.ends_with('}')
+}
+
+fn looks_truncated_audit_json(value: &str) -> bool {
+    let trimmed = value.trim();
+    let has_json_start = trimmed.starts_with('{') || trimmed.starts_with("```");
+    has_json_start
+        && (trimmed.contains("\"failure_mode\"")
+            || trimmed.contains("\"findings\"")
+            || trimmed.contains("\"suggested_fixes\""))
+        && !trimmed.ends_with('}')
+}
+
+// ── Prompt audit ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct PromptAuditResponse {
+    failure_mode: String,
+    #[serde(default)]
+    confidence: f32,
+    #[serde(default)]
+    findings: Vec<RawAuditFinding>,
+    #[serde(default)]
+    suggested_fixes: Vec<String>,
+    /// Actual prompt text to paste for each fix — parallel to suggested_fixes.
+    #[serde(default)]
+    suggested_implementations: Vec<String>,
+    #[serde(default)]
+    overall_rationale: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawAuditFinding {
+    pattern: String,
+    #[serde(default)]
+    affected_case_count: u32,
+    #[serde(default)]
+    root_cause: String,
+}
+
+/// Run the second-pass prompt-audit judge after all cases are scored.
+///
+/// Takes the fixture's `prompt.md` text and the completed case results. Calls the same
+/// judge model to classify the root cause of failures (prompt design, model capability,
+/// fixture miscalibration, or mixed) and produce actionable fix suggestions.
+///
+/// Only runs when there are failed/errored cases; returns `None` silently when there is
+/// nothing to diagnose.
+pub fn run_prompt_audit(
+    prompt_text: &str,
+    results: &[CaseResult],
+    model: &str,
+    max_tokens: Option<u32>,
+) -> Result<PromptAudit, EvaluatorError> {
+    let provider = judge_provider_from_model(model);
+    let judge_key = resolve_judge_key(provider)?;
+
+    let system_prompt = build_prompt_audit_system_prompt();
+    let user_prompt = build_prompt_audit_user_prompt(prompt_text, results);
+
+    let call_judge = |sp: String, up: String, max_tok: Option<u32>| match provider {
+        JudgeProvider::Gemini => call_gemini_text(&judge_key, model, max_tok, sp, up),
+        JudgeProvider::OpenAi => call_openai_text(&judge_key, model, max_tok, sp, up),
+        JudgeProvider::Anthropic => call_anthropic_text(&judge_key, model, max_tok, sp, up),
+        JudgeProvider::OpenRouter => call_openrouter_text(&judge_key, model, max_tok, sp, up),
+    };
+
+    let first_out = call_judge(system_prompt.clone(), user_prompt.clone(), max_tokens)?;
+    let mut tokens_in = first_out.tokens_in;
+    let mut tokens_out = first_out.tokens_out;
+
+    let parsed = match parse_prompt_audit_response(&first_out.text) {
+        Ok(p) => p,
+        Err(first_err) => {
+            if !looks_truncated_audit_json(&first_out.text) {
+                return Err(first_err);
+            }
+            // The response was cut off mid-JSON — retry with a larger budget and tighter
+            // field-length constraints so the model fits the whole object in the window.
+            let retry_tokens = Some(max_tokens.unwrap_or(2048).saturating_mul(4).min(8192));
+            let retry_system = format!(
+                "{}\nReturn minified JSON only. Keep finding.pattern <=40 chars, each suggested_fix <=60 chars, overall_rationale <=80 chars.",
+                system_prompt
+            );
+            let retry_out = call_judge(retry_system, user_prompt, retry_tokens)?;
+            tokens_in = add_opt(tokens_in, retry_out.tokens_in);
+            tokens_out = add_opt(tokens_out, retry_out.tokens_out);
+            parse_prompt_audit_response(&retry_out.text)?
+        }
+    };
+
+    let failure_mode = match parsed.failure_mode.to_lowercase().as_str() {
+        "model" => PromptAuditFailureMode::Model,
+        "fixture" => PromptAuditFailureMode::Fixture,
+        "mixed" => PromptAuditFailureMode::Mixed,
+        _ => PromptAuditFailureMode::Prompt,
+    };
+
+    Ok(PromptAudit {
+        failure_mode,
+        confidence: parsed.confidence.clamp(0.0, 1.0),
+        findings: parsed
+            .findings
+            .into_iter()
+            .map(|f| AuditFinding {
+                pattern: f.pattern,
+                affected_case_count: f.affected_case_count,
+                root_cause: f.root_cause,
+            })
+            .collect(),
+        suggested_fixes: parsed.suggested_fixes,
+        suggested_implementations: parsed
+            .suggested_implementations
+            .into_iter()
+            .filter(|s| !s.trim().is_empty())
+            .collect(),
+        overall_rationale: parsed.overall_rationale,
+        judge_tokens_in: tokens_in,
+        judge_tokens_out: tokens_out,
+    })
+}
+
+fn build_prompt_audit_system_prompt() -> String {
+    r#"You are a prompt-audit judge. You have just seen the results of an agentcarousel eval run.
+Your job is to diagnose WHY cases are failing and WHERE the fix should be applied.
+
+Classify the primary failure mode as exactly one of:
+- "prompt"  — the agent prompt is underspecified, ambiguous, or missing worked examples;
+              fixing the prompt is likely to fix the failures without a model upgrade.
+- "model"   — the model lacks the capability to follow these instructions regardless of
+              how the prompt is worded; a stronger model is needed.
+- "fixture" — the rubric thresholds or test expectations are miscalibrated; the model
+              output is actually reasonable but the evaluator is scoring it too harshly.
+- "mixed"   — two or more of the above are materially contributing.
+
+Evidence patterns for "prompt":
+- The same structural element (citation format, section header, required block) is absent
+  across ALL or nearly ALL cases → model never saw a concrete example of what to produce.
+- Failures concentrate on format/structure requirements rather than factual accuracy.
+- The model's output is clinically/factually reasonable but ignores the specified format.
+
+Evidence patterns for "model":
+- The model attempts the required format but produces garbled or partially correct output.
+- Failures involve semantic reasoning (e.g. identifying an escalation trigger), not structure.
+- Prompt already contains worked examples and the model still fails.
+
+Evidence patterns for "fixture":
+- The model output looks reasonable to a domain expert but is being scored 0.
+- Rubric items are overly specific (exact string matches on phrasing that can vary).
+- Effectiveness thresholds are set higher than the task's inherent ambiguity warrants.
+
+Return JSON only:
+{
+  "failure_mode": "prompt" | "model" | "fixture" | "mixed",
+  "confidence": <0.0–1.0>,
+  "findings": [
+    {
+      "pattern": "<what failed, how many cases, e.g. '7/7 cases missing [T####] citations'>",
+      "affected_case_count": <integer>,
+      "root_cause": "<why it failed — one concrete sentence>"
+    }
+  ],
+  "suggested_fixes": ["<one-line title for fix 1>", "<one-line title for fix 2>"],
+  "suggested_implementations": [
+    "<complete markdown block to paste into prompt.md for fix 1 — full worked example, restructured section, or new rule, ready to use as-is>",
+    "<complete markdown block to paste into prompt.md for fix 2>"
+  ],
+  "overall_rationale": "<2–3 sentence synthesis>"
+}
+
+Rules for suggested_implementations:
+- One element per fix, parallel to suggested_fixes (same index).
+- Write the actual prompt text the author should add or replace — not a description of what to do.
+- Include a worked input/output example when the fix is about adding an example.
+- Include the restructured section text when the fix is about reorganising a section.
+- Keep each implementation under 800 characters; use \n for line breaks inside the JSON string.
+- If a fix applies only to model or fixture issues (not prompt text), write an empty string "".
+Keep each finding.pattern under 80 chars. Keep each suggested_fix title under 100 chars. JSON only — no prose outside the JSON object."#.to_string()
+}
+
+fn build_prompt_audit_user_prompt(prompt_text: &str, results: &[CaseResult]) -> String {
+    let mut out = String::new();
+
+    out.push_str("## Agent prompt (prompt.md)\n\n```\n");
+    out.push_str(prompt_text.trim());
+    out.push_str("\n```\n\n");
+
+    out.push_str("## Case results\n\n");
+    for r in results {
+        let status = match r.status {
+            CaseStatus::Passed => "PASS",
+            CaseStatus::Failed => "FAIL",
+            CaseStatus::Error => "ERROR",
+            CaseStatus::TimedOut => "TIMEOUT",
+            CaseStatus::Skipped => "SKIP",
+            CaseStatus::Flaky => "FLAKY",
+        };
+        out.push_str(&format!("### {} [{}]\n", r.case_id.0, status));
+
+        if let Some(scores) = &r.eval_scores {
+            if let Some(rationale) = &scores.judge_rationale {
+                out.push_str(&format!("Judge: {}\n", rationale.trim()));
+            }
+            for rs in &scores.rubric_scores {
+                if rs.score < 1.0 {
+                    if let Some(rat) = &rs.rationale {
+                        out.push_str(&format!(
+                            "  · {} ({:.2}): {}\n",
+                            rs.rubric_id,
+                            rs.score,
+                            rat.trim()
+                        ));
+                    }
+                }
+            }
+        }
+
+        if let Some(output) = &r.trace.final_output {
+            let preview: String = output.chars().take(300).collect();
+            out.push_str(&format!("Output preview: {}\n", preview.trim()));
+            if output.chars().count() > 300 {
+                out.push_str("...[truncated]\n");
+            }
+        }
+        out.push('\n');
+    }
+
+    out
+}
+
+fn parse_prompt_audit_response(raw_text: &str) -> Result<PromptAuditResponse, EvaluatorError> {
+    let trimmed = raw_text.trim();
+    if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(trimmed) {
+        return Ok(parsed);
+    }
+    if let Some(fenced) = extract_fenced_json(trimmed) {
+        if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(&fenced) {
+            return Ok(parsed);
+        }
+    }
+    let start = raw_text.find('{');
+    let end = raw_text.rfind('}');
+    if let (Some(s), Some(e)) = (start, end) {
+        return serde_json::from_str::<PromptAuditResponse>(&raw_text[s..=e])
+            .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()));
+    }
+    Err(EvaluatorError::InvalidOutput(
+        "prompt audit response was not valid JSON".to_string(),
+    ))
 }
