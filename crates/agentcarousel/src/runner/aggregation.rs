@@ -199,7 +199,7 @@ fn extract_http_status(error: &str) -> Option<u16> {
     for code in candidates {
         let code_str = code.to_string();
         let patterns = [
-            format!("({code_str}"),
+            format!("({code_str})"),
             format!(" {code_str} "),
             format!(" {code_str}:"),
             format!(" {code_str})"),
@@ -320,7 +320,7 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
     let mut tokens_in_sum = 0u64;
     let mut tokens_out_sum = 0u64;
     let mut has_tokens = false;
-    let mut judged_case_count = 0u32;
+    let mut token_case_count = 0u64;
     let mut judge_tokens_in_sum = 0u64;
     let mut judge_tokens_out_sum = 0u64;
     let mut has_judge_tokens = false;
@@ -334,10 +334,10 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
         if let Some(scores) = result.eval_scores.as_ref() {
             effectiveness_sum += scores.effectiveness_score;
             effectiveness_count += 1;
-            judged_case_count += 1;
         }
         if result.metrics.tokens_in.is_some() || result.metrics.tokens_out.is_some() {
             has_tokens = true;
+            token_case_count += 1;
             tokens_in_sum += result.metrics.tokens_in.unwrap_or(0);
             tokens_out_sum += result.metrics.tokens_out.unwrap_or(0);
         }
@@ -356,7 +356,7 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
         }
     }
 
-    let effective_total = total.saturating_sub(flaky);
+    let effective_total = total.saturating_sub(flaky).saturating_sub(skipped);
     let pass_rate = if effective_total == 0 {
         0.0
     } else {
@@ -379,11 +379,7 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
     };
 
     let (tokens_in, tokens_out, mean_tokens_per_judged_case) = if has_tokens {
-        let mean = if judged_case_count > 0 {
-            Some((tokens_in_sum + tokens_out_sum) / judged_case_count as u64)
-        } else {
-            None
-        };
+        let mean = (tokens_in_sum + tokens_out_sum).checked_div(token_case_count);
         (Some(tokens_in_sum), Some(tokens_out_sum), mean)
     } else {
         (None, None, None)

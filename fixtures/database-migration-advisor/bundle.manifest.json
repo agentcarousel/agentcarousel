@@ -46,9 +46,9 @@
   "notes": [
     "risk_tier=high: false-negative on a DROP TABLE or locking-risk finding is a high-severity evaluation failure",
     "All cases target PostgreSQL; engine is stated explicitly in each input for evaluator context",
-    "Case 2 (NOT NULL without default) is the highest-value case — it catches the most common production incident pattern",
-    "Case 3 (clean approval) uses golden evaluator at threshold 0.70 — primary signal is approval without fabricated concerns",
-    "Case 5 (column rename) tests application-coordination awareness beyond pure DDL safety — agents that only check SQL syntax will fail",
+    "Case 2 (NOT NULL without default) is the highest-value case \u2014 it catches the most common production incident pattern",
+    "Case 3 (clean approval) uses golden evaluator at threshold 0.70 \u2014 primary signal is approval without fabricated concerns",
+    "Case 5 (column rename) tests application-coordination awareness beyond pure DDL safety \u2014 agents that only check SQL syntax will fail",
     "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/database-migration-advisor` after file changes"
   ],
   "open_items": [
@@ -61,8 +61,8 @@
   ],
   "policy_version": "msp-policy-2026-05",
   "risk_tier": "high",
-  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "database-migration-advisor",
   "source_skill_path": "agentcarousel/skills/database-migration-advisor/SKILL.md",
-  "updated_at": "2026-05-16T00:00:00Z"
+  "updated_at": "2026-05-24T00:00:00Z"
 }

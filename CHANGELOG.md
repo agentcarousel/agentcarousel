@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.5 - May 2026
+
+### Features
+
+- **`agc metrics`** — Compliance-focused performance report with four cross-domain metrics: Prompt Injection Resistance (0–100 score aggregated across adversarial cases), Behavioral Stability (drift in effectiveness score over run history), Test Coverage Completeness (percentage of a built-in 7-category risk taxonomy covered by the fixture suite), and Score Accuracy (Expected Calibration Error measuring how well automated judge scores predict actual pass/fail outcomes). Output is designed to be readable by auditors and procurement reviewers, not just engineers. `--json` emits a structured envelope for evidence bundles.
+
+  `--skill` and `--fixture` flags are linked: `--skill <name>` auto-discovers `fixtures/<name>/` (errors with exit 5 if the directory is missing); `--fixture <path>` reads the skill name from the fixture's `skill_or_agent` field and scopes run history automatically. Providing both with conflicting skill names produces a structured `skill_fixture_mismatch` error (exit 2).
+
+- **`agc export` metrics embedding** — Every evidence tarball now includes two additional artifacts: `metrics.json` (machine-readable compliance metrics, SHA-256 fingerprinted in `MANIFEST.json`) and a Compliance Metrics table injected into `report.md` between the certification scope and the case list. Metrics are scoped to the exported run's `skill_or_agent` across the most recent 20 runs of that skill's history.
+- **Git commit provenance** — Run records now capture `git_sha` at eval time: `GITHUB_SHA` is preferred in CI; falls back to `git rev-parse HEAD` for local runs. The SHA surfaces in `environment_fingerprint.json` inside every evidence tarball, giving auditors a traceable link from the archived results back to the exact code revision that produced them.
+
+### Removals
+
+- **`agc stats` removed** — Replaced by `agc metrics`. The old command showed pass-rate trends and case flakiness; the new command covers the same territory as part of a broader compliance-oriented report that also ships in every evidence bundle.
+
+---
+
 ## 0.6.4 - May 2026
 
 ### Features

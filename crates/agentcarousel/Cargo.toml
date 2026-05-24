@@ -26,6 +26,7 @@ path = "src/bin/agc.rs"
 [features]
 default = []
 dashboard = ["dep:axum", "dep:tokio-stream"]
+experimental = ["dep:rand", "dep:rand_distr"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
@@ -54,6 +55,8 @@ toml = "1.1.2"
 ulid = "1"
 walkdir = "2"
 notify = "6"
+rand = { version = "0.8", optional = true }
+rand_distr = { version = "0.4", optional = true }
 
 # Bundled SQLite on Linux and Windows so CI/release binaries link without host libsqlite
 # (cross-compile to aarch64-gnu has no arm64 libsqlite; musl already needed bundled).

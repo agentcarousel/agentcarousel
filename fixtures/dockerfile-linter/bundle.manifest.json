@@ -44,8 +44,8 @@
   ],
   "notes": [
     "risk_tier=high: false-negative on a secret-in-ENV or root-user finding is a high-severity evaluation failure",
-    "Case 3 (clean-approval) uses golden evaluator at threshold 0.70 — primary signal is approval without fabricated findings",
-    "Case 5 (multi-stage-secret-leak) tests intermediate layer awareness — agents that only check the final stage will fail",
+    "Case 3 (clean-approval) uses golden evaluator at threshold 0.70 \u2014 primary signal is approval without fabricated findings",
+    "Case 5 (multi-stage-secret-leak) tests intermediate layer awareness \u2014 agents that only check the final stage will fail",
     "All credential-like strings (DATABASE_URL, AWS_SECRET_ACCESS_KEY) in fixtures are synthetic and do not represent real secrets",
     "Hashes: re-run `agentcarousel bundle pack fixtures/bundles/dockerfile-linter` after file changes"
   ],
@@ -58,8 +58,8 @@
   ],
   "policy_version": "msp-policy-2026-05",
   "risk_tier": "high",
-  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "dockerfile-linter",
   "source_skill_path": "agentcarousel/skills/dockerfile-linter/SKILL.md",
-  "updated_at": "2026-05-16T00:00:00Z"
+  "updated_at": "2026-05-24T00:00:00Z"
 }

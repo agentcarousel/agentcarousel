@@ -285,7 +285,12 @@ pub async fn api_get_reviews(
     State(st): State<Arc<AppState>>,
     Query(q): Query<GetReviewsQuery>,
 ) -> impl IntoResponse {
-    let text = std::fs::read_to_string(&st.reviews_path).unwrap_or_default();
+    let reviews_path = st.reviews_path.clone();
+    let text = tokio::task::spawn_blocking(move || {
+        std::fs::read_to_string(&reviews_path).unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
     let reviews: Vec<ReviewAnnotation> = text
         .lines()
         .filter_map(|l| serde_json::from_str(l).ok())

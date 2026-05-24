@@ -10,17 +10,19 @@ mod dashboard;
 mod doctor;
 mod eval;
 mod exit_codes;
+#[cfg(all(feature = "experimental", has_experimental))]
+mod experimental;
 mod export;
 mod fixture_utils;
 mod generate;
 mod init;
 mod lint;
+mod metrics;
 mod output;
 mod promote;
 mod publish;
 mod registry_client;
 mod report;
-mod stats;
 mod test;
 mod trust_check;
 mod update;
@@ -51,7 +53,7 @@ fn styles() -> Styles {
 #[derive(Debug, Parser)]
 #[command(
     name = "agentcarousel",
-    version,
+    version = concat!(env!("CARGO_PKG_VERSION"), env!("AGENTCAROUSEL_VERSION_SUFFIX")),
     about = "Validate, test, and evaluate AI agents and skills using YAML fixtures.",
     styles = styles(),
 )]
@@ -116,8 +118,8 @@ enum Command {
     Doctor(doctor::DoctorArgs),
     /// Check fixture quality beyond schema: smoke coverage, rubric weights, descriptions.
     Lint(lint::LintArgs),
-    /// Show historical pass-rate trends, flakiness, and latency from run history.
-    Stats(stats::StatsArgs),
+    /// Compute compliance metrics: injection resistance, behavioral drift, test coverage, and score calibration.
+    Metrics(metrics::MetricsArgs),
     /// Compare two eval runs and gate on regressions.
     Compare(compare::CompareArgs),
     /// Run tests automatically whenever you save a fixture file.
@@ -128,6 +130,9 @@ enum Command {
     Ab(ab::AbArgs),
     /// Re-run the prompt-audit analysis against a previously-saved run.
     Audit(audit::AuditArgs),
+    /// [experimental] Adaptive model selection using Thompson Sampling bandit.
+    #[cfg(all(feature = "experimental", has_experimental))]
+    Bandit(experimental::bandit_cli::BanditArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -168,7 +173,7 @@ fn help_template() -> String {
     let init = c("init");
     let audit = c("audit");
     let report = c("report");
-    let stats = c("stats");
+    let metrics = c("metrics");
     let compare = c("compare");
     let export = c("export");
     let bundle = c("bundle");
@@ -210,7 +215,7 @@ Usage:
 {re}:
   {report}       List recent runs or show details of a run (to compare runs: agc compare)
   {audit}        Prompt-audit a saved run (audit run) or apply its suggestions (audit suggest)
-  {stats}        Pass-rate trends, case flakiness, and latency across run history
+  {metrics}      Compliance metrics: injection resistance, drift, coverage, calibration
   {compare}      Compare two eval runs and gate on regressions (CI regression gate)
   {export}       Export run(s) as signed evidence tarballs
 
@@ -260,7 +265,6 @@ pub fn run() -> i32 {
         Command::Promote(a) => a.config.as_deref(),
         Command::TrustCheck(a) => a.config.as_deref(),
         Command::Doctor(a) => a.config.as_deref(),
-        Command::Stats(a) => a.config.as_deref(),
         Command::Watch(a) => a.config.as_deref(),
         Command::Ab(a) => a.config.as_deref(),
         Command::Audit(a) => a.config.as_deref(),
@@ -312,24 +316,29 @@ pub fn run() -> i32 {
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Lint(args) => lint::run_lint(args, &globals),
-        Command::Stats(args) => stats::run_stats(args, &config, &globals),
+        Command::Metrics(args) => metrics::run_metrics(args, &globals),
         Command::Compare(args) => compare::run_compare(args, &globals),
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
         Command::Audit(args) => audit::run_audit_command(args, &config, &globals),
+        #[cfg(all(feature = "experimental", has_experimental))]
+        Command::Bandit(args) => experimental::bandit_cli::run_bandit(args, &config, &globals),
     }
 }
 
 fn print_compact_help() {
     println!(
         "agc {} — AI agent behavioral testing\n",
-        env!("CARGO_PKG_VERSION")
+        concat!(
+            env!("CARGO_PKG_VERSION"),
+            env!("AGENTCAROUSEL_VERSION_SUFFIX")
+        )
     );
     #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit stats export bundle publish trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit stats export bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");
