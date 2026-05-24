@@ -110,8 +110,6 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         summary,
         fixture_bundle_id,
         fixture_bundle_version,
-        carousel_iteration: None,
-        policy_version: None,
         skill_or_agent,
         runner_offline: config.offline,
         runner_mock_strict: config.mock_strict,
@@ -136,7 +134,8 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
     let cases = orchestration::flatten_cases(fixtures);
     let judge_cache = Arc::new(Mutex::new(orchestration::BoundedCache::new(1000)));
 
-    let results = orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
+    let results =
+        orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
 
@@ -153,8 +152,6 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         summary,
         fixture_bundle_id,
         fixture_bundle_version,
-        carousel_iteration: None,
-        policy_version: None,
         skill_or_agent,
         runner_offline: config.runner.offline,
         runner_mock_strict: config.runner.mock_strict,

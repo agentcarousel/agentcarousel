@@ -175,10 +175,6 @@ pub struct Run {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixture_bundle_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub carousel_iteration: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub policy_version: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skill_or_agent: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runner_offline: bool,
@@ -461,4 +457,3 @@ pub enum DataHandling {
     NoPii,
     PiiReviewed,
 }
-

@@ -15,7 +15,7 @@ use super::GlobalOptions;
 /// agc stats reads your local run history and summarizes how each case has behaved over time — whether pass rates are trending up or down, which cases are flaky, and where latency is highest. Use --skill to focus on a specific agent or skill area.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc stats                                # summary across all recent runs\n  agc stats --skill customer-support       # focus on a specific skill\n  agc stats --limit 100 --format json      # last 100 runs in JSON"
+    after_help = "Examples:\n  agc stats                                # summary across all recent runs\n  agc stats --skill customer-support       # focus on a specific skill\n  agc stats --limit 100                    # last 100 runs\n  agc stats --json                         # machine-readable output"
 )]
 pub struct StatsArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).

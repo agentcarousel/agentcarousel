@@ -29,7 +29,7 @@ enum EvalExecutionMode {
 #[derive(Debug, Parser)]
 #[command(
     long_about = "Run your test suite and see which cases pass, fail, or need attention.\n\nBy default, agc eval uses pre-recorded mock responses so no API key is required and runs finish in seconds. Switch to --execution-mode live to call a real model API. Add --judge to score outputs with an LLM judge on top of rule-based checks.\n\nToken counts and USD cost are shown automatically after each run when data is available.",
-    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --format json   # CI-friendly JSON output\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
+    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --json          # CI-friendly JSON output\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
 )]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -421,7 +421,7 @@ fn print_postflight_hints(run: &agentcarousel_core::Run) {
     }
     if run.summary.errored > 0 || run.summary.timed_out > 0 {
         println!(
-            "{} use --verbose for diagnostics or --format json to inspect outputs",
+            "{} use --verbose for diagnostics or --json to inspect outputs",
             style("hint:").yellow(),
         );
     }

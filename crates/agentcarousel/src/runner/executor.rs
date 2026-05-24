@@ -7,12 +7,16 @@ use agentcarousel_core::{
 use agentcarousel_evaluators::evaluate_case;
 use agentcarousel_fixtures::MockEngine;
 use serde_json::json;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Instant;
 
 /// Run a single [`crate::Case`]: replay tool expectations against [`crate::MockEngine`], apply
 /// output rules when enabled, and return a [`crate::CaseResult`].
 pub async fn run_case(case: Case, mock_engine: &MockEngine, config: &RunnerConfig) -> CaseResult {
-    run_case_inner(case, mock_engine, config, true).await
+    run_case_inner(case, mock_engine, config, true, None).await
 }
 
 /// Same execution path as [`run_case`](crate::run_case) but skips embedded rules scoring
@@ -21,8 +25,16 @@ pub async fn run_case_unscored(
     case: Case,
     mock_engine: &MockEngine,
     config: &RunnerConfig,
+    generator_unavailable: Option<Arc<AtomicBool>>,
 ) -> CaseResult {
-    run_case_inner(case, mock_engine, config, false).await
+    run_case_inner(
+        case,
+        mock_engine,
+        config,
+        false,
+        generator_unavailable.as_deref(),
+    )
+    .await
 }
 
 async fn run_case_inner(
@@ -30,6 +42,7 @@ async fn run_case_inner(
     mock_engine: &MockEngine,
     config: &RunnerConfig,
     evaluate_rules: bool,
+    generator_unavailable: Option<&AtomicBool>,
 ) -> CaseResult {
     let start = Instant::now();
     let input = case.input.messages.clone();
@@ -147,6 +160,16 @@ async fn run_case_inner(
                             metrics.tokens_out = generated.tokens_out;
                         }
                         Err(err) => {
+                            if err.is_fatal() {
+                                if let Some(flag) = generator_unavailable {
+                                    if !flag.swap(true, Ordering::AcqRel) {
+                                        eprintln!(
+                                            "warn: generator permanently unavailable ({}), skipping remaining cases",
+                                            err
+                                        );
+                                    }
+                                }
+                            }
                             status = CaseStatus::Error;
                             error = Some(format!("live generation failed: {err}"));
                         }

@@ -88,8 +88,6 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
         },
         fixture_bundle_id: Some(bundle_id.to_string()),
         fixture_bundle_version: Some(bundle_version.to_string()),
-        carousel_iteration: None,
-        policy_version: None,
         skill_or_agent: Some("example-skill".to_string()),
         runner_offline: false,
         runner_mock_strict: false,
