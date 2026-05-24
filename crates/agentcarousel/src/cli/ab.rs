@@ -5,7 +5,7 @@ use agentcarousel_core::{
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{Parser, ValueEnum};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
@@ -80,12 +80,6 @@ pub struct AbArgs {
     /// Effectiveness delta threshold for declaring a winner (default: 0.05).
     #[arg(long, default_value_t = 0.05_f32)]
     threshold: f32,
-    /// Show a variant-level progress bar on stderr (default: on when stderr is a TTY).
-    #[arg(short = 'P', long, action = ArgAction::SetTrue)]
-    progress: bool,
-    /// Never show the A/B progress bar.
-    #[arg(short = 'N', long, action = ArgAction::SetTrue)]
-    no_progress: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -211,10 +205,7 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
         );
     }
 
-    let show_progress = !args.no_progress
-        && !globals.quiet
-        && !globals.json
-        && (args.progress || stderr().is_terminal());
+    let show_progress = !globals.quiet && !globals.json && stderr().is_terminal();
 
     let fixtures_a = inject_system_prompt(fixtures.clone(), &prompt_a);
     let fixtures_b = inject_system_prompt(fixtures, &prompt_b);
@@ -355,7 +346,6 @@ fn build_eval_config(
     let runner = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        run_timeout_secs: None,
         offline: if matches!(generation_mode, GenerationMode::Live) {
             false
         } else {
@@ -386,9 +376,6 @@ fn build_eval_config(
         judge_model: Some(judge_model.to_string()),
         judge_max_tokens: config.judge.max_tokens,
         effectiveness_threshold: config.eval.effectiveness_threshold,
-        certification_context: None,
-        carousel_iteration: None,
-        policy_version: None,
         progress: false,
     }
 }

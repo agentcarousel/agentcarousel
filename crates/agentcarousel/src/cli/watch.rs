@@ -191,7 +191,6 @@ fn run_once(
     let runner_config = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        run_timeout_secs: None,
         offline: config.runner.offline,
         mock_dir: config.runner.mock_dir.clone(),
         generation_mode: GenerationMode::MockOnly,
@@ -217,9 +216,6 @@ fn run_once(
             judge_model: None,
             judge_max_tokens: None,
             effectiveness_threshold: config.eval.effectiveness_threshold,
-            certification_context: None,
-            carousel_iteration: None,
-            policy_version: None,
             progress: false,
         };
         runtime.block_on(run_eval(fixtures, eval_config))

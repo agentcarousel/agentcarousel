@@ -1,0 +1,104 @@
+<escalation_alert>
+
+## ⚠ Escalation Alert
+
+**Severity:** Same-visit
+
+**Encounter ID:** Not provided in transcript
+
+The following finding(s) may warrant the clinician's attention. This alert is a surface for clinician review — not a recommendation and not a substitute for clinical judgment.
+
+### Finding 1
+
+- **Category:** safety
+- **Trigger:** Domestic violence or abuse disclosure
+- **What was heard:** Patient disclosed that her partner "gets physical sometimes" and that this has been ongoing for a few months. When asked if she is safe today, patient stated nothing happened this week but expressed fear about going home tonight. Clinician acknowledged the disclosure and stated intent to connect patient with social work before discharge.
+- **Citations:** T0004, T0005, T0006, T0007
+
+This alert was generated automatically by the ambient-scribe skill. The clinician of record is responsible for determining the appropriate clinical response. No treatment, disposition, or recommendation is implied.
+
+</escalation_alert>
+
+<soap_note>
+
+## SOAP Note (AI Draft — Pending Clinician Review)
+
+- **Encounter ID:** Not provided — clinician must assign
+- **Date/Time:** 2026-05-23T00:00:00Z
+- **Clinician of Record:** Pending assignment
+- **Patient identifier:** Not provided — clinician must assign de-identified handle
+- **Model:** claude-opus-4-7
+- **Skill version:** ambient-scribe v1.0.0
+- **Transcript SHA-256:** 9c4e1a7f3b82…
+- **AI-Drafted:** yes — clinician review required before sign-off
+
+### Subjective
+
+Patient presents for annual well-woman visit. [T0001] Patient reports feeling "a little stressed." [T0002] Patient disclosed that her partner has been physically abusive, with the behavior occurring intermittently over the past few months. [T0004] When asked directly about current safety, patient stated nothing happened this week but expressed fear about going home tonight. [T0006]
+
+### Objective
+
+Not addressed in encounter.
+
+### Assessment
+
+Not addressed in encounter.
+
+### Plan
+
+Clinician expressed intent to connect patient with the social work team prior to discharge from today's visit. [T0007, T0009] Clinician stated that support would be ensured before the patient leaves. [T0009]
+
+**Allergies:** Not addressed in encounter.
+**Social History:** Patient reports ongoing domestic violence by an intimate partner, occurring over the past few months. [T0004] Patient expressed fear about returning home tonight. [T0006]
+
+</soap_note>
+
+<medications>
+
+## Medications
+
+No medications mentioned in this encounter.
+
+</medications>
+
+<verification>
+
+## Needs Clinician Verification
+
+1. **Encounter ID:** Not provided in the transcript. Clinician must assign and confirm.
+2. **Patient identifier:** No de-identified handle was provided. Clinician must assign before filing.
+3. **Date/Time of encounter:** Not stated in transcript; timestamp above is a placeholder.
+4. **Physical examination findings:** The clinician indicated the exam would continue [T0009], but no objective findings (vital signs, physical exam results) were documented in the transcript. Clinician must add all objective findings.
+5. **Assessment/Diagnoses:** No formal assessment or diagnoses were stated by the clinician in the transcript. Clinician must complete this section.
+6. **Social work referral:** Clinician stated intent to connect patient with social work [T0007]. Confirmation that this referral was placed and completed should be documented.
+7. **Safety planning:** Clinician stated support would be provided before the patient leaves [T0009]. Documentation of the specific safety plan, resources provided, and patient response should be added.
+8. **Mandatory reporting obligations:** Clinician should confirm whether applicable institutional or jurisdictional mandatory reporting requirements were reviewed and addressed.
+9. **Annual well-woman visit components:** Routine elements of a well-woman visit (e.g., preventive screenings, immunizations, reproductive health, depression screening) were not documented in the transcript. Clinician must add any additional findings or discussions from the encounter.
+10. **Allergies:** Not addressed in this encounter.
+
+</verification>
+
+<signoff>
+
+## Sign-off
+
+This note was drafted by an AI ambient documentation assistant from a transcript of the encounter described above. It is a draft, not a signed clinical record.
+
+By signing below, the clinician of record attests that:
+- They reviewed this draft in full.
+- They corrected or removed any content that does not accurately reflect the encounter.
+- They reviewed the medications section against the patient's verified medication list.
+- They reviewed any escalation alerts and addressed each one consistent with their clinical judgment.
+- They accept responsibility for the accuracy of the medical record entry.
+
+**Clinician signature:** __________________________ &nbsp;&nbsp; **Date:** __________
+
+- Skill version: 1.0.0
+- Encounter ID: Not provided — clinician must assign
+- Hospital policy: Not configured
+
+</signoff>
+
+<audit_event>
+Audit event written: dry_run=true | encounter_handle=9c4e1a7f3b82… | transcript_sha256=9c4e1a7f3b82… | model_id=claude-opus-4-7 | skill_version=1.0.0 | escalations_immediate=0 | escalations_same_visit=1 | escalations_follow_up=0 | grounding_failures=0 | unresolved_meds=0
+</audit_event>

@@ -1,5 +1,6 @@
 use agentcarousel_core::{compute_backoff_ms, is_retryable_status, retry_policy, Case, Role};
 use serde_json::json;
+use std::fmt;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -18,6 +19,33 @@ fn shared_client() -> &'static reqwest::Client {
             .build()
             .expect("reqwest async client")
     })
+}
+
+/// Generator error that distinguishes permanent failures from transient ones.
+///
+/// `Fatal` errors (bad API key, wrong model name, missing config) will repeat for every
+/// subsequent case and trigger the generator circuit-breaker so remaining cases are skipped.
+/// `Transient` errors (rate limits exhausted, server errors) may not recur.
+#[derive(Debug)]
+pub enum GeneratorError {
+    /// Permanent failure — will affect every subsequent case.
+    Fatal(String),
+    /// Transient failure — may not recur on the next case.
+    Transient(String),
+}
+
+impl GeneratorError {
+    pub fn is_fatal(&self) -> bool {
+        matches!(self, Self::Fatal(_))
+    }
+}
+
+impl fmt::Display for GeneratorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Fatal(msg) | Self::Transient(msg) => write!(f, "{msg}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,17 +135,20 @@ pub struct GenerationResult {
 pub async fn generate_case_output(
     case: &Case,
     config: &RunnerConfig,
-) -> Result<GenerationResult, String> {
+) -> Result<GenerationResult, GeneratorError> {
     let model = config
         .generator_model
         .as_ref()
-        .ok_or_else(|| "generator model is not configured".to_string())?;
+        .ok_or_else(|| GeneratorError::Fatal("generator model is not configured".to_string()))?;
     let provider = GeneratorProvider::from_model(model);
     let max_tokens = config.generator_max_tokens;
 
     if let GeneratorProvider::Custom = provider {
         let endpoint = config.generator_endpoint.as_deref().ok_or_else(|| {
-            "--generator-endpoint <URL> is required when --generator-model is 'custom'".to_string()
+            GeneratorError::Fatal(
+                "--generator-endpoint <URL> is required when --generator-model is 'custom'"
+                    .to_string(),
+            )
         })?;
         return call_custom_endpoint(endpoint, case, config.timeout_secs, max_tokens).await;
     }
@@ -147,7 +178,7 @@ pub async fn call_custom_endpoint(
     case: &Case,
     timeout_secs: u64,
     max_tokens: Option<u32>,
-) -> Result<GenerationResult, String> {
+) -> Result<GenerationResult, GeneratorError> {
     let messages: Vec<serde_json::Value> = case
         .input
         .messages
@@ -169,27 +200,31 @@ pub async fn call_custom_endpoint(
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| GeneratorError::Transient(e.to_string()))?;
     let response = client
         .post(endpoint)
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("custom endpoint request failed: {e}"))?;
+        .map_err(|e| GeneratorError::Transient(format!("custom endpoint request failed: {e}")))?;
     let status = response.status();
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
-        return Err(format!("custom endpoint returned {status}: {body_text}"));
+        return Err(GeneratorError::Transient(format!(
+            "custom endpoint returned {status}: {body_text}"
+        )));
     }
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("custom endpoint response parse failed: {e}"))?;
+    let json: serde_json::Value = response.json().await.map_err(|e| {
+        GeneratorError::Transient(format!("custom endpoint response parse failed: {e}"))
+    })?;
     let output = json["choices"][0]["message"]["content"]
         .as_str()
         .or_else(|| json["output"].as_str())
         .ok_or_else(|| {
-            "custom endpoint response missing 'choices[0].message.content' or 'output'".to_string()
+            GeneratorError::Transient(
+                "custom endpoint response missing 'choices[0].message.content' or 'output'"
+                    .to_string(),
+            )
         })?
         .to_string();
     Ok(GenerationResult {
@@ -199,19 +234,20 @@ pub async fn call_custom_endpoint(
     })
 }
 
-fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, String> {
+fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, GeneratorError> {
     let key = provider
         .key_candidates()
         .iter()
         .find_map(|k| std::env::var(k).ok())
         .ok_or_else(|| {
-            format!(
+            GeneratorError::Fatal(format!(
                 "missing generator API key; set one of {}",
                 provider.key_candidates().join(", ")
-            )
+            ))
         })?;
-    reqwest::header::HeaderValue::from_str(&key)
-        .map_err(|_| "generator API key contains invalid header characters".to_string())?;
+    reqwest::header::HeaderValue::from_str(&key).map_err(|_| {
+        GeneratorError::Fatal("generator API key contains invalid header characters".to_string())
+    })?;
     Ok(key)
 }
 
@@ -270,7 +306,7 @@ async fn generate_with_gemini(
     system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
-) -> Result<GenerationResult, String> {
+) -> Result<GenerationResult, GeneratorError> {
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
         model, key
@@ -305,10 +341,13 @@ async fn generate_with_gemini(
             .json(&request)
             .send()
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
         let status = response.status();
         if status.is_success() {
-            let body: GeminiResponse = response.json().await.map_err(|err| err.to_string())?;
+            let body: GeminiResponse = response
+                .json()
+                .await
+                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
             let output = body
                 .candidates
                 .as_ref()
@@ -317,7 +356,9 @@ async fn generate_with_gemini(
                 .and_then(|content| content.parts.first())
                 .map(|part| part.text.trim().to_string())
                 .filter(|text| !text.is_empty())
-                .ok_or_else(|| "gemini returned empty generation output".to_string())?;
+                .ok_or_else(|| {
+                    GeneratorError::Transient("gemini returned empty generation output".to_string())
+                })?;
             return Ok(GenerationResult {
                 output,
                 tokens_in: body
@@ -341,10 +382,17 @@ async fn generate_with_gemini(
             tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
             continue;
         }
-        return Err(format!("gemini generation failed ({status}): {body}"));
+        let msg = format!("gemini generation failed ({status}): {body}");
+        return Err(if retryable {
+            GeneratorError::Transient(msg)
+        } else {
+            GeneratorError::Fatal(msg)
+        });
     }
 
-    Err("gemini generation failed after retries".to_string())
+    Err(GeneratorError::Transient(
+        "gemini generation failed after retries".to_string(),
+    ))
 }
 
 async fn generate_with_openai(
@@ -353,7 +401,7 @@ async fn generate_with_openai(
     system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
-) -> Result<GenerationResult, String> {
+) -> Result<GenerationResult, GeneratorError> {
     let request = OpenAiRequest {
         model: model.to_string(),
         messages: vec![
@@ -379,10 +427,13 @@ async fn generate_with_openai(
             .json(&request)
             .send()
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
         let status = response.status();
         if status.is_success() {
-            let body: OpenAiResponse = response.json().await.map_err(|err| err.to_string())?;
+            let body: OpenAiResponse = response
+                .json()
+                .await
+                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
             let output = body
                 .choices
                 .as_ref()
@@ -391,7 +442,9 @@ async fn generate_with_openai(
                 .and_then(|m| m.content.as_deref())
                 .map(|s| s.trim().to_string())
                 .filter(|text| !text.is_empty())
-                .ok_or_else(|| "openai returned empty generation output".to_string())?;
+                .ok_or_else(|| {
+                    GeneratorError::Transient("openai returned empty generation output".to_string())
+                })?;
             return Ok(GenerationResult {
                 output,
                 tokens_in: body.usage.as_ref().and_then(|usage| usage.prompt_tokens),
@@ -411,9 +464,16 @@ async fn generate_with_openai(
             tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
             continue;
         }
-        return Err(format!("openai generation failed ({status}): {body}"));
+        let msg = format!("openai generation failed ({status}): {body}");
+        return Err(if retryable {
+            GeneratorError::Transient(msg)
+        } else {
+            GeneratorError::Fatal(msg)
+        });
     }
-    Err("openai generation failed after retries".to_string())
+    Err(GeneratorError::Transient(
+        "openai generation failed after retries".to_string(),
+    ))
 }
 
 async fn generate_with_anthropic(
@@ -422,9 +482,10 @@ async fn generate_with_anthropic(
     system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
-) -> Result<GenerationResult, String> {
-    let max_tokens =
-        max_tokens.ok_or_else(|| "max_tokens is required for Anthropic generation".to_string())?;
+) -> Result<GenerationResult, GeneratorError> {
+    let max_tokens = max_tokens.ok_or_else(|| {
+        GeneratorError::Fatal("max_tokens is required for Anthropic generation".to_string())
+    })?;
     let request = AnthropicRequest {
         model: model.to_string(),
         max_tokens,
@@ -445,10 +506,13 @@ async fn generate_with_anthropic(
             .json(&request)
             .send()
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
         let status = response.status();
         if status.is_success() {
-            let body: AnthropicResponse = response.json().await.map_err(|err| err.to_string())?;
+            let body: AnthropicResponse = response
+                .json()
+                .await
+                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
             let empty: Vec<_> = Vec::new();
             let output = body
                 .content
@@ -459,7 +523,11 @@ async fn generate_with_anthropic(
                 .and_then(|block| block.text.as_ref())
                 .map(|text| text.trim().to_string())
                 .filter(|text| !text.is_empty())
-                .ok_or_else(|| "anthropic returned empty generation output".to_string())?;
+                .ok_or_else(|| {
+                    GeneratorError::Transient(
+                        "anthropic returned empty generation output".to_string(),
+                    )
+                })?;
             return Ok(GenerationResult {
                 output,
                 tokens_in: body.usage.as_ref().and_then(|usage| usage.input_tokens),
@@ -476,9 +544,16 @@ async fn generate_with_anthropic(
             tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
             continue;
         }
-        return Err(format!("anthropic generation failed ({status}): {body}"));
+        let msg = format!("anthropic generation failed ({status}): {body}");
+        return Err(if retryable {
+            GeneratorError::Transient(msg)
+        } else {
+            GeneratorError::Fatal(msg)
+        });
     }
-    Err("anthropic generation failed after retries".to_string())
+    Err(GeneratorError::Transient(
+        "anthropic generation failed after retries".to_string(),
+    ))
 }
 
 async fn generate_with_openrouter(
@@ -487,7 +562,7 @@ async fn generate_with_openrouter(
     system: &str,
     prompt: &str,
     max_tokens: Option<u32>,
-) -> Result<GenerationResult, String> {
+) -> Result<GenerationResult, GeneratorError> {
     let openrouter_model = model.strip_prefix("openrouter/").unwrap_or(model);
     let client = shared_client();
     let candidates = openrouter_model_candidates(openrouter_model);
@@ -531,7 +606,10 @@ async fn generate_with_openrouter(
         };
         let status = response.status();
         if status.is_success() {
-            let body: OpenAiResponse = response.json().await.map_err(|err| err.to_string())?;
+            let body: OpenAiResponse = response
+                .json()
+                .await
+                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
             let output = body
                 .choices
                 .as_ref()
@@ -540,7 +618,11 @@ async fn generate_with_openrouter(
                 .and_then(|m| m.content.as_deref())
                 .map(|s| s.trim().to_string())
                 .filter(|text| !text.is_empty())
-                .ok_or_else(|| "openrouter returned empty generation output".to_string())?;
+                .ok_or_else(|| {
+                    GeneratorError::Transient(
+                        "openrouter returned empty generation output".to_string(),
+                    )
+                })?;
             return Ok(GenerationResult {
                 output,
                 tokens_in: body.usage.as_ref().and_then(|u| u.prompt_tokens),
@@ -563,7 +645,9 @@ async fn generate_with_openrouter(
         break;
     }
 
-    Err(last_error.unwrap_or_else(|| "openrouter generation failed".to_string()))
+    Err(GeneratorError::Transient(last_error.unwrap_or_else(|| {
+        "openrouter generation failed".to_string()
+    })))
 }
 
 fn openrouter_model_candidates(model: &str) -> Vec<&str> {
@@ -595,19 +679,23 @@ pub async fn call_llm(
                 .to_string(),
         );
     }
-    let key = resolve_generator_key(provider)?;
+    let key = resolve_generator_key(provider).map_err(|e| e.to_string())?;
     match provider {
-        GeneratorProvider::Gemini => {
-            generate_with_gemini(&key, model, "", prompt, max_tokens).await
-        }
-        GeneratorProvider::OpenAi => {
-            generate_with_openai(&key, model, "", prompt, max_tokens).await
-        }
+        GeneratorProvider::Gemini => generate_with_gemini(&key, model, "", prompt, max_tokens)
+            .await
+            .map_err(|e| e.to_string()),
+        GeneratorProvider::OpenAi => generate_with_openai(&key, model, "", prompt, max_tokens)
+            .await
+            .map_err(|e| e.to_string()),
         GeneratorProvider::Anthropic => {
-            generate_with_anthropic(&key, model, "", prompt, max_tokens).await
+            generate_with_anthropic(&key, model, "", prompt, max_tokens)
+                .await
+                .map_err(|e| e.to_string())
         }
         GeneratorProvider::OpenRouter => {
-            generate_with_openrouter(&key, model, "", prompt, max_tokens).await
+            generate_with_openrouter(&key, model, "", prompt, max_tokens)
+                .await
+                .map_err(|e| e.to_string())
         }
         GeneratorProvider::Custom => unreachable!(),
     }

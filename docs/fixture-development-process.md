@@ -240,10 +240,10 @@ agentcarousel test fixtures/my-skill/cases.yaml --offline --mock-dir mocks/ --mo
 # If rubric changed:
 agentcarousel eval fixtures/my-skill/cases.yaml --offline --runs 3
 # Check for regressions against previous run:
-agentcarousel report diff <PREV_RUN_ID> $(agentcarousel report list --limit 1 --json | jq -r '.[0].id')
+agc compare <PREV_RUN_ID>
 ```
 
-If `report diff` exits 1, investigate which metric degraded before merging.
+If `agc compare` exits 1, investigate which metric degraded before merging.
 
 ---
 

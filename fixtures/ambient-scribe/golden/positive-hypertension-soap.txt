@@ -1,0 +1,86 @@
+<escalation_alert>
+No escalation triggers identified in this encounter.
+</escalation_alert>
+
+<soap_note>
+
+## SOAP Note (AI Draft — Pending Clinician Review)
+
+- **Encounter ID:** Not provided
+- **Date/Time:** 2025-01-31T00:00:00Z
+- **Clinician of Record:** Pending assignment
+- **Patient identifier:** Not provided
+- **Model:** claude-opus-4-5
+- **Skill version:** ambient-scribe v1.0.0
+- **Transcript SHA-256:** a7c3f1d92e84…
+- **AI-Drafted:** yes — clinician review required before sign-off
+
+### Subjective
+
+Patient presents for blood pressure follow-up. [T0001] Patient reports a dry cough that has been ongoing for approximately three weeks, occurring mostly at night. [T0002, T0004] Patient denies shortness of breath, chest pain, or wheezing. [T0005, T0006] Patient denies headaches or vision changes. [T0007, T0008] Allergy to penicillin — patient reports breaking out in hives with prior exposure. [T0009, T0010]
+
+### Objective
+
+BP 138/86 mmHg in clinic today. [T0007]
+
+### Assessment
+
+Clinician's impression: dry cough attributed to ACE-inhibitor (lisinopril) side effect. [T0011]
+
+### Plan
+
+Lisinopril to be discontinued and switched to losartan 50 mg PO once daily. [T0011] Basic metabolic panel ordered to establish baseline given losartan's potential effects on potassium and kidney function. [T0013] Follow up in four weeks. [T0013] If cough resolves and blood pressure is better controlled, plan to continue losartan. [T0013]
+
+**Allergies:** Penicillin — hives. [T0009, T0010]
+
+**Social History:** Not addressed in encounter.
+
+</soap_note>
+
+<medications>
+
+## Medications
+
+| Medication | Dose | Route | Frequency | Status | Citations | Notes |
+|---|---|---|---|---|---|---|
+| lisinopril | not specified | not specified | not specified | discontinued | T0011 | Discontinued due to ACE-inhibitor cough; dose not stated in transcript |
+| losartan | 50 mg | PO | once daily | started | T0011 | Initiated as replacement for lisinopril |
+
+</medications>
+
+<verification>
+
+## Needs Clinician Verification
+
+1. **Lisinopril dose:** The transcript does not specify the dose of lisinopril the patient was taking prior to this visit. Clinician should confirm and document the discontinued dose for the medication record.
+2. **Losartan route:** Route of administration (PO) was inferred from context; not explicitly stated in transcript. Clinician should confirm.
+3. **Current medication list:** Only lisinopril is mentioned as a current medication. Clinician should verify the patient's complete medication list.
+4. **Basic metabolic panel:** Order was verbally stated [T0013] but not confirmed as placed in the system. Clinician should verify order entry.
+5. **Social history:** Not addressed in this encounter; may warrant documentation if relevant to blood pressure management.
+
+</verification>
+
+<signoff>
+
+## Sign-off
+
+This note was drafted by an AI ambient documentation assistant from a transcript of the encounter described above. It is a draft, not a signed clinical record.
+
+By signing below, the clinician of record attests that:
+- They reviewed this draft in full.
+- They corrected or removed any content that does not accurately reflect the encounter.
+- They reviewed the medications section against the patient's verified medication list.
+- They reviewed any escalation alerts and addressed each one consistent with their clinical judgment.
+- They accept responsibility for the accuracy of the medical record entry.
+
+**Clinician signature:** __________________________ &nbsp;&nbsp; **Date:** __________
+
+- Skill version: 1.0.0
+- Encounter ID: Not provided
+- Hospital policy: Not configured
+
+</signoff>
+
+<audit_event>
+Audit event written: dry_run=true | encounter_handle=a7c3f1d92e84… | transcript_sha256=a7c3f1d92e84… | model_id=claude-opus-4-5 | skill_version=1.0.0 | escalations_immediate=0 | escalations_same_visit=0 | escalations_follow_up=0 | grounding_failures=0 | unresolved_meds=0
+</audit_event>

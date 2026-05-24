@@ -19,7 +19,7 @@ const AGENTCAROUSEL_IGNORE: &str = ".agentcarousel-ignore";
 /// agc validate reads your YAML fixture files and reports any structural problems — missing required fields, invalid values, unknown keys. Nothing is executed, so no API keys are needed. Run it in CI to catch broken fixtures before they block a test run.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc validate fixtures/customer-support/cases.yaml    # validate a single file\n  agc validate fixtures/                               # validate a whole directory\n  agc validate --strict                                # treat warnings as errors\n  agc validate --format sarif > results.sarif          # GitHub code-scanning format\n\nExit codes:\n  0  all fixtures are valid\n  2  one or more validation errors found\n  4  runtime error (disk, schema load failure)\n  5  fixture path not found"
+    after_help = "Examples:\n  agc validate fixtures/customer-support/cases.yaml    # validate a single file\n  agc validate fixtures/                               # validate a whole directory\n  agc validate --strict                                # treat warnings as errors\n\nExit codes:\n  0  all fixtures are valid\n  2  one or more validation errors found\n  4  runtime error (disk, schema load failure)\n  5  fixture path not found"
 )]
 pub struct ValidateArgs {
     /// Files or dirs to scan (default: `.` if omitted).
@@ -34,9 +34,6 @@ pub struct ValidateArgs {
     /// Fail on warnings too (also if validate.strict in config).
     #[arg(short = 'x', long)]
     strict: bool,
-    /// `human`, `json`, or `sarif` (default from config). `sarif` emits SARIF 2.1.0 for GitHub code scanning.
-    #[arg(short = 'f', long)]
-    format: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -89,7 +86,7 @@ pub fn run_validate(args: ValidateArgs, config: &ResolvedConfig, globals: &Globa
     let mut reports = Vec::new();
     let mut has_errors = false;
     let mut has_warnings = false;
-    let format = resolve_format(args.format.as_deref(), &config.output.format);
+    let format = config.output.format.clone();
     let strict = args.strict || config.validate.strict;
     let inputs = fixture_scan_roots(&args.paths);
     let ignore_file = Path::new(AGENTCAROUSEL_IGNORE)
@@ -130,9 +127,7 @@ pub fn run_validate(args: ValidateArgs, config: &ResolvedConfig, globals: &Globa
                     "validation_failed",
                     "One or more fixtures failed validation.",
                 )
-                .with_suggestions(vec![
-                    "Run 'agc validate --format human' for detailed output.".to_string(),
-                ]),
+                .with_suggestions(vec!["Run 'agc validate' for detailed output.".to_string()]),
             )
             .print();
             return ExitCode::ValidationFailed.as_i32();
@@ -370,10 +365,6 @@ fn summarize_atf(rows: &[AtfFileHints]) -> AtfSummary {
     summary
 }
 
-fn resolve_format(value: Option<&str>, default_format: &str) -> String {
-    value.unwrap_or(default_format).to_string()
-}
-
 fn ensure_safe_relative(label: &str, value: &str) -> Result<(), String> {
     let path = Path::new(value);
     if path.is_absolute() {
@@ -400,53 +391,8 @@ fn output_reports(format: &str, reports: &[ValidationReport], atf_summary: &AtfS
                 serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{\"messages\":[]}".into());
             println!("{payload}");
         }
-        "sarif" => {
-            let payload = build_sarif(reports);
-            println!("{payload}");
-        }
         _ => print_validate_terminal(reports, atf_summary),
     }
-}
-
-fn build_sarif(reports: &[ValidationReport]) -> String {
-    let tool = serde_json::json!({
-        "driver": {
-            "name": "agentcarousel",
-            "version": env!("CARGO_PKG_VERSION"),
-            "informationUri": "https://agentcarousel.com",
-            "rules": [
-                { "id": "AC001", "name": "SchemaError", "shortDescription": { "text": "Fixture schema validation error" } },
-                { "id": "AC002", "name": "SchemaWarning", "shortDescription": { "text": "Fixture schema validation warning" } }
-            ]
-        }
-    });
-
-    let mut results: Vec<serde_json::Value> = Vec::new();
-    for report in reports {
-        for error in &report.errors {
-            results.push(serde_json::json!({
-                "ruleId": "AC001",
-                "level": "error",
-                "message": { "text": error },
-                "locations": [{ "physicalLocation": { "artifactLocation": { "uri": report.path } } }]
-            }));
-        }
-        for warning in &report.warnings {
-            results.push(serde_json::json!({
-                "ruleId": "AC002",
-                "level": "warning",
-                "message": { "text": warning },
-                "locations": [{ "physicalLocation": { "artifactLocation": { "uri": report.path } } }]
-            }));
-        }
-    }
-
-    let sarif = serde_json::json!({
-        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-        "version": "2.1.0",
-        "runs": [{ "tool": tool, "results": results }]
-    });
-    serde_json::to_string_pretty(&sarif).unwrap_or_else(|_| "{}".into())
 }
 
 /// Carousel-style terminal output aligned with eval/test (`print_terminal`).

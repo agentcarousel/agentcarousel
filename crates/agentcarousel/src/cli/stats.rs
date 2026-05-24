@@ -15,7 +15,7 @@ use super::GlobalOptions;
 /// agc stats reads your local run history and summarizes how each case has behaved over time — whether pass rates are trending up or down, which cases are flaky, and where latency is highest. Use --skill to focus on a specific agent or skill area.
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc stats                                # summary across all recent runs\n  agc stats --skill customer-support       # focus on a specific skill\n  agc stats --limit 100 --format json      # last 100 runs in JSON"
+    after_help = "Examples:\n  agc stats                                # summary across all recent runs\n  agc stats --skill customer-support       # focus on a specific skill\n  agc stats --limit 100                    # last 100 runs\n  agc stats --json                         # machine-readable output"
 )]
 pub struct StatsArgs {
     /// Config file path (default: agentcarousel.toml in the current directory).
@@ -27,9 +27,6 @@ pub struct StatsArgs {
     /// Maximum number of runs to analyse (newest first).
     #[arg(long, default_value_t = 50)]
     limit: usize,
-    /// Output format: `human` (default) or `json`.
-    #[arg(long, default_value = "human")]
-    format: String,
 }
 
 pub fn run_stats(args: StatsArgs, _config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -87,7 +84,7 @@ pub fn run_stats(args: StatsArgs, _config: &ResolvedConfig, globals: &GlobalOpti
 
     let latency_trend: Vec<f64> = runs.iter().map(|r| r.summary.mean_latency_ms).collect();
 
-    if globals.json || args.format == "json" {
+    if globals.json {
         let data = serde_json::json!({
             "run_count": runs.len(),
             "pass_rate_trend": pass_rates.iter().map(|(t, r)| serde_json::json!({"at": t, "pass_rate": r})).collect::<Vec<_>>(),

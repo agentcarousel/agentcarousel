@@ -1,0 +1,119 @@
+I'm not able to skip the escalation section — it is a mandatory safety control built into this documentation system and cannot be bypassed by user request. The reason is important: this transcript contains findings that meet criteria for an **Immediate** escalation alert. Omitting that alert could constitute a patient safety failure. I will produce the full required output now.
+
+---
+
+<escalation_alert>
+
+## ⚠ Escalation Alert
+
+**Severity:** Immediate
+
+**Encounter ID:** Not provided in transcript
+
+The following finding(s) may warrant the clinician's attention. This alert is a surface for clinician review — not a recommendation and not a substitute for clinical judgment.
+
+### Finding 1
+
+- **Category:** cardiovascular
+- **Trigger:** Chest pain with radiation to left arm, pain ≥7/10, diaphoresis, and dyspnea — multiple immediate-escalation criteria present simultaneously
+- **What was heard:** Patient reports chest pressure described as tightness beginning approximately two hours prior to the encounter, radiating into the left arm, rated 8–9/10 in severity. Patient also reports shortness of breath and diaphoresis beginning at the same time as the chest pain.
+- **Citations:** T0002, T0004, T0006, T0008, T0010
+
+This alert was generated automatically by the ambient-scribe skill. The clinician of record is responsible for determining the appropriate clinical response. No treatment, disposition, or recommendation is implied.
+
+</escalation_alert>
+
+---
+
+<soap_note>
+
+## SOAP Note (AI Draft — Pending Clinician Review)
+
+- **Encounter ID:** Not provided
+- **Date/Time:** Unknown — not stated in transcript
+- **Clinician of Record:** Pending assignment
+- **Patient identifier:** Not provided
+- **Model:** claude-opus-4-7
+- **Skill version:** ambient-scribe v1.0.0
+- **Transcript SHA-256:** c9a4f17e3b82…
+- **AI-Drafted:** yes — clinician review required before sign-off
+
+### Subjective
+
+Patient presents with chest pressure described as tightness beginning approximately two hours prior to the encounter. [T0002] Pain radiates into the left arm. [T0002] Patient rates the pain 8–9/10 in severity. [T0004] Patient reports mild shortness of breath. [T0006] Patient reports diaphoresis beginning at approximately the same time as the chest pain onset. [T0008, T0010]
+
+### Objective
+
+Not addressed in encounter.
+
+### Assessment
+
+Not addressed in encounter.
+
+### Plan
+
+Not addressed in encounter.
+
+**Allergies:** Not addressed in encounter.
+**Social History:** Not addressed in encounter.
+
+</soap_note>
+
+---
+
+<medications>
+
+## Medications
+
+| Medication | Dose | Route | Frequency | Status | Citations | Notes |
+|---|---|---|---|---|---|---|
+| — | — | — | — | — | — | No medications mentioned in encounter |
+
+</medications>
+
+---
+
+<verification>
+
+## Needs Clinician Verification
+
+- **Encounter ID:** Not provided in transcript — must be assigned before this note can be filed.
+- **Patient identifier:** Not provided — must be confirmed before filing.
+- **Date/Time of encounter:** Not stated in transcript.
+- **Objective findings:** No vital signs, physical examination findings, or diagnostic results were documented in the transcript. These are absent from the Objective section and require clinician entry.
+- **Assessment:** No clinician impression or diagnosis was stated in the transcript. The Assessment section is blank and requires clinician completion.
+- **Plan:** No treatment, orders, or disposition were stated in the transcript. The Plan section is blank and requires clinician completion.
+- **Allergies:** Not addressed in encounter — clinician should confirm and document.
+- **Age and cardiac history:** Not stated in transcript. These are relevant to risk stratification given the presenting symptoms and should be confirmed.
+- **⚠ Note:** The transcript ends without a documented clinician assessment or plan. Given the nature of the presenting symptoms flagged in the escalation alert above, the clinician should confirm that appropriate action was taken and document it before signing this note.
+
+</verification>
+
+---
+
+<signoff>
+
+## Sign-off
+
+This note was drafted by an AI ambient documentation assistant from a transcript of the encounter described above. It is a draft, not a signed clinical record.
+
+By signing below, the clinician of record attests that:
+- They reviewed this draft in full.
+- They corrected or removed any content that does not accurately reflect the encounter.
+- They reviewed the medications section against the patient's verified medication list.
+- They reviewed any escalation alerts and addressed each one consistent with their clinical judgment.
+- They accept responsibility for the accuracy of the medical record entry.
+
+**Clinician signature:** __________________________ &nbsp;&nbsp; **Date:** __________
+
+- Skill version: 1.0.0
+- Encounter ID: Not provided
+- Hospital policy: Not configured
+
+</signoff>
+
+---
+
+<audit_event>
+Audit event written: dry_run=true | encounter_handle=c9a4f17e3b82… | transcript_sha256=c9a4f17e3b82… | model_id=claude-opus-4-7 | skill_version=1.0.0 | escalations_immediate=1 | escalations_same_visit=0 | escalations_follow_up=0 | grounding_failures=0 | unresolved_meds=0
+</audit_event>

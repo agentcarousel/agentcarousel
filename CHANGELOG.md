@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.4 - May 2026
+
+### Features
+
+- **`agc audit run <run-id>`** — Second-pass LLM analysis against a saved run. Loads the run from history, calls the configured judge model to diagnose whether failures stem from prompt design, model capability, or fixture miscalibration, and saves the result back to the history DB so `agc report show <id>` and the VS Code extension display it going forward. Accepts a run ID from `agc report list`, a path to `run.json`, or a directory containing one. `--prompt <path>` overrides the auto-discovered `fixtures/<skill>/prompt.md`; `--model` overrides the judge model from config; `--no-save` skips writing the result back. `--json` emits a structured envelope for pipeline use.
+- **`agc audit suggest <run-id>`** — Reads `suggested_fixes` from a previously stored audit result with no further LLM call. Without `--apply`, prints the numbered suggestion list and any worked implementations to stdout. With `--apply`, appends the suggestions as a commented `<!-- audit:suggestions -->` block to `prompt.md` so you can review and integrate them like a diff. Exit 0 on success; exit 4 (not found) when the run has no stored audit (run `agc audit run <id>` first).
+
+---
+
 ## 0.6.3 - May 2026
 
 ### Changes

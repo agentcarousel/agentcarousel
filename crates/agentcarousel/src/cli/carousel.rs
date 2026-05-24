@@ -5,7 +5,7 @@ use agentcarousel_core::{
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
-use clap::{ArgAction, Parser};
+use clap::Parser;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
@@ -78,12 +78,6 @@ pub struct CarouselArgs {
     /// Per-case timeout in seconds.
     #[arg(short = 't', long)]
     timeout: Option<u64>,
-    /// Show a model-level progress bar on stderr (default: on when stderr is a TTY).
-    #[arg(short = 'P', long, action = ArgAction::SetTrue)]
-    progress: bool,
-    /// Never show the carousel progress bar.
-    #[arg(short = 'N', long, action = ArgAction::SetTrue)]
-    no_progress: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,10 +181,7 @@ pub fn run_carousel(args: CarouselArgs, config: &ResolvedConfig, globals: &Globa
         );
     }
 
-    let show_progress = !args.no_progress
-        && !globals.quiet
-        && !globals.json
-        && (args.progress || stderr().is_terminal());
+    let show_progress = !globals.quiet && !globals.json && stderr().is_terminal();
 
     prefetch_pricing();
 
@@ -349,7 +340,6 @@ fn build_eval_config(
     let runner = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        run_timeout_secs: None,
         offline: false,
         mock_dir: config.runner.mock_dir.clone(),
         generation_mode: GenerationMode::Live,
@@ -376,9 +366,6 @@ fn build_eval_config(
         judge_model: Some(judge_model.to_string()),
         judge_max_tokens: config.judge.max_tokens,
         effectiveness_threshold: config.eval.effectiveness_threshold,
-        certification_context: None,
-        carousel_iteration: None,
-        policy_version: None,
         progress: false,
     }
 }

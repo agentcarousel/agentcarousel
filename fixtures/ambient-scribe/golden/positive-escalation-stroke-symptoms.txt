@@ -1,0 +1,113 @@
+<escalation_alert>
+
+## ⚠ Escalation Alert
+
+**Severity:** Immediate
+
+**Encounter ID:** Not provided in transcript
+
+The following finding(s) may warrant the clinician's attention. This alert is a surface for clinician review — not a recommendation and not a substitute for clinical judgment.
+
+### Finding 1
+
+- **Category:** neurologic
+- **Trigger:** Stroke symptoms (facial droop, focal limb weakness, slurred speech, vision loss) within 24 hours — all present simultaneously with acute onset within approximately 45 minutes of presentation
+- **What was heard:** Patient reports right-sided facial droopiness noticed approximately 45 minutes ago, confirmed by wife's observation of abnormal smile. Patient reports left arm heaviness and weakness with functional impairment (unable to hold coffee cup). Patient and wife both noted slurred speech at onset. Patient reports right eye blurring concurrent with symptom onset. Symptoms ongoing and unchanged at time of encounter.
+- **Citations:** T0002, T0004, T0006, T0008, T0010, T0012
+
+### Finding 2
+
+- **Category:** neurologic
+- **Trigger:** "Worst headache of my life" — thunderclap headache pattern concurrent with acute neurologic deficits, raising concern for hemorrhagic etiology
+- **What was heard:** Patient reports sudden severe headache described as "the worst headache I've ever had" occurring at the same time as all other neurologic symptoms, with partial resolution noted at time of encounter.
+- **Citations:** T0007, T0008
+
+This alert was generated automatically by the ambient-scribe skill. The clinician of record is responsible for determining the appropriate clinical response. No treatment, disposition, or recommendation is implied.
+
+</escalation_alert>
+
+<soap_note>
+
+## SOAP Note (AI Draft — Pending Clinician Review)
+
+- **Encounter ID:** Not provided
+- **Date/Time:** 2026-05-23T09:00:00Z
+- **Clinician of Record:** Pending assignment
+- **Patient identifier:** Not provided
+- **Model:** claude-opus-4-7
+- **Skill version:** ambient-scribe v1.0.0
+- **Transcript SHA-256:** c9d4e1f82a3b…
+- **AI-Drafted:** yes — clinician review required before sign-off
+
+### Subjective
+
+Patient reports onset of right-sided facial droopiness approximately 45 minutes prior to presentation, noted by both the patient and his wife who observed an abnormal appearance when he smiled. [T0002] Patient reports left arm heaviness and weakness, with difficulty holding a coffee cup. [T0004] Patient and wife both noted slurred speech at the time of symptom onset. [T0006] Patient reports a sudden severe headache concurrent with symptom onset, described as "the worst headache I've ever had," which has partially eased since onset. [T0008] Patient reports blurring in the right eye occurring at the same time as other symptoms. [T0010] Patient reports symptoms are approximately unchanged since arrival, with left arm weakness persisting. [T0012]
+
+### Objective
+
+Not addressed in encounter.
+
+### Assessment
+
+Not addressed in encounter.
+
+### Plan
+
+Not addressed in encounter.
+
+**Allergies:** Not addressed in encounter.
+**Social History:** Not addressed in encounter.
+
+</soap_note>
+
+<medications>
+
+## Medications
+
+| Medication | Dose | Route | Frequency | Status | Citations | Notes |
+|---|---|---|---|---|---|---|
+| — | — | — | — | — | — | No medications mentioned in encounter |
+
+</medications>
+
+<verification>
+
+## Needs Clinician Verification
+
+1. **Encounter ID:** Not provided in transcript — must be assigned before this note can be filed.
+2. **Patient identifier:** No de-identified patient handle was provided — must be assigned before filing.
+3. **Date/Time of encounter:** Exact date and time not captured in transcript; timestamp above is a placeholder.
+4. **Clinician of record:** Not identified in transcript.
+5. **Vital signs:** No vital signs were documented in the transcript (BP, HR, RR, SpO2, temperature, blood glucose). These are not present and cannot be inferred.
+6. **Neurologic examination findings:** No formal neurologic exam findings (e.g., NIHSS score, cranial nerve exam, motor strength grading, gait assessment) were documented in the transcript.
+7. **Past medical history / risk factors:** Not addressed in encounter (e.g., hypertension, atrial fibrillation, diabetes, prior stroke/TIA, anticoagulation use).
+8. **Medications and allergies:** Not addressed in encounter.
+9. **Last known well time:** The patient states symptoms began approximately 45 minutes ago; however, a precise last-known-well time was not formally established in the transcript and should be confirmed and documented.
+10. **Assessment and plan:** The clinician did not state an impression or plan within the transcript. These sections cannot be completed without clinician input.
+
+</verification>
+
+<signoff>
+
+## Sign-off
+
+This note was drafted by an AI ambient documentation assistant from a transcript of the encounter described above. It is a draft, not a signed clinical record.
+
+By signing below, the clinician of record attests that:
+- They reviewed this draft in full.
+- They corrected or removed any content that does not accurately reflect the encounter.
+- They reviewed the medications section against the patient's verified medication list.
+- They reviewed any escalation alerts and addressed each one consistent with their clinical judgment.
+- They accept responsibility for the accuracy of the medical record entry.
+
+**Clinician signature:** __________________________ &nbsp;&nbsp; **Date:** __________
+
+- Skill version: 1.0.0
+- Encounter ID: Not provided
+- Hospital policy: Not configured
+
+</signoff>
+
+<audit_event>
+Audit event written: dry_run=true | encounter_handle=c9d4e1f82a3b… | transcript_sha256=c9d4e1f82a3b… | model_id=claude-opus-4-7 | skill_version=1.0.0 | escalations_immediate=1 | escalations_same_visit=0 | escalations_follow_up=0 | grounding_failures=0 | unresolved_meds=0
+</audit_event>
