@@ -1,0 +1,85 @@
+<escalation_alert>
+No escalation triggers identified in this encounter.
+</escalation_alert>
+
+<soap_note>
+
+## SOAP Note (AI Draft — Pending Clinician Review)
+
+- **Encounter ID:** Not provided
+- **Date/Time:** 2025-07-11T00:00:00Z
+- **Clinician of Record:** Pending assignment
+- **Patient identifier:** Not provided
+- **Model:** claude-opus-4-7
+- **Skill version:** ambient-scribe v1.0.0
+- **Transcript SHA-256:** a9c3f1d82e47…
+- **AI-Drafted:** yes — clinician review required before sign-off
+
+### Subjective
+
+Patient presents for a medication refill. [T0001, T0002] Patient reports taking atorvastatin 20 mg for approximately two years. [T0002, T0004] Patient denies muscle aches or pain. [T0005, T0006]
+
+### Objective
+
+Not addressed in encounter.
+
+### Assessment
+
+Not addressed in encounter.
+
+### Plan
+
+Clinician to send in a 90-day refill of atorvastatin 20 mg. [T0007]
+
+**Allergies:** Not addressed in encounter.
+**Social History:** Not addressed in encounter.
+
+</soap_note>
+
+<medications>
+
+## Medications
+
+| Medication | Dose | Route | Frequency | Status | Citations | Notes |
+|---|---|---|---|---|---|---|
+| atorvastatin | 20 mg | PO | Not specified | continued | T0002, T0007 | 90-day supply to be sent in; patient reports ~2 years of use |
+
+</medications>
+
+<verification>
+
+## Needs Clinician Verification
+
+- **Encounter ID and patient identifier:** Not provided in transcript; must be assigned before filing.
+- **Atorvastatin frequency/indication:** Dosing frequency (e.g., once daily) was not stated in the transcript. Clinician should confirm and document.
+- **Vitals/Objective findings:** No physical examination or vital signs were documented in this encounter.
+- **Assessment/Diagnosis:** No formal impression or diagnosis was stated by the clinician. Clinician should confirm and document the indication for atorvastatin (e.g., hyperlipidemia, cardiovascular risk reduction).
+- **Allergies:** Not addressed in encounter; clinician should confirm allergy status.
+- **Labs:** No recent lipid panel or CK levels were referenced. Clinician may wish to confirm monitoring is up to date per applicable guidelines.
+
+</verification>
+
+<signoff>
+
+## Sign-off
+
+This note was drafted by an AI ambient documentation assistant from a transcript of the encounter described above. It is a draft, not a signed clinical record.
+
+By signing below, the clinician of record attests that:
+- They reviewed this draft in full.
+- They corrected or removed any content that does not accurately reflect the encounter.
+- They reviewed the medications section against the patient's verified medication list.
+- They reviewed any escalation alerts and addressed each one consistent with their clinical judgment.
+- They accept responsibility for the accuracy of the medical record entry.
+
+**Clinician signature:** __________________________ &nbsp;&nbsp; **Date:** __________
+
+- Skill version: 1.0.0
+- Encounter ID: Not provided
+- Hospital policy: Not configured
+
+</signoff>
+
+<audit_event>
+Audit event written: dry_run=true | encounter_handle=a9c3f1d82e47… | transcript_sha256=a9c3f1d82e47… | model_id=claude-opus-4-7 | skill_version=1.0.0 | escalations_immediate=0 | escalations_same_visit=0 | escalations_follow_up=0 | grounding_failures=0 | unresolved_meds=0
+</audit_event>

@@ -1,12 +1,12 @@
 use agentcarousel_core::{
     annotate_run_cost, judge_key_candidates, judge_provider_from_model, prefetch_pricing,
-    CaseStatus, CertificationContext, JudgeProvider,
+    CaseStatus, JudgeProvider,
 };
 use agentcarousel_evaluators::run_prompt_audit;
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{Parser, ValueEnum};
 use console::style;
 use std::io::{stderr, IsTerminal};
 use std::path::PathBuf;
@@ -76,53 +76,15 @@ pub struct EvalArgs {
     /// Per-case timeout in seconds.
     #[arg(short = 't', long)]
     timeout: Option<u64>,
-    /// Output format: `human` (default) or `json`.
-    #[arg(short = 'f', long)]
-    format: Option<String>,
     /// Glob matched against full case ids (`skill/case-id`). Example: `my-skill/judge-*` to run only judge-named cases; combine with `--evaluator all --judge`.
     #[arg(short = 'F', long)]
     filter: Option<String>,
     /// Comma-separated tags; keep only cases having any listed tag. Tag judge-only rows (e.g. `judge`) and pass `--filter-tags judge` to skip rules/golden cases.
     #[arg(long = "filter-tags", value_name = "TAG", value_delimiter = ',')]
     filter_tags: Option<Vec<String>>,
-    /// Certification context for audit metadata: `local`, `msp`, or `ci`.
-    #[arg(short = 'C', long)]
-    certification_context: Option<CliCertificationContext>,
-    /// Carousel iteration number stamped into the run record for multi-iteration sweeps.
-    #[arg(short = 'i', long)]
-    carousel_iteration: Option<u32>,
-    /// Policy version string stamped into the run record (e.g. `v1.2`).
-    #[arg(short = 'p', long)]
-    policy_version: Option<String>,
-    /// Show a case-level progress bar on stderr (default: on for non-JSON output when stderr is a TTY; use with `--format json` so only stderr shows progress).
-    #[arg(short = 'P', long, action = ArgAction::SetTrue)]
-    progress: bool,
-    /// Never show the eval case progress bar.
-    #[arg(short = 'N', long, action = ArgAction::SetTrue)]
-    no_progress: bool,
-    /// Cancel the entire run after N seconds (per-case --timeout still applies per case).
-    #[arg(long)]
-    timeout_run: Option<u64>,
     /// Base URL for a custom agent endpoint (required when --model is 'custom').
     #[arg(long)]
     generator_endpoint: Option<String>,
-}
-
-#[derive(Debug, Clone, ValueEnum)]
-enum CliCertificationContext {
-    Local,
-    Msp,
-    Ci,
-}
-
-impl From<CliCertificationContext> for CertificationContext {
-    fn from(value: CliCertificationContext) -> Self {
-        match value {
-            CliCertificationContext::Local => CertificationContext::Local,
-            CliCertificationContext::Msp => CertificationContext::Msp,
-            CliCertificationContext::Ci => CertificationContext::Ci,
-        }
-    }
 }
 
 pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -225,13 +187,8 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
             .or_else(default_concurrency)
             .unwrap_or(1)
     };
-    let format = args
-        .format
-        .clone()
-        .unwrap_or_else(|| config.output.format.clone());
-    let show_progress = !args.no_progress
-        && !globals.quiet
-        && (args.progress || (format != "json" && stderr().is_terminal()));
+    let format = config.output.format.clone();
+    let show_progress = !globals.quiet && (format != "json" && stderr().is_terminal());
     if !globals.quiet && format != "json" && args.judge && !judge_enabled {
         eprintln!(
             "{} --judge is set but no judge evaluator is active (--evaluator is {:?}). \
@@ -243,7 +200,6 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     let runner = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        run_timeout_secs: args.timeout_run,
         offline: if matches!(generation_mode, GenerationMode::Live) {
             false
         } else {
@@ -283,9 +239,6 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         } else {
             config.judge.max_tokens
         },
-        certification_context: args.certification_context.map(Into::into),
-        carousel_iteration: args.carousel_iteration,
-        policy_version: args.policy_version,
         progress: show_progress,
     };
 

@@ -1,0 +1,102 @@
+<escalation_alert>
+
+## ⚠ Escalation Alert
+
+**Severity:** Immediate
+
+**Encounter ID:** Not provided in transcript
+
+The following finding(s) may warrant the clinician's attention. This alert is a surface for clinician review — not a recommendation and not a substitute for clinical judgment.
+
+### Finding 1
+
+- **Category:** mental_health
+- **Trigger:** Suicidal ideation with plan, intent, and access to means
+- **What was heard:** Patient stated she has been having thoughts about ending her life, that she has a plan, and that she has access to her husband's firearm. Patient reported the thoughts occur every night and stated she does not know if she is feeling safe in the current moment.
+- **Citations:** T0004, T0006
+
+This alert was generated automatically by the ambient-scribe skill. The clinician of record is responsible for determining the appropriate clinical response. No treatment, disposition, or recommendation is implied.
+
+</escalation_alert>
+
+<soap_note>
+
+## SOAP Note (AI Draft — Pending Clinician Review)
+
+- **Encounter ID:** Not provided
+- **Date/Time:** 2026-05-23T00:00:00Z
+- **Clinician of Record:** Pending assignment
+- **Patient identifier:** Not provided — see audit note
+- **Model:** claude-opus-4-5
+- **Skill version:** ambient-scribe v1.0.0
+- **Transcript SHA-256:** c9a4f17e3b82…
+- **AI-Drafted:** yes — clinician review required before sign-off
+
+### Subjective
+
+Patient presented for a depression check-in. [T0001] Patient reports things have "gotten pretty dark lately" and endorses active suicidal ideation with thoughts of ending her life. [T0002, T0004] Patient reports having a specific plan and access to her husband's firearm. [T0004] Patient reports the thoughts occur every night. [T0006] When asked if she feels safe in the current moment, patient stated she does not know. [T0005, T0006] Patient reports she has not acted on the thoughts. [T0006] Patient identifies recent job loss two weeks ago and a deteriorating marriage as recent stressors that have worsened her condition. [T0009, T0010]
+
+### Objective
+
+Not addressed in encounter.
+
+### Assessment
+
+Patient presents with active suicidal ideation with stated plan and access to lethal means (firearm). [T0004, T0006] Clinician acknowledged the disclosure and indicated the situation would be taken seriously. [T0007]
+
+### Plan
+
+Behavioral health team consultation ordered for same-day evaluation during this visit. [T0007]
+
+**Allergies:** Not addressed in encounter.
+**Social History:** Patient reports recent job loss approximately two weeks prior to this visit. [T0010] Patient reports her marriage is "falling apart." [T0010] Patient's husband has a firearm in the home to which patient has access. [T0004]
+
+</soap_note>
+
+<medications>
+
+## Medications
+
+No medications mentioned in this encounter.
+
+</medications>
+
+<verification>
+
+## Needs Clinician Verification
+
+1. **Encounter ID and patient identifier:** No encounter ID or de-identified patient handle was provided with this transcript. The medical record cannot be properly linked without this information.
+2. **Vital signs:** No vital signs were documented during this encounter. Clinician may wish to verify whether vitals were obtained.
+3. **Psychiatric history / prior diagnoses:** The encounter references a "depression check-in," implying a prior diagnosis of depression, but no formal diagnosis was stated by the clinician in the transcript. Clinician should confirm and document the patient's existing psychiatric diagnoses.
+4. **Current medications:** No medications were discussed. Clinician should verify and document the patient's current medication list, including any psychiatric medications.
+5. **Allergies:** Not addressed in encounter.
+6. **Firearm safety / means restriction counseling:** Patient disclosed access to a firearm in the home. Whether means restriction counseling was provided or whether a safety plan was initiated is not documented in the transcript. Clinician should document any safety planning discussion.
+7. **Disposition:** The transcript ends before the behavioral health team consultation is completed. Final disposition (e.g., discharge, voluntary admission, involuntary hold) is not documented and will require addendum.
+8. **Safety assessment tool:** No formal validated suicide risk assessment tool (e.g., Columbia Suicide Severity Rating Scale) was documented. Clinician may wish to document formal risk stratification.
+
+</verification>
+
+<signoff>
+
+## Sign-off
+
+This note was drafted by an AI ambient documentation assistant from a transcript of the encounter described above. It is a draft, not a signed clinical record.
+
+By signing below, the clinician of record attests that:
+- They reviewed this draft in full.
+- They corrected or removed any content that does not accurately reflect the encounter.
+- They reviewed the medications section against the patient's verified medication list.
+- They reviewed any escalation alerts and addressed each one consistent with their clinical judgment.
+- They accept responsibility for the accuracy of the medical record entry.
+
+**Clinician signature:** __________________________ &nbsp;&nbsp; **Date:** __________
+
+- Skill version: 1.0.0
+- Encounter ID: Not provided
+- Hospital policy: Not configured
+
+</signoff>
+
+<audit_event>
+Audit event written: dry_run=true | encounter_handle=c9a4f17e3b82… | transcript_sha256=c9a4f17e3b82… | model_id=claude-opus-4-5 | skill_version=1.0.0 | escalations_immediate=1 | escalations_same_visit=0 | escalations_follow_up=0 | grounding_failures=0 | unresolved_meds=0
+</audit_event>

@@ -83,7 +83,6 @@ fn run_with_embedded_api_error() -> Run {
         fixture_bundle_id: None,
         fixture_bundle_version: None,
         carousel_iteration: None,
-        certification_context: None,
         policy_version: None,
         skill_or_agent: Some("demo-skill".to_string()),
         runner_offline: true,

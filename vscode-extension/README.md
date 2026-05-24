@@ -25,6 +25,17 @@ Click any case to open a fully rendered detail view:
 - **Evaluator Config** — golden file link, threshold explained, judge prompt, or process command
 - **Tool Sequence** — expected tool calls rendered as JSON
 
+### Prompt Audit Results
+
+After running `agc audit run <run-id>` from the terminal, the stored audit result is surfaced inline in the Case Detail panel — no extra clicks required.
+
+- **Failure diagnosis** — the judge's verdict on whether a failure was caused by prompt design, model capability, or fixture miscalibration
+- **Suggested fixes** — numbered list of LLM-generated improvement suggestions
+- **Worked implementations** — where the judge provided a concrete rewrite, it appears below the suggestion in a code block
+- **Apply to prompt** — run `agc audit suggest <run-id> --apply` to append suggestions as a commented block directly into `prompt.md`
+
+The audit block is hidden when no audit has been run for a case, so the panel stays clean for runs that don't need it.
+
 ### Live Reload
 The tree auto-refreshes whenever you save a fixture YAML. No manual refresh required.
 

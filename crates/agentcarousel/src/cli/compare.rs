@@ -557,7 +557,6 @@ fn synthetic_baseline_run(
         fixture_bundle_id: None,
         fixture_bundle_version: None,
         carousel_iteration: None,
-        certification_context: None,
         policy_version: None,
         skill_or_agent: Some(skill.to_string()),
         runner_offline: false,

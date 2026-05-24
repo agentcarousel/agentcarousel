@@ -23,9 +23,6 @@ pub struct LintArgs {
     /// Exit with a non-zero code on warnings (default: only fail on errors).
     #[arg(short = 'x', long)]
     error_on_warn: bool,
-    /// `human` or `json`.
-    #[arg(short = 'f', long, default_value = "human")]
-    format: String,
 }
 
 #[derive(Debug)]
@@ -72,7 +69,7 @@ pub fn run_lint(args: LintArgs, globals: &GlobalOptions) -> i32 {
     }
 
     if !globals.quiet {
-        if globals.json || args.format == "json" {
+        if globals.json {
             let items: Vec<serde_json::Value> = results
                 .iter()
                 .map(|r| {

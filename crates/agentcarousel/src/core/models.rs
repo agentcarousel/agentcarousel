@@ -177,8 +177,6 @@ pub struct Run {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carousel_iteration: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub certification_context: Option<CertificationContext>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skill_or_agent: Option<String>,
@@ -439,31 +437,6 @@ pub enum OverallStatus {
     RuntimeError,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RunDiff {
-    pub run_a: RunId,
-    pub run_b: RunId,
-    pub regressions: Vec<CaseRegression>,
-    pub improvements: Vec<Value>,
-    pub has_regressions: bool,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CaseRegression {
-    pub case_id: CaseId,
-    pub kind: RegressionKind,
-    pub before: Value,
-    pub after: Value,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum RegressionKind {
-    StatusChange,
-    LatencyIncrease,
-    EffectivenessDropped,
-    ErrorRateIncreased,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum CertificationTrack {
@@ -489,10 +462,3 @@ pub enum DataHandling {
     PiiReviewed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum CertificationContext {
-    Local,
-    Msp,
-    Ci,
-}

@@ -27,9 +27,6 @@ pub struct StatsArgs {
     /// Maximum number of runs to analyse (newest first).
     #[arg(long, default_value_t = 50)]
     limit: usize,
-    /// Output format: `human` (default) or `json`.
-    #[arg(long, default_value = "human")]
-    format: String,
 }
 
 pub fn run_stats(args: StatsArgs, _config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -87,7 +84,7 @@ pub fn run_stats(args: StatsArgs, _config: &ResolvedConfig, globals: &GlobalOpti
 
     let latency_trend: Vec<f64> = runs.iter().map(|r| r.summary.mean_latency_ms).collect();
 
-    if globals.json || args.format == "json" {
+    if globals.json {
         let data = serde_json::json!({
             "run_count": runs.len(),
             "pass_rate_trend": pass_rates.iter().map(|(t, r)| serde_json::json!({"at": t, "pass_rate": r})).collect::<Vec<_>>(),

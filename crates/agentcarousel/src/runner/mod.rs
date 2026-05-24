@@ -18,12 +18,11 @@ mod orchestration;
 mod sandbox;
 mod tracer;
 
-use agentcarousel_core::{new_run_id, CertificationContext, FixtureFile, Run};
+use agentcarousel_core::{new_run_id, FixtureFile, Run};
 use agentcarousel_fixtures::MockEngine;
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex;
 
 pub use executor::run_case;
@@ -45,8 +44,6 @@ pub enum GenerationMode {
 pub struct RunnerConfig {
     pub concurrency: usize,
     pub timeout_secs: u64,
-    /// Cancel the entire run after this many seconds (all cases). `None` means no global limit.
-    pub run_timeout_secs: Option<u64>,
     pub offline: bool,
     pub mock_dir: PathBuf,
     pub generation_mode: GenerationMode,
@@ -74,9 +71,6 @@ pub struct EvalConfig {
     pub judge_model: Option<String>,
     pub judge_max_tokens: Option<u32>,
     pub effectiveness_threshold: f32,
-    pub certification_context: Option<CertificationContext>,
-    pub carousel_iteration: Option<u32>,
-    pub policy_version: Option<String>,
     /// Case-level progress bar on stderr (indicatif).
     pub progress: bool,
 }
@@ -94,23 +88,10 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
     let skill_or_agent = orchestration::skill_display_label(&fixtures);
     let cases = orchestration::flatten_cases(fixtures);
 
-    let execute = async {
-        if config.fail_fast {
-            orchestration::run_sequential(cases, &mock_engine, &config).await
-        } else {
-            orchestration::run_parallel(cases, &mock_engine, &config).await
-        }
-    };
-    let results = if let Some(secs) = config.run_timeout_secs {
-        match tokio::time::timeout(Duration::from_secs(secs), execute).await {
-            Ok(r) => r,
-            Err(_) => {
-                eprintln!("run timed out after {secs}s");
-                vec![]
-            }
-        }
+    let results = if config.fail_fast {
+        orchestration::run_sequential(cases, &mock_engine, &config).await
     } else {
-        execute.await
+        orchestration::run_parallel(cases, &mock_engine, &config).await
     };
 
     let summary = aggregation::build_summary(&results);
@@ -130,7 +111,6 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         fixture_bundle_id,
         fixture_bundle_version,
         carousel_iteration: None,
-        certification_context: None,
         policy_version: None,
         skill_or_agent,
         runner_offline: config.offline,
@@ -156,19 +136,7 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
     let cases = orchestration::flatten_cases(fixtures);
     let judge_cache = Arc::new(Mutex::new(orchestration::BoundedCache::new(1000)));
 
-    let run_timeout = config.runner.run_timeout_secs;
-    let execute = orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache);
-    let results = if let Some(secs) = run_timeout {
-        match tokio::time::timeout(Duration::from_secs(secs), execute).await {
-            Ok(r) => r,
-            Err(_) => {
-                eprintln!("eval timed out after {secs}s");
-                vec![]
-            }
-        }
-    } else {
-        execute.await
-    };
+    let results = orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
 
@@ -185,9 +153,8 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         summary,
         fixture_bundle_id,
         fixture_bundle_version,
-        carousel_iteration: config.carousel_iteration,
-        certification_context: config.certification_context,
-        policy_version: config.policy_version,
+        carousel_iteration: None,
+        policy_version: None,
         skill_or_agent,
         runner_offline: config.runner.offline,
         runner_mock_strict: config.runner.mock_strict,

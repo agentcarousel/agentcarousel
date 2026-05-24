@@ -1,13 +1,11 @@
-//! Human-readable and machine-readable **output**: terminal tables, JSON, persisted
-//! history (SQLite), and [`diff_runs`] / [`print_diff`] for comparing two runs.
+//! Human-readable and machine-readable **output**: terminal tables, JSON, and persisted
+//! history (SQLite).
 
 #[cfg(feature = "dashboard")]
 pub mod dashboard;
-mod diff;
 mod history;
 mod terminal;
 
-pub use diff::{diff_runs, print_diff};
 pub use history::{
     fetch_run, find_previous_run, find_tagged_run, list_full_runs, list_runs, persist_run, tag_run,
     HistoryError, RunListing,

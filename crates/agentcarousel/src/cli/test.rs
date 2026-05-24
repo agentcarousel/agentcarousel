@@ -57,12 +57,6 @@ pub struct TestArgs {
     /// Stop after the first failing case.
     #[arg(short = 'F', long)]
     fail_fast: bool,
-    /// Output format: `human` (default) or `json`.
-    #[arg(short = 'p', long)]
-    format: Option<String>,
-    /// Cancel the entire run after N seconds (per-case --timeout still applies per case).
-    #[arg(long)]
-    timeout_run: Option<u64>,
     /// Base URL for a custom agent endpoint (required when generator model is 'custom').
     #[arg(long)]
     generator_endpoint: Option<String>,
@@ -100,15 +94,11 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
         .mock_dir
         .clone()
         .unwrap_or_else(|| config.runner.mock_dir.clone());
-    let format = args
-        .format
-        .clone()
-        .unwrap_or_else(|| config.output.format.clone());
+    let format = config.output.format.clone();
 
     let runner_config = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        run_timeout_secs: args.timeout_run,
         offline,
         mock_dir,
         generation_mode: GenerationMode::MockOnly,
