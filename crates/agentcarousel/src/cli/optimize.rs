@@ -1,4 +1,5 @@
 use agentcarousel_core::{annotate_run_cost, CaseId, CaseResult, CaseStatus, FixtureFile, Message, Role};
+use similar::{ChangeTag, TextDiff};
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
 use agentcarousel_runner::{call_llm, run_eval, EvalConfig, GenerationMode, RunnerConfig};
@@ -67,8 +68,11 @@ struct OptimizeReport {
     iterations_run: u32,
     score_trajectory: Vec<f32>,
     total_cost_usd: f64,
+    total_duration_secs: f64,
     baseline_prompt: String,
     final_prompt: String,
+    /// Unified diff of `baseline_prompt` → `final_prompt`.
+    prompt_diff: String,
     iterations: Vec<IterationRecord>,
 }
 
@@ -96,6 +100,7 @@ struct IterationRecord {
     applied: Option<usize>,
     score_after: f32,
     cost_usd: f64,
+    duration_secs: f64,
 }
 
 /// A targeted, minimal edit to the system prompt produced by the synthesis LLM.
@@ -263,34 +268,8 @@ pub fn run_optimize_command(
         globals,
     ));
 
-    // Print summary.
-    println!(
-        "\n{} score trajectory: {}",
-        style("Optimization complete.").bold(),
-        report
-            .score_trajectory
-            .iter()
-            .map(|s| format!("{:.0}%", s * 100.0))
-            .collect::<Vec<_>>()
-            .join(" → ")
-    );
-    if report.target_reached {
-        println!(
-            "  {} target {:.0}% reached!",
-            style("✓").green().bold(),
-            report.target_score * 100.0
-        );
-    } else {
-        println!(
-            "  {} target {:.0}% not reached (final {:.0}%)",
-            style("✗").yellow(),
-            report.target_score * 100.0,
-            report.final_score * 100.0
-        );
-    }
-    if report.total_cost_usd > 0.0 {
-        println!("  estimated cost: ${:.4}", report.total_cost_usd);
-    }
+    // Print human-readable summary.
+    print_optimize_summary(&report, globals);
 
     // Write report file.
     let report_path = args.output.unwrap_or_else(|| {
@@ -334,6 +313,7 @@ async fn optimize_loop(
     config: &ResolvedConfig,
     globals: &GlobalOptions,
 ) -> OptimizeReport {
+    let loop_start = std::time::Instant::now();
     let skill = fixtures[0].skill_or_agent.clone();
     let rubric_lookup = build_rubric_lookup(&fixtures);
     let mut current_prompt = baseline_prompt.clone();
@@ -390,7 +370,9 @@ async fn optimize_loop(
             iterations_run: 0,
             score_trajectory,
             total_cost_usd: total_cost,
-            baseline_prompt,
+            total_duration_secs: loop_start.elapsed().as_secs_f64(),
+            prompt_diff: String::new(),
+            baseline_prompt: baseline_prompt.clone(),
             final_prompt: current_prompt,
             iterations: iteration_records,
         };
@@ -425,6 +407,7 @@ async fn optimize_loop(
             break;
         }
 
+        let iter_start = std::time::Instant::now();
         if !globals.quiet {
             println!(
                 "\n  {} Iteration {}/{} (current score: {:.0}%)",
@@ -707,6 +690,7 @@ async fn optimize_loop(
 
         score_trajectory.push(score_after);
         let iter_cost = total_cost - iteration_records.iter().map(|r| r.cost_usd).sum::<f64>();
+        let iter_duration = iter_start.elapsed().as_secs_f64();
         iteration_records.push(IterationRecord {
             iteration: iter + 1,
             score_before: current_score - (score_after - current_score),
@@ -719,10 +703,14 @@ async fn optimize_loop(
             applied,
             score_after,
             cost_usd: iter_cost,
+            duration_secs: iter_duration,
         });
     }
 
     let final_score = *score_trajectory.last().unwrap_or(&baseline_score);
+    let total_duration = loop_start.elapsed().as_secs_f64();
+    let final_prompt = current_prompt;
+    let prompt_diff = unified_diff(&baseline_prompt, &final_prompt);
 
     OptimizeReport {
         skill,
@@ -733,10 +721,94 @@ async fn optimize_loop(
         iterations_run: iteration_records.len() as u32,
         score_trajectory,
         total_cost_usd: total_cost,
+        total_duration_secs: total_duration,
         baseline_prompt,
-        final_prompt: current_prompt,
+        final_prompt,
+        prompt_diff,
         iterations: iteration_records,
     }
+}
+
+// ── Report helpers ────────────────────────────────────────────────────────────
+
+fn print_optimize_summary(report: &OptimizeReport, globals: &GlobalOptions) {
+    println!(
+        "\nOptimization complete: {} iteration(s), ${:.4} spent, {:.1}s",
+        report.iterations_run, report.total_cost_usd, report.total_duration_secs,
+    );
+    for rec in &report.iterations {
+        let delta = rec.score_after - rec.score_before;
+        let arrow = if delta > 0.0 {
+            style(format!("(+{:.0}%)", delta * 100.0)).green().to_string()
+        } else if delta < 0.0 {
+            style(format!("({:.0}%)", delta * 100.0)).red().to_string()
+        } else {
+            style("(±0%)".to_string()).dim().to_string()
+        };
+        let edit_label = rec
+            .applied
+            .and_then(|idx| rec.edit_candidates.get(idx.saturating_sub(1)))
+            .map(|e| format!("Edit: {}", e.rationale.chars().take(60).collect::<String>()))
+            .unwrap_or_else(|| "no edit applied".to_string());
+        println!(
+            "  Iteration {}: {:.0}% → {:.0}%  {}  {}",
+            rec.iteration,
+            rec.score_before * 100.0,
+            rec.score_after * 100.0,
+            arrow,
+            edit_label,
+        );
+    }
+    let score_line = if report.target_reached {
+        format!(
+            "Score: {:.2} ≥ target {:.2} {}",
+            report.final_score,
+            report.target_score,
+            style("✓").green().bold(),
+        )
+    } else {
+        format!(
+            "Score: {:.2} < target {:.2} {}",
+            report.final_score,
+            report.target_score,
+            style("✗").yellow(),
+        )
+    };
+    println!("{score_line}");
+    if !report.prompt_diff.is_empty() && !globals.quiet {
+        println!("\nPrompt diff:");
+        for line in report.prompt_diff.lines() {
+            if line.starts_with('+') {
+                println!("  {}", style(line).green());
+            } else if line.starts_with('-') {
+                println!("  {}", style(line).red());
+            } else {
+                println!("  {line}");
+            }
+        }
+    }
+}
+
+/// Generate a unified diff string from `old` to `new`.
+fn unified_diff(old: &str, new: &str) -> String {
+    if old == new {
+        return String::new();
+    }
+    let diff = TextDiff::from_lines(old, new);
+    let mut out = String::new();
+    for change in diff.iter_all_changes() {
+        let prefix = match change.tag() {
+            ChangeTag::Delete => "-",
+            ChangeTag::Insert => "+",
+            ChangeTag::Equal => " ",
+        };
+        out.push_str(prefix);
+        out.push_str(change.value());
+        if !change.value().ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
