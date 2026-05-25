@@ -163,7 +163,8 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
     if matches!(
         args.execution_mode,
         EvalExecutionMode::Live | EvalExecutionMode::Batch
-    ) && resolve_generator_key(generator_provider).is_none()
+    ) && !matches!(generator_provider, GeneratorProvider::Custom)
+        && resolve_generator_key(generator_provider).is_none()
     {
         eprintln!(
             "error: set one of {} to run live generation for model '{}'\n  tip: {}",
@@ -249,7 +250,10 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         } else {
             config.generator.max_tokens
         },
-        generator_endpoint: args.generator_endpoint.clone(),
+        generator_endpoint: args
+            .generator_endpoint
+            .clone()
+            .or_else(|| config.generator.endpoint.clone()),
         fail_fast: false,
         mock_strict: std::env::var("agentcarousel_MOCK_STRICT").ok().as_deref() == Some("1"),
         command: "eval".to_string(),

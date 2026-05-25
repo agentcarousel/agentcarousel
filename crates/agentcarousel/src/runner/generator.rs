@@ -64,7 +64,7 @@ pub enum GeneratorProvider {
 
 impl GeneratorProvider {
     pub fn from_model(model: &str) -> Self {
-        if model == "custom" {
+        if model == "custom" || model.starts_with("custom/") || model.starts_with("ollama/") {
             return Self::Custom;
         }
         let normalized = model.to_ascii_lowercase();
@@ -150,11 +150,16 @@ pub async fn generate_case_output(
     if let GeneratorProvider::Custom = provider {
         let endpoint = config.generator_endpoint.as_deref().ok_or_else(|| {
             GeneratorError::Fatal(
-                "--generator-endpoint <URL> is required when --generator-model is 'custom'"
+                "--generator-endpoint <URL> is required when generator model is 'custom' or 'ollama/<name>'"
                     .to_string(),
             )
         })?;
-        return call_custom_endpoint(endpoint, case, config.timeout_secs, max_tokens).await;
+        let model_name = model
+            .strip_prefix("ollama/")
+            .or_else(|| model.strip_prefix("custom/"))
+            .filter(|s| !s.is_empty());
+        return call_custom_endpoint(endpoint, model_name, case, config.timeout_secs, max_tokens)
+            .await;
     }
 
     let key = resolve_generator_key(provider)?;
@@ -179,28 +184,56 @@ pub async fn generate_case_output(
 
 pub async fn call_custom_endpoint(
     endpoint: &str,
+    model_name: Option<&str>,
     case: &Case,
     timeout_secs: u64,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
-    let messages: Vec<serde_json::Value> = case
-        .input
-        .messages
-        .iter()
-        .map(|m| {
-            let role = match m.role {
-                Role::User => "user",
-                Role::Assistant => "assistant",
-                Role::System => "system",
-                Role::Tool => "tool",
-            };
-            serde_json::json!({"role": role, "content": m.content})
-        })
-        .collect();
-    let body = serde_json::json!({
-        "messages": messages,
-        "max_tokens": max_tokens.unwrap_or(2048),
-    });
+    // Ollama's /api/generate takes a single prompt string; everything else gets messages.
+    let body = if endpoint.contains("/api/generate") {
+        let system = resolve_system_prompt(case);
+        let user = build_user_prompt(case);
+        let prompt = if system.is_empty() {
+            user
+        } else {
+            format!("{system}\n\n{user}")
+        };
+        let mut b = serde_json::json!({
+            "prompt": prompt,
+            "stream": false,
+        });
+        if let Some(m) = model_name {
+            b["model"] = serde_json::json!(m);
+        }
+        if let Some(n) = max_tokens {
+            b["options"] = serde_json::json!({"num_predict": n});
+        }
+        b
+    } else {
+        let messages: Vec<serde_json::Value> = case
+            .input
+            .messages
+            .iter()
+            .map(|m| {
+                let role = match m.role {
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::System => "system",
+                    Role::Tool => "tool",
+                };
+                serde_json::json!({"role": role, "content": m.content})
+            })
+            .collect();
+        let mut b = serde_json::json!({
+            "messages": messages,
+            "max_tokens": max_tokens.unwrap_or(2048),
+        });
+        if let Some(m) = model_name {
+            b["model"] = serde_json::json!(m);
+        }
+        b
+    };
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .build()
@@ -221,12 +254,14 @@ pub async fn call_custom_endpoint(
     let json: serde_json::Value = response.json().await.map_err(|e| {
         GeneratorError::Transient(format!("custom endpoint response parse failed: {e}"))
     })?;
+    // Accept OpenAI-compat, Ollama /api/generate ("response"), or generic ("output").
     let output = json["choices"][0]["message"]["content"]
         .as_str()
+        .or_else(|| json["response"].as_str())
         .or_else(|| json["output"].as_str())
         .ok_or_else(|| {
             GeneratorError::Transient(
-                "custom endpoint response missing 'choices[0].message.content' or 'output'"
+                "custom endpoint response missing 'choices[0].message.content', 'response', or 'output'"
                     .to_string(),
             )
         })?

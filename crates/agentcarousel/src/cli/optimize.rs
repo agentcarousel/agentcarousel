@@ -1,10 +1,12 @@
-use agentcarousel_core::{annotate_run_cost, CaseId, CaseResult, CaseStatus, FixtureFile, Message, Role};
-use similar::{ChangeTag, TextDiff};
+use agentcarousel_core::{
+    annotate_run_cost, CaseId, CaseResult, CaseStatus, FixtureFile, Message, Role,
+};
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
 use agentcarousel_runner::{call_llm, run_eval, EvalConfig, GenerationMode, RunnerConfig};
 use clap::Parser;
 use console::style;
+use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -449,8 +451,7 @@ async fn optimize_loop(
             .iter()
             .map(|c| (c.case_id.clone(), *c))
             .collect();
-        let analyses =
-            analyze_clusters_llm(&clusters, &case_map, judge_model).await;
+        let analyses = analyze_clusters_llm(&clusters, &case_map, judge_model).await;
         // Build a flat feedback string for the candidate synthesis step.
         let feedback = if analyses.is_empty() {
             // Fallback to the text-summary path if no structured analysis produced.
@@ -478,20 +479,24 @@ async fn optimize_loop(
         }
 
         // 4. Synthesize 3 targeted prompt edits.
-        let edit_candidates =
-            match synthesize_edit_candidates_llm(&current_prompt, &analyses, &feedback, model)
-                .await
-            {
-                Ok(c) if !c.is_empty() => c,
-                Ok(_) => {
-                    eprintln!("  warn: synthesis returned no edit candidates — skipping iteration");
-                    continue;
-                }
-                Err(e) => {
-                    eprintln!("  warn: synthesis LLM call failed: {e} — skipping iteration");
-                    continue;
-                }
-            };
+        let edit_candidates = match synthesize_edit_candidates_llm(
+            &current_prompt,
+            &analyses,
+            &feedback,
+            model,
+        )
+        .await
+        {
+            Ok(c) if !c.is_empty() => c,
+            Ok(_) => {
+                eprintln!("  warn: synthesis returned no edit candidates — skipping iteration");
+                continue;
+            }
+            Err(e) => {
+                eprintln!("  warn: synthesis LLM call failed: {e} — skipping iteration");
+                continue;
+            }
+        };
 
         // 5. Targeted candidate scoring: eval only failing cluster cases + regression guard.
         // Build targeted fixture sets once per iteration (shared across candidates).
@@ -739,7 +744,9 @@ fn print_optimize_summary(report: &OptimizeReport, globals: &GlobalOptions) {
     for rec in &report.iterations {
         let delta = rec.score_after - rec.score_before;
         let arrow = if delta > 0.0 {
-            style(format!("(+{:.0}%)", delta * 100.0)).green().to_string()
+            style(format!("(+{:.0}%)", delta * 100.0))
+                .green()
+                .to_string()
         } else if delta < 0.0 {
             style(format!("({:.0}%)", delta * 100.0)).red().to_string()
         } else {
@@ -963,7 +970,8 @@ pub fn build_rubric_lookup(fixtures: &[FixtureFile]) -> HashMap<String, String> 
         for case in &fixture.cases {
             if let Some(rubric_items) = &case.expected.rubric {
                 for item in rubric_items {
-                    map.entry(item.id.clone()).or_insert_with(|| item.description.clone());
+                    map.entry(item.id.clone())
+                        .or_insert_with(|| item.description.clone());
                 }
             }
         }
@@ -1035,7 +1043,6 @@ pub fn cluster_failures(
     clusters.sort_by_key(|c| std::cmp::Reverse(c.case_ids.len()));
     clusters
 }
-
 
 /// Build a concise failure summary for the analysis prompt.
 fn format_failure_summary(failures: &[&CaseResult], current_prompt: &str) -> String {
@@ -1118,8 +1125,9 @@ pub async fn analyze_clusters_llm(
             );
             match call_llm(judge_model, &prompt, Some(256)).await {
                 Ok(r) => representative_cases.push((case_id.clone(), r.output)),
-                Err(e) => representative_cases
-                    .push((case_id.clone(), format!("(analysis failed: {e})"))),
+                Err(e) => {
+                    representative_cases.push((case_id.clone(), format!("(analysis failed: {e})")))
+                }
             }
         }
 
@@ -1242,9 +1250,7 @@ Respond with valid JSON only — no markdown, no explanation:
         .as_array()
         .ok_or("response missing 'edits' array")?
         .iter()
-        .filter_map(|v| {
-            serde_json::from_value::<PromptEditCandidate>(v.clone()).ok()
-        })
+        .filter_map(|v| serde_json::from_value::<PromptEditCandidate>(v.clone()).ok())
         .filter(|e| !e.replacement_text.is_empty())
         .collect::<Vec<_>>();
 
@@ -1254,4 +1260,3 @@ Respond with valid JSON only — no markdown, no explanation:
 
     Ok(edits)
 }
-

@@ -104,7 +104,10 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
         generation_mode: GenerationMode::MockOnly,
         generator_model: Some(config.generator.model.clone()),
         generator_max_tokens: config.generator.max_tokens,
-        generator_endpoint: args.generator_endpoint.clone(),
+        generator_endpoint: args
+            .generator_endpoint
+            .clone()
+            .or_else(|| config.generator.endpoint.clone()),
         fail_fast: args.fail_fast,
         mock_strict: std::env::var("agentcarousel_MOCK_STRICT").ok().as_deref() == Some("1"),
         command: "test".to_string(),

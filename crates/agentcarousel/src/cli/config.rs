@@ -59,6 +59,7 @@ pub struct EvalSettings {
 pub struct GeneratorSettings {
     pub model: String,
     pub max_tokens: Option<u32>,
+    pub endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,6 +108,7 @@ impl Default for ResolvedConfig {
             generator: GeneratorSettings {
                 model: "claude-3-5-sonnet".to_string(),
                 max_tokens: Some(1024),
+                endpoint: None,
             },
             judge: JudgeSettings {
                 model: "gemini-2.5-flash".to_string(),
@@ -166,6 +168,7 @@ struct FileEvalSettings {
 struct FileGeneratorSettings {
     model: Option<String>,
     max_tokens: Option<u32>,
+    endpoint: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -307,6 +310,9 @@ fn apply_file_config(resolved: &mut ResolvedConfig, file: FileConfig) {
         }
         if let Some(max_tokens) = generator.max_tokens {
             resolved.generator.max_tokens = Some(max_tokens);
+        }
+        if let Some(endpoint) = generator.endpoint {
+            resolved.generator.endpoint = Some(endpoint);
         }
     }
 
