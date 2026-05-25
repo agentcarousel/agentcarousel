@@ -126,7 +126,7 @@ enum Command {
     Carousel(carousel::CarouselArgs),
     /// Run the same fixture suite against two system prompts and get a head-to-head comparison.
     Ab(ab::AbArgs),
-    /// Re-run the prompt-audit analysis against a previously-saved run.
+    /// Prompt-audit a saved run, or apply stored suggestions to prompt.md.
     Audit(audit::AuditArgs),
 }
 
@@ -326,7 +326,7 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
     println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
