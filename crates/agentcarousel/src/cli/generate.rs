@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -11,12 +11,19 @@ use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
 
 const DEFAULT_MODEL: &str = "gemini-2.5-flash";
-const DEFAULT_COUNT: u8 = 5;
+const DEFAULT_COUNT: u32 = 5;
 const MAX_TOKENS: u32 = 8192;
 const EMBEDDED_PROMPT: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/templates/generate-prompt.md"
 ));
+
+#[derive(Debug, Clone, ValueEnum)]
+enum DifficultyLevel {
+    Easy,
+    Medium,
+    Hard,
+}
 
 /// Generate fixture cases from a skill description or an existing system prompt.
 ///
@@ -44,7 +51,7 @@ pub struct GenerateArgs {
 
     /// Number of cases to generate.
     #[arg(long, short = 'n', default_value_t = DEFAULT_COUNT)]
-    count: u8,
+    count: u32,
 
     /// Print generated YAML to stdout instead of writing to disk.
     #[arg(long)]
@@ -63,6 +70,28 @@ pub struct GenerateArgs {
     /// Default mode (single call) remains unchanged for backward compatibility.
     #[arg(long)]
     batch: bool,
+
+    /// Path to a cases YAML file; generates adversarial variants of cases in that file.
+    /// Useful when you have eval results and want more coverage of weak spots.
+    #[arg(long, value_name = "PATH")]
+    seed_cases: Option<PathBuf>,
+
+    /// Distribution of coverage categories as a comma-separated key:count spec
+    /// (e.g. 'happy:2,edge:3,failure:3,adversarial:2'). Must sum to --count.
+    /// Defaults to the built-in proportional split.
+    #[arg(long, value_name = "SPEC")]
+    distribution: Option<String>,
+
+    /// Difficulty bias for generated cases.
+    /// 'hard' skews toward adversarial and boundary edge cases;
+    /// 'easy' skews toward happy path and standard failure modes.
+    #[arg(long, value_enum)]
+    difficulty: Option<DifficultyLevel>,
+
+    /// Path to a domain-context file (markdown or text) prepended to every
+    /// per-case prompt, e.g. HIPAA rules, an API spec, or brand guidelines.
+    #[arg(long, value_name = "PATH")]
+    domain_context: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,7 +116,22 @@ pub fn run_generate(args: GenerateArgs, globals: &GlobalOptions) -> i32 {
 }
 
 fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32, (i32, String)> {
-    let (skill_name, description, output_path, existing_ids) = resolve_inputs(&args)?;
+    let (skill_name, description, output_path, mut existing_ids) = resolve_inputs(&args)?;
+
+    // Prepend seed case IDs so generation avoids re-generating them.
+    if let Some(ref seed_path) = args.seed_cases {
+        let seed_text = std::fs::read_to_string(seed_path).map_err(|e| {
+            (
+                ExitCode::RuntimeError.as_i32(),
+                format!("--seed-cases: {e}"),
+            )
+        })?;
+        let seed_ids = extract_ids_from_yaml(&seed_text);
+        // Prepend seed IDs before existing IDs so the prompt lists them first.
+        let mut combined = seed_ids;
+        combined.extend(existing_ids);
+        existing_ids = combined;
+    }
 
     if args.batch {
         return run_generate_batch(
@@ -150,6 +194,17 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
     });
 
     let cases_value = cases_value.map_err(|e| (ExitCode::ValidationFailed.as_i32(), e))?;
+
+    // Discriminability pre-screen
+    let valid_cases_arr = cases_value
+        .get("cases")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let flagged = discriminability_prescreen(&valid_cases_arr, globals.quiet);
+    if !globals.quiet && !globals.json && flagged > 0 {
+        eprintln!("{flagged} case(s) flagged by discriminability pre-screen");
+    }
 
     let cases_yaml = cases_to_yaml_block(&cases_value);
     let case_count = count_cases(&cases_value);
@@ -287,6 +342,21 @@ fn read_existing_case_ids(cases_path: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Extract case IDs from a YAML text by scanning for `  - id:` patterns.
+fn extract_ids_from_yaml(text: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("- id:") {
+            let id = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !id.is_empty() {
+                ids.push(id);
+            }
+        }
+    }
+    ids
+}
+
 fn load_meta_prompt() -> String {
     let disk_path = Path::new("templates/generate-prompt.md");
     if disk_path.exists() {
@@ -301,7 +371,7 @@ fn build_prompt(
     template: &str,
     skill_name: &str,
     description: &str,
-    count: u8,
+    count: u32,
     existing_ids: &[String],
 ) -> String {
     let existing = if existing_ids.is_empty() {
@@ -445,10 +515,51 @@ fn append_cases_to_file(path: &Path, cases_yaml: &str, skill_name: &str) -> Resu
 ///
 /// Distribution: 1 happy_path, 1 adversarial (if n ≥ 5), remaining slots alternate
 /// edge_case / failure_mode. Adversarial is placed last.
-fn build_category_plan(n: usize) -> Vec<&'static str> {
+///
+/// If `distribution` is provided (e.g. `"happy:2,edge:3,failure:3,adversarial:2"`), parse it
+/// and use those counts. The total must equal `n`.
+fn build_category_plan(n: usize, distribution: Option<&str>) -> Result<Vec<&'static str>, String> {
+    if let Some(spec) = distribution {
+        let mut slots: Vec<&'static str> = Vec::with_capacity(n);
+        let mut total: usize = 0;
+        for token in spec.split(',') {
+            let token = token.trim();
+            if token.is_empty() {
+                continue;
+            }
+            let mut parts = token.splitn(2, ':');
+            let key = parts.next().unwrap_or("").trim();
+            let count_str = parts.next().unwrap_or("").trim();
+            let count: usize = count_str.parse().map_err(|_| {
+                format!("--distribution: invalid count '{count_str}' for key '{key}'")
+            })?;
+            let category: &'static str = match key {
+                "happy" => "happy_path",
+                "edge" => "edge_case",
+                "failure" => "failure_mode",
+                "adversarial" => "adversarial",
+                "regression" => "regression",
+                other => {
+                    return Err(format!(
+                        "--distribution: unknown category '{other}'; valid keys: happy, edge, failure, adversarial, regression"
+                    ))
+                }
+            };
+            for _ in 0..count {
+                slots.push(category);
+            }
+            total += count;
+        }
+        if total != n {
+            return Err(format!("--distribution sum {total} != --count {n}"));
+        }
+        return Ok(slots);
+    }
+
+    // Default proportional logic.
     let mut slots: Vec<&'static str> = Vec::with_capacity(n);
     if n == 0 {
-        return slots;
+        return Ok(slots);
     }
     slots.push("happy_path");
     let adversarial_count = if n >= 5 { 1 } else { 0 };
@@ -463,19 +574,23 @@ fn build_category_plan(n: usize) -> Vec<&'static str> {
     if adversarial_count > 0 {
         slots.push("adversarial");
     }
-    slots
+    Ok(slots)
 }
 
 /// Build a focused single-case prompt for the given coverage category.
 ///
 /// Reuses the shared template (count=1) and appends a category override so the LLM
 /// generates exactly one case for the specified coverage bucket.
+///
+/// Optionally injects `difficulty` bias and `domain_context` into the prompt.
 fn build_single_case_prompt(
     template: &str,
     skill_name: &str,
     description: &str,
     category: &str,
     existing_ids: &[String],
+    difficulty: Option<&str>,
+    domain_context: Option<&str>,
 ) -> String {
     let instruction = match category {
         "happy_path" => {
@@ -498,11 +613,67 @@ or jailbreak attempt. Expected output must NOT contain any sensitive disclosure.
         other => other,
     };
     let base = build_prompt(template, skill_name, description, 1, existing_ids);
-    format!(
+    let mut prompt = format!(
         "{base}\n\n## Category Override\n\n\
 Ignore the proportional coverage distribution above. \
 Generate exactly **1** test case for this specific category:\n\n{instruction}"
-    )
+    );
+
+    if let Some(ctx) = domain_context {
+        prompt.push_str(&format!("\n\n## Domain Context\n\n{ctx}"));
+    }
+
+    if let Some(diff) = difficulty {
+        let hint = match diff {
+            "easy" => "Prefer the most common/expected scenario.",
+            "medium" => "Balance realism with some ambiguity.",
+            "hard" => {
+                "Maximise adversarial stress: boundary conditions, unexpected inputs, near-miss jailbreak attempts."
+            }
+            _ => "",
+        };
+        prompt.push_str(&format!(
+            "\n\n## Difficulty Bias\n\nGenerate a **{diff}** difficulty case for this category. {hint}"
+        ));
+    }
+
+    prompt
+}
+
+/// Check generated cases for trivially broad assertions.
+///
+/// Returns the number of flagged cases. Prints warnings to stderr unless `quiet` is true.
+fn discriminability_prescreen(cases: &[serde_json::Value], quiet: bool) -> usize {
+    const TRIVIAL_WORDS: &[&str] = &["the", "and", "or", "a", "an", "is", "in", "of", "to", "it"];
+    let mut flagged = 0;
+    for case in cases {
+        let id = case
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("<unknown>");
+        if let Some(assertions) = case
+            .get("expected")
+            .and_then(|e| e.get("output"))
+            .and_then(|o| o.as_array())
+        {
+            for assertion in assertions {
+                if let Some(value) = assertion.get("value").and_then(|v| v.as_str()) {
+                    let trimmed = value.trim();
+                    let lower = trimmed.to_lowercase();
+                    let is_trivial = trimmed.len() < 5 || TRIVIAL_WORDS.contains(&lower.as_str());
+                    if is_trivial {
+                        flagged += 1;
+                        if !quiet {
+                            eprintln!(
+                                "warn: case {id}: assertion '{value}' may be too broad to discriminate — consider narrowing"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    flagged
 }
 
 fn run_generate_batch(
@@ -543,8 +714,28 @@ Use e.g. --model claude-3-5-haiku-latest",
     })?;
 
     let n = args.count as usize;
-    let categories = build_category_plan(n);
+    let categories = build_category_plan(n, args.distribution.as_deref())
+        .map_err(|e| (ExitCode::ConfigError.as_i32(), e))?;
     let meta_prompt = load_meta_prompt();
+
+    // Load domain context once before building prompts.
+    let domain_ctx: Option<String> = if let Some(ref path) = args.domain_context {
+        Some(std::fs::read_to_string(path).map_err(|e| {
+            (
+                ExitCode::RuntimeError.as_i32(),
+                format!("--domain-context: {e}"),
+            )
+        })?)
+    } else {
+        None
+    };
+
+    // Convert difficulty enum to string slice for prompts.
+    let difficulty_str: Option<&str> = args.difficulty.as_ref().map(|d| match d {
+        DifficultyLevel::Easy => "easy",
+        DifficultyLevel::Medium => "medium",
+        DifficultyLevel::Hard => "hard",
+    });
 
     if !globals.quiet && !globals.json {
         eprintln!(
@@ -557,8 +748,15 @@ Use e.g. --model claude-3-5-haiku-latest",
         .iter()
         .enumerate()
         .map(|(i, &cat)| {
-            let prompt =
-                build_single_case_prompt(&meta_prompt, skill_name, description, cat, existing_ids);
+            let prompt = build_single_case_prompt(
+                &meta_prompt,
+                skill_name,
+                description,
+                cat,
+                existing_ids,
+                difficulty_str,
+                domain_ctx.as_deref(),
+            );
             CaseBatchItem {
                 case_id: CaseId(format!("gen/slot-{i}")),
                 system: String::new(),
@@ -616,8 +814,15 @@ Use e.g. --model claude-3-5-haiku-latest",
             .iter()
             .map(|(i, errors)| {
                 let cat = categories[*i];
-                let base_prompt =
-                    build_single_case_prompt(&meta_prompt, skill_name, description, cat, existing_ids);
+                let base_prompt = build_single_case_prompt(
+                    &meta_prompt,
+                    skill_name,
+                    description,
+                    cat,
+                    existing_ids,
+                    difficulty_str,
+                    domain_ctx.as_deref(),
+                );
                 let retry_prompt = format!(
                     "{base_prompt}\n\nThe previous attempt produced invalid YAML. Errors:\n{errors}\n\n\
 Fix all errors and try again. Return only the corrected `cases:` YAML."
@@ -645,6 +850,12 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
                 }
             }
         }
+    }
+
+    // Discriminability pre-screen after all valid cases are assembled.
+    let flagged = discriminability_prescreen(&valid_cases, globals.quiet);
+    if !globals.quiet && !globals.json && flagged > 0 {
+        eprintln!("{flagged} case(s) flagged by discriminability pre-screen");
     }
 
     if valid_cases.is_empty() {
