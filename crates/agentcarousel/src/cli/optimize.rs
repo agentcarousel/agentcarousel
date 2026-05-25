@@ -1,9 +1,10 @@
-use agentcarousel_core::{annotate_run_cost, CaseResult, CaseStatus, FixtureFile, Message, Role};
+use agentcarousel_core::{annotate_run_cost, CaseId, CaseResult, CaseStatus, FixtureFile, Message, Role};
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::persist_run;
 use agentcarousel_runner::{call_llm, run_eval, EvalConfig, GenerationMode, RunnerConfig};
 use clap::Parser;
 use console::style;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::config::ResolvedConfig;
@@ -74,6 +75,7 @@ struct IterationRecord {
     score_before: f32,
     failure_count: usize,
     top_rubric_failure: Option<String>,
+    failure_clusters: Vec<FailureCluster>,
     candidates: Vec<CandidateRecord>,
     applied: Option<usize>,
     score_after: f32,
@@ -267,6 +269,7 @@ async fn optimize_loop(
     globals: &GlobalOptions,
 ) -> OptimizeReport {
     let skill = fixtures[0].skill_or_agent.clone();
+    let rubric_lookup = build_rubric_lookup(&fixtures);
     let mut current_prompt = baseline_prompt.clone();
     let mut total_cost: f64 = 0.0;
     let mut score_trajectory: Vec<f32> = Vec::new();
@@ -370,13 +373,15 @@ async fn optimize_loop(
         }
 
         // 2. Cluster failures by rubric dimension.
-        let top_rubric = top_failure_dimension(&failing_cases);
+        let clusters = cluster_failures(&failing_cases, &rubric_lookup);
+        let top_rubric = clusters.first().map(|c| c.rubric_id.clone());
         if !globals.quiet {
             let msg = top_rubric.as_deref().unwrap_or("(no rubric data)");
             println!(
-                "    Failures: {}  top dimension: {}",
+                "    Failures: {}  top dimension: {}  ({} cluster(s))",
                 failing_cases.len(),
-                msg
+                msg,
+                clusters.len(),
             );
         }
 
@@ -516,6 +521,7 @@ async fn optimize_loop(
             score_before: current_score - (score_after - current_score),
             failure_count: failing_cases.len(),
             top_rubric_failure: top_rubric,
+            failure_clusters: clusters,
             candidates: candidate_records,
             applied,
             score_after,
@@ -627,23 +633,101 @@ fn collect_failures(run: &agentcarousel_core::Run) -> Vec<&CaseResult> {
         .collect()
 }
 
-/// Find the rubric dimension with the most failures.
-fn top_failure_dimension(failures: &[&CaseResult]) -> Option<String> {
-    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for case in failures {
-        if let Some(scores) = &case.eval_scores {
-            for rs in &scores.rubric_scores {
-                if rs.score < 0.5 {
-                    *counts.entry(rs.rubric_id.clone()).or_insert(0) += 1;
+// ── Failure clustering ────────────────────────────────────────────────────────
+
+/// A group of failing cases sharing the same primary rubric failure dimension.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct FailureCluster {
+    /// The rubric dimension ID (or `"rules_failure"` for cases with no eval scores).
+    pub rubric_id: String,
+    /// Human-readable description from the fixture rubric definition.
+    pub rubric_description: String,
+    /// All failing case IDs in this cluster.
+    pub case_ids: Vec<CaseId>,
+    /// Up to 3 representative case IDs (sorted for determinism).
+    pub representative: Vec<CaseId>,
+}
+
+/// Build a `rubric_id → description` lookup from all fixture rubric definitions.
+pub fn build_rubric_lookup(fixtures: &[FixtureFile]) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for fixture in fixtures {
+        for case in &fixture.cases {
+            if let Some(rubric_items) = &case.expected.rubric {
+                for item in rubric_items {
+                    map.entry(item.id.clone()).or_insert_with(|| item.description.clone());
                 }
             }
         }
     }
-    counts
-        .into_iter()
-        .max_by_key(|(_, n)| *n)
-        .map(|(dim, _)| dim)
+    map
 }
+
+/// Group failing cases by their primary rubric failure dimension.
+///
+/// For each failing case, the primary dimension is the rubric item with the
+/// lowest weighted score (`weight * (1.0 - score)`). Cases with no `eval_scores`
+/// (rules-only failures) are grouped into a catch-all `"rules_failure"` cluster.
+/// Returns clusters ordered by descending case count.
+pub fn cluster_failures(
+    failures: &[&CaseResult],
+    rubric_lookup: &HashMap<String, String>,
+) -> Vec<FailureCluster> {
+    // rubric_id → case_ids
+    let mut groups: HashMap<String, Vec<CaseId>> = HashMap::new();
+
+    for case in failures {
+        let primary = match &case.eval_scores {
+            None => "rules_failure".to_string(),
+            Some(scores) if scores.rubric_scores.is_empty() => "rules_failure".to_string(),
+            Some(scores) => {
+                // Pick dimension with highest weighted deficit (weight * (1 - score)).
+                scores
+                    .rubric_scores
+                    .iter()
+                    .filter(|rs| rs.score < 1.0)
+                    .max_by(|a, b| {
+                        let da = a.weight * (1.0 - a.score);
+                        let db = b.weight * (1.0 - b.score);
+                        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|rs| rs.rubric_id.clone())
+                    .unwrap_or_else(|| "rules_failure".to_string())
+            }
+        };
+        groups
+            .entry(primary)
+            .or_default()
+            .push(case.case_id.clone());
+    }
+
+    let mut clusters: Vec<FailureCluster> = groups
+        .into_iter()
+        .map(|(rubric_id, mut case_ids)| {
+            case_ids.sort_by(|a, b| a.0.cmp(&b.0));
+            let description = if rubric_id == "rules_failure" {
+                "Rules-based failure (no rubric scores available)".to_string()
+            } else {
+                rubric_lookup
+                    .get(&rubric_id)
+                    .cloned()
+                    .unwrap_or_else(|| rubric_id.clone())
+            };
+            let representative = case_ids.iter().take(3).cloned().collect();
+            FailureCluster {
+                rubric_id,
+                rubric_description: description,
+                case_ids,
+                representative,
+            }
+        })
+        .collect();
+
+    // Largest cluster first.
+    clusters.sort_by_key(|c| std::cmp::Reverse(c.case_ids.len()));
+    clusters
+}
+
 
 /// Build a concise failure summary for the analysis prompt.
 fn format_failure_summary(failures: &[&CaseResult], current_prompt: &str) -> String {
