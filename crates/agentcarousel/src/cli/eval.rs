@@ -187,6 +187,18 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
             .or_else(default_concurrency)
             .unwrap_or(1)
     };
+    let total_cases_for_hint: usize = fixtures.iter().map(|f| f.cases.len()).sum();
+    if !globals.quiet
+        && config.output.format != "json"
+        && matches!(args.execution_mode, EvalExecutionMode::Live)
+        && total_cases_for_hint > 50
+    {
+        eprintln!(
+            "{} {} cases detected in live mode; use --execution-mode batch for ~50% cost savings",
+            style("hint:").yellow().bold(),
+            total_cases_for_hint
+        );
+    }
     let format = config.output.format.clone();
     let show_progress = !globals.quiet && (format != "json" && stderr().is_terminal());
     if !globals.quiet && format != "json" && args.judge && !judge_enabled {

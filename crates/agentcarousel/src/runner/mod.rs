@@ -11,12 +11,17 @@
 //! Requires a Tokio runtime (multi-thread recommended for parallel cases).
 
 mod aggregation;
+mod batch;
 mod executor;
 mod generator;
 mod git_revision;
 mod orchestration;
 mod sandbox;
 mod tracer;
+
+pub use batch::{
+    BatchCaseResult, BatchDispatcher, BatchError, BatchStateRecord, BatchStateStore, CaseBatchItem,
+};
 
 use agentcarousel_core::{new_run_id, FixtureFile, Run};
 use agentcarousel_fixtures::MockEngine;
