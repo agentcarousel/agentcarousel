@@ -188,7 +188,7 @@ jobs:
             [ $COMPARE_EXIT -eq 1 ] && \
               echo "::warning title=regression-${skill}::regression detected for ${skill}"
 
-            ./target/release/agentcarousel stats --skill "$skill" --json \
+            ./target/release/agentcarousel metrics --skill "$skill" --json \
               > "eval-results/${skill}.stats.json" 2>/dev/null \
               || echo '{}' > "eval-results/${skill}.stats.json"
 

@@ -10,8 +10,6 @@ mod dashboard;
 mod doctor;
 mod eval;
 mod exit_codes;
-#[cfg(all(feature = "experimental", has_experimental))]
-mod experimental;
 mod export;
 mod fixture_utils;
 mod generate;
@@ -53,7 +51,7 @@ fn styles() -> Styles {
 #[derive(Debug, Parser)]
 #[command(
     name = "agentcarousel",
-    version = concat!(env!("CARGO_PKG_VERSION"), env!("AGENTCAROUSEL_VERSION_SUFFIX")),
+    version = env!("CARGO_PKG_VERSION"),
     about = "Validate, test, and evaluate AI agents and skills using YAML fixtures.",
     styles = styles(),
 )]
@@ -130,9 +128,6 @@ enum Command {
     Ab(ab::AbArgs),
     /// Re-run the prompt-audit analysis against a previously-saved run.
     Audit(audit::AuditArgs),
-    /// [experimental] Adaptive model selection using Thompson Sampling bandit.
-    #[cfg(all(feature = "experimental", has_experimental))]
-    Bandit(experimental::bandit_cli::BanditArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -322,18 +317,13 @@ pub fn run() -> i32 {
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
         Command::Audit(args) => audit::run_audit_command(args, &config, &globals),
-        #[cfg(all(feature = "experimental", has_experimental))]
-        Command::Bandit(args) => experimental::bandit_cli::run_bandit(args, &config, &globals),
     }
 }
 
 fn print_compact_help() {
     println!(
         "agc {} — AI agent behavioral testing\n",
-        concat!(
-            env!("CARGO_PKG_VERSION"),
-            env!("AGENTCAROUSEL_VERSION_SUFFIX")
-        )
+        env!("CARGO_PKG_VERSION")
     );
     #[cfg(feature = "dashboard")]
     println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish trust-check compare dashboard doctor completions update\n");
