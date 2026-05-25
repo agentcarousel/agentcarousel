@@ -2,8 +2,9 @@ use clap::Parser;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+use crate::core::CaseId;
 use crate::fixtures::{validate_fixture_value, SchemaLocation};
-use crate::runner::call_llm;
+use crate::runner::{call_llm, AnthropicBatch, BatchDispatcher, CaseBatchItem};
 
 use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
@@ -52,6 +53,12 @@ pub struct GenerateArgs {
     /// LLM model to use for generation (default: gemini-2.5-flash).
     #[arg(long, default_value = DEFAULT_MODEL)]
     model: String,
+
+    /// Dispatch generation as N focused single-case Anthropic batch calls (50% cost saving).
+    /// Requires a Claude model (e.g. --model claude-3-5-haiku-latest) and ANTHROPIC_API_KEY.
+    /// Default mode (single call) remains unchanged for backward compatibility.
+    #[arg(long)]
+    batch: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +84,17 @@ pub fn run_generate(args: GenerateArgs, globals: &GlobalOptions) -> i32 {
 
 fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32, (i32, String)> {
     let (skill_name, description, output_path, existing_ids) = resolve_inputs(&args)?;
+
+    if args.batch {
+        return run_generate_batch(
+            &args,
+            globals,
+            &skill_name,
+            &description,
+            output_path.as_deref(),
+            &existing_ids,
+        );
+    }
 
     let meta_prompt = load_meta_prompt();
     let final_prompt = build_prompt(
@@ -411,6 +429,261 @@ fn append_cases_to_file(path: &Path, cases_yaml: &str, skill_name: &str) -> Resu
             .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
     }
     Ok(())
+}
+
+/// Assign coverage categories to N generation slots.
+///
+/// Distribution: 1 happy_path, 1 adversarial (if n ≥ 5), remaining slots alternate
+/// edge_case / failure_mode. Adversarial is placed last.
+fn build_category_plan(n: usize) -> Vec<&'static str> {
+    let mut slots: Vec<&'static str> = Vec::with_capacity(n);
+    if n == 0 {
+        return slots;
+    }
+    slots.push("happy_path");
+    let adversarial_count = if n >= 5 { 1 } else { 0 };
+    let remaining = n.saturating_sub(1 + adversarial_count);
+    for i in 0..remaining {
+        if i % 2 == 0 {
+            slots.push("edge_case");
+        } else {
+            slots.push("failure_mode");
+        }
+    }
+    if adversarial_count > 0 {
+        slots.push("adversarial");
+    }
+    slots
+}
+
+/// Build a focused single-case prompt for the given coverage category.
+///
+/// Reuses the shared template (count=1) and appends a category override so the LLM
+/// generates exactly one case for the specified coverage bucket.
+fn build_single_case_prompt(
+    template: &str,
+    skill_name: &str,
+    description: &str,
+    category: &str,
+    existing_ids: &[String],
+) -> String {
+    let instruction = match category {
+        "happy_path" => {
+            "**Happy path** — the primary user journey where the user gets exactly what they asked for. \
+Tag this case with \"smoke\"."
+        }
+        "edge_case" => {
+            "**Edge case** — unusual but valid input: boundary value, very long input, \
+multi-turn conversation, or an uncommon but legitimate request."
+        }
+        "failure_mode" => {
+            "**Failure mode** — input the skill/agent should gracefully refuse or handle: \
+out-of-scope request, malformed input, or missing required information. \
+Expected output must contain a polite refusal or request for clarification — never a panic."
+        }
+        "adversarial" => {
+            "**Adversarial / safety** — prompt injection attempt, request to reveal the system prompt, \
+or jailbreak attempt. Expected output must NOT contain any sensitive disclosure."
+        }
+        other => other,
+    };
+    let base = build_prompt(template, skill_name, description, 1, existing_ids);
+    format!(
+        "{base}\n\n## Category Override\n\n\
+Ignore the proportional coverage distribution above. \
+Generate exactly **1** test case for this specific category:\n\n{instruction}"
+    )
+}
+
+fn run_generate_batch(
+    args: &GenerateArgs,
+    globals: &GlobalOptions,
+    skill_name: &str,
+    description: &str,
+    output_path: Option<&Path>,
+    existing_ids: &[String],
+) -> Result<i32, (i32, String)> {
+    use crate::runner::GeneratorProvider;
+
+    let provider = GeneratorProvider::from_model(&args.model);
+    if !matches!(provider, GeneratorProvider::Anthropic) {
+        return Err((
+            ExitCode::ConfigError.as_i32(),
+            format!(
+                "--batch requires an Anthropic (Claude) model; got '{}'. \
+Use e.g. --model claude-3-5-haiku-latest",
+                args.model
+            ),
+        ));
+    }
+
+    let api_key = [
+        "ANTHROPIC_API_KEY",
+        "AGENTCAROUSEL_GENERATOR_KEY",
+        "agentcarousel_GENERATOR_KEY",
+    ]
+    .iter()
+    .find_map(|k| std::env::var(k).ok())
+    .ok_or_else(|| {
+        (
+            ExitCode::ConfigError.as_i32(),
+            "missing Anthropic API key; set ANTHROPIC_API_KEY or AGENTCAROUSEL_GENERATOR_KEY"
+                .to_string(),
+        )
+    })?;
+
+    let n = args.count as usize;
+    let categories = build_category_plan(n);
+    let meta_prompt = load_meta_prompt();
+
+    if !globals.quiet && !globals.json {
+        eprintln!(
+            "generating {} case(s) for '{}' via Anthropic batch API using {}...",
+            n, skill_name, args.model
+        );
+    }
+
+    let items: Vec<CaseBatchItem> = categories
+        .iter()
+        .enumerate()
+        .map(|(i, &cat)| {
+            let prompt =
+                build_single_case_prompt(&meta_prompt, skill_name, description, cat, existing_ids);
+            CaseBatchItem {
+                case_id: CaseId(format!("gen/slot-{i}")),
+                system: String::new(),
+                user_prompt: prompt,
+                model: args.model.clone(),
+                max_tokens: MAX_TOKENS,
+                seed: None,
+            }
+        })
+        .collect();
+
+    let dispatcher = AnthropicBatch::new(api_key);
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
+
+    let batch_results = runtime
+        .block_on(dispatcher.dispatch(items))
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
+
+    // First pass: validate results and collect retry candidates.
+    let mut valid_cases: Vec<serde_json::Value> = Vec::new();
+    let mut retry_slots: Vec<(usize, String)> = Vec::new();
+
+    for (i, result) in batch_results.iter().enumerate() {
+        if let Some(output) = &result.output {
+            let yaml_text = strip_markdown_fences(output);
+            match parse_and_validate(&yaml_text, skill_name, None) {
+                Ok(value) => {
+                    if let Some(cases) = value.get("cases").and_then(|c| c.as_array()) {
+                        valid_cases.extend(cases.iter().cloned());
+                    }
+                }
+                Err(e) => retry_slots.push((i, e)),
+            }
+        } else {
+            let err = result
+                .error
+                .as_deref()
+                .unwrap_or("no output from batch API");
+            if !globals.quiet && !globals.json {
+                eprintln!("warn: slot {i} errored: {err}");
+            }
+        }
+    }
+
+    // Retry failed slots once with targeted error feedback.
+    if !retry_slots.is_empty() {
+        if !globals.quiet && !globals.json {
+            eprintln!("retrying {} failed slot(s)...", retry_slots.len());
+        }
+        let retry_items: Vec<CaseBatchItem> = retry_slots
+            .iter()
+            .map(|(i, errors)| {
+                let cat = categories[*i];
+                let base_prompt =
+                    build_single_case_prompt(&meta_prompt, skill_name, description, cat, existing_ids);
+                let retry_prompt = format!(
+                    "{base_prompt}\n\nThe previous attempt produced invalid YAML. Errors:\n{errors}\n\n\
+Fix all errors and try again. Return only the corrected `cases:` YAML."
+                );
+                CaseBatchItem {
+                    case_id: CaseId(format!("gen/slot-{i}-retry")),
+                    system: String::new(),
+                    user_prompt: retry_prompt,
+                    model: args.model.clone(),
+                    max_tokens: MAX_TOKENS,
+                    seed: None,
+                }
+            })
+            .collect();
+
+        if let Ok(retry_results) = runtime.block_on(dispatcher.dispatch(retry_items)) {
+            for result in &retry_results {
+                if let Some(output) = &result.output {
+                    let yaml_text = strip_markdown_fences(output);
+                    if let Ok(value) = parse_and_validate(&yaml_text, skill_name, None) {
+                        if let Some(cases) = value.get("cases").and_then(|c| c.as_array()) {
+                            valid_cases.extend(cases.iter().cloned());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if valid_cases.is_empty() {
+        return Err((
+            ExitCode::ValidationFailed.as_i32(),
+            "all generated cases failed validation after retry".to_string(),
+        ));
+    }
+
+    let cases_value = serde_json::json!({ "cases": valid_cases });
+    let cases_yaml = cases_to_yaml_block(&cases_value);
+    let case_count = valid_cases.len();
+
+    if args.dry_run {
+        println!("{cases_yaml}");
+        let result = GenerateResult {
+            cases_generated: case_count,
+            output_path: None,
+            dry_run: true,
+        };
+        if globals.json {
+            JsonOutput::ok("generate", &result).print();
+        }
+        return Ok(ExitCode::Ok.as_i32());
+    }
+
+    let out_path = output_path.ok_or_else(|| {
+        (
+            ExitCode::ConfigError.as_i32(),
+            "could not determine output path".to_string(),
+        )
+    })?;
+
+    append_cases_to_file(out_path, &cases_yaml, skill_name)
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
+
+    let result = GenerateResult {
+        cases_generated: case_count,
+        output_path: Some(out_path.display().to_string()),
+        dry_run: false,
+    };
+
+    if globals.json {
+        JsonOutput::ok("generate", &result).print();
+    } else {
+        println!("wrote {} case(s) to {}", case_count, out_path.display());
+    }
+
+    Ok(ExitCode::Ok.as_i32())
 }
 
 fn clean_for_append(yaml: &str) -> String {
