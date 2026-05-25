@@ -1,8 +1,8 @@
 # AgentCarousel
 
-**Unit tests for AI agents.** Run behavioral tests in CI, score outputs with an LLM judge, gate on regressions, rank which model costs and performs the best, and export auditable signed bundles.
+**Unit tests for AI agents.** Run behavioral tests in CI, score outputs with an LLM judge, gate on regressions, rank which model costs and performs the best, generate compliance metrics for auditors, and export auditable signed bundles.
 
-[Install](#install) · [Quickstart](#quickstart) · [LLM-as-a-Judge Eval](#live-eval-with-llm-as-a-judge) · [Multi-Model Comparisons](#multi-model-comparison) · [A/B Tests](#ab-prompt-comparison) · 
+[Install](#install) · [Quickstart](#quickstart) · [LLM-as-a-Judge Eval](#live-eval-with-llm-as-a-judge) · [Multi-Model Comparisons](#multi-model-comparison) · [A/B Tests](#ab-prompt-comparison) · [Compliance Metrics](#compliance-metrics) · [Reports & Export](#reports)
 
 [![Crates.io](https://img.shields.io/crates/v/agentcarousel.svg)](https://crates.io/crates/agentcarousel)
 [![Homebrew](https://img.shields.io/badge/homebrew-agentcarousel-orange)](https://github.com/agentcarousel/homebrew-agentcarousel)
@@ -222,6 +222,39 @@ agc dashboard --port 8080            # custom port
 agc dashboard --db path/to/history.db
 ```
 
+## Compliance Metrics
+
+`agc metrics` generates a compliance-ready report with four cross-domain measurements. The output is designed to be read by auditors, procurement reviewers, and compliance teams — not just engineers.
+
+```bash
+# Metrics from run history + auto-discovered fixtures
+agc metrics --skill customer-support
+
+# Point directly at fixture files
+agc metrics --fixture fixtures/my-skill/
+
+# Export machine-readable JSON for an evidence bundle
+agc metrics --skill customer-support --json > metrics.json
+
+# Widen the history window
+agc metrics --skill customer-support --limit 50
+```
+
+**What each metric measures:**
+
+| Metric | What it tells you | Source |
+|--------|------------------|--------|
+| Prompt Injection Resistance | How reliably the agent blocks adversarial injection attempts (0–100) | Run history |
+| Behavioral Stability | Whether effectiveness scores are drifting over time — stable, improving, or degrading | Run history |
+| Test Coverage Completeness | What fraction of the risk taxonomy (happy path, edge cases, adversarial, error handling, etc.) the fixture suite covers | Fixture files |
+| Score Accuracy (Calibration) | Whether the automated judge scores actually predict pass/fail outcomes | Judged run history |
+
+**How `--skill` and `--fixture` interact:**
+
+- `--skill my-skill` automatically loads fixture files from `fixtures/my-skill/` (errors if the directory doesn't exist)
+- `--fixture fixtures/my-skill/` reads the skill name from the fixture files and filters run history automatically
+- Providing both flags validates that they agree — mismatched skill names produce a clear error
+
 ## Reports
 
 ```bash
@@ -237,7 +270,12 @@ agc export <RUN-ID>
 agc export -l   # latest run
 ```
 
-Exported runs include a comprehensive report alongside a JSON report and the minisign attestation.
+Every exported tarball includes:
+- `run.json` — full run record with all case results
+- `metrics.json` — compliance metrics scoped to the run's skill
+- `report.md` — human-readable report with a Compliance Metrics table auditors can read directly
+- `MANIFEST.json` — SHA-256 fingerprints of every file in the archive
+- `environment_fingerprint.json` and `fixture_bundle.lock` for reproducibility
 
 ## Exit Codes
 

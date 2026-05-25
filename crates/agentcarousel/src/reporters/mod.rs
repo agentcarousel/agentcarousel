@@ -7,8 +7,8 @@ mod history;
 mod terminal;
 
 pub use history::{
-    fetch_run, find_previous_run, find_tagged_run, list_full_runs, list_runs, persist_run, tag_run,
-    HistoryError, RunListing,
+    fetch_run, find_previous_run, find_tagged_run, list_full_runs, list_full_runs_by_skill,
+    list_runs, persist_run, tag_run, HistoryError, RunListing,
 };
 pub use terminal::{print_audit, print_terminal, print_terminal_summary};
 

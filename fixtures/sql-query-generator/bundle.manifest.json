@@ -57,8 +57,8 @@
   ],
   "policy_version": "msp-policy-2026-05",
   "risk_tier": "medium",
-  "schema_hash": "sha256:placeholder-rerun-bundle-pack",
+  "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "sql-query-generator",
   "source_skill_path": "agentcarousel/skills/sql-query-generator/SKILL.md",
-  "updated_at": "2026-05-16T00:00:00Z"
+  "updated_at": "2026-05-24T00:00:00Z"
 }

@@ -242,8 +242,39 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     file.write_all(b"Redaction policy: trace outputs are scrubbed of common secrets and tokens.\n")
         .map_err(|err| err.to_string())?;
 
+    // Compute compliance metrics for this run's skill and embed in the tarball.
+    let skill = run.skill_or_agent.as_deref();
+    let (effective_skill, metrics_results, runs_analyzed) =
+        super::metrics::compute_metrics_for_export(skill, 20);
+    let metrics_json_path = root.join("metrics.json");
+    let metrics_json_payload = json!({
+        "generated_at": Utc::now().to_rfc3339(),
+        "skill": effective_skill.as_deref().unwrap_or("all skills"),
+        "analysis_window_runs": runs_analyzed,
+        "metrics": metrics_results
+            .iter()
+            .map(|m| json!({
+                "id": m.id,
+                "title": m.title,
+                "domain": m.domain,
+                "score_0_to_100": m.score_0_to_100,
+                "grade": m.grade,
+                "finding": m.finding,
+                "sample_size": m.sample_size,
+                "detail": m.detail,
+            }))
+            .collect::<Vec<_>>()
+    });
+    write_json(&metrics_json_path, &metrics_json_payload)?;
+
+    let metrics_section = super::metrics::render_metrics_to_markdown(
+        &metrics_results,
+        effective_skill.as_deref(),
+        runs_analyzed,
+    );
+
     let report_md_path = root.join("report.md");
-    let report_md = render_markdown_report(&run);
+    let report_md = render_markdown_report(&run, &metrics_section);
     let mut file = fs::File::create(&report_md_path).map_err(|err| err.to_string())?;
     file.write_all(report_md.as_bytes())
         .map_err(|err| err.to_string())?;
@@ -265,7 +296,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     Ok(out_path)
 }
 
-fn render_markdown_report(run: &Run) -> String {
+fn render_markdown_report(run: &Run, metrics_section: &str) -> String {
     use std::fmt::Write as _;
     let mut md = String::new();
 
@@ -387,6 +418,35 @@ fn render_markdown_report(run: &Run) -> String {
         let _ = writeln!(md);
     }
 
+    let _ = writeln!(md, "---");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Certification Scope and Limitations");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "This certification covers the agent system prompt, model version, and workflow configuration described herein, as evaluated on the run date above.");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "Behavioral certification does **not** automatically extend to:"
+    );
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "- Subsequent model versions or provider-issued model updates to the tested model"
+    );
+    let _ = writeln!(md, "- Revisions to the agent's system prompt or workflow configuration after the certification date");
+    let _ = writeln!(md, "- Production deployments that differ materially from the configuration described in this report");
+    let _ = writeln!(
+        md,
+        "- Future agent behavior in scenarios not represented in the test case suite"
+    );
+    let _ = writeln!(md);
+    let _ = writeln!(md, "**Re-attestation:** When the tested model version is deprecated, updated, or replaced by the LLM provider, re-attestation against the same fixture suite is required to maintain a current behavioral certification record. A 90-day grace period applies from the date the provider announces a model version change. Re-attestation is available at reduced cost for existing customers.");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "*This report is issued under the AgentCarousel Behavioral Certification Program. The domain expert attestation constitutes a professional opinion that the test cases are appropriate and material for the stated use case as of the certification date — not a guarantee of agent safety or regulatory compliance in all production scenarios or future model versions.*");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "---");
+    let _ = writeln!(md);
+    md.push_str(metrics_section);
     let _ = writeln!(md, "---");
     let _ = writeln!(md);
     let _ = writeln!(md, "## Cases");
@@ -528,6 +588,7 @@ fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
         "fixture_bundle.lock",
         "environment_fingerprint.json",
         "REDACTION_POLICY.md",
+        "metrics.json",
         "report.md",
     ];
     let mut files = Vec::new();

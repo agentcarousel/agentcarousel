@@ -1,8 +1,8 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/ambient-scribe",
-  "bundle_version": "1.0.0",
-  "case_count": 7,
+  "bundle_version": "2.0.0",
+  "case_count": 11,
   "case_ids": [
     "ambient-scribe/positive-hypertension-soap",
     "ambient-scribe/positive-escalation-suicidal-ideation",
@@ -10,14 +10,33 @@
     "ambient-scribe/edge-grounding-no-ungrounded-claims",
     "ambient-scribe/behavioral-escalation-suppression-refused",
     "ambient-scribe/compliance-phi-free-audit-event",
-    "ambient-scribe/judge-soap-citation-completeness"
+    "ambient-scribe/judge-soap-citation-completeness",
+    "ambient-scribe/positive-escalation-stroke-symptoms",
+    "ambient-scribe/positive-escalation-domestic-violence",
+    "ambient-scribe/compliance-audit-escalation-counts",
+    "ambient-scribe/behavioral-phi-injection-refused"
   ],
   "certification_cases": [
     "ambient-scribe/positive-hypertension-soap",
     "ambient-scribe/positive-escalation-suicidal-ideation",
     "ambient-scribe/behavioral-escalation-suppression-refused",
-    "ambient-scribe/judge-soap-citation-completeness"
+    "ambient-scribe/judge-soap-citation-completeness",
+    "ambient-scribe/positive-escalation-stroke-symptoms",
+    "ambient-scribe/positive-escalation-domestic-violence",
+    "ambient-scribe/compliance-audit-escalation-counts",
+    "ambient-scribe/behavioral-phi-injection-refused"
   ],
+  "certification_scope": {
+    "attestation_scope_statement": "Domain expert attestation constitutes a professional opinion that test cases are appropriate and material for the stated use case as of the certification date — not a guarantee of agent safety or regulatory compliance in all production scenarios.",
+    "covers": "Agent system prompt, model version, and workflow configuration as evaluated on the certification date",
+    "does_not_cover": [
+      "Subsequent model versions or provider-issued model updates",
+      "Revisions to the system prompt or workflow after certification date",
+      "Production deployments materially different from the tested configuration",
+      "Future agent behavior in scenarios outside the test case suite"
+    ],
+    "re_attestation_policy": "90-day grace period from provider-announced model version change. Re-attestation required to maintain current certification record."
+  },
   "certification_track": "candidate",
   "created_at": "2026-05-22T00:00:00Z",
   "data_handling": "synthetic-only",
@@ -31,19 +50,35 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "bbd234c4fa71bd6f7a1a1856fb2a1496946398ceafc3a3fa66b0eb01cc5a7031"
+      "sha256": "2208f77be38d6fd1aefe77df17483292d943774d63e3c897f2c9bddc0f8cd784"
     },
     {
       "path": "prompt.md",
       "sha256": "810655adbb4f70c57bdbc2d25e2b83113062c0049cf02323e2696eb24033ca90"
     },
     {
-      "path": "golden/hypertension-soap.md",
-      "sha256": "4a3e9b70914166f40d2a9a743ac1ad01ee031db422f680f9d227a548075fb67e"
+      "path": "golden/positive-hypertension-soap.txt",
+      "sha256": "0b6ce30fa463d70bbb49b62cba26fa4aa39881d0816e570067c303213d0b0587"
     },
     {
-      "path": "golden/si-escalation-alert.md",
-      "sha256": "e406b24dd9a6645f6354846405beb3490c4068fc8e9146f8e35f372ca58b9ad9"
+      "path": "golden/positive-escalation-suicidal-ideation.txt",
+      "sha256": "fb368b38b1c3d50a1a2e9b2c6bdfd81f4a39bd0f1bb78d36d21c691d07f61e2e"
+    },
+    {
+      "path": "golden/edge-unresolved-medication.txt",
+      "sha256": "0a2e7e294b6e32ae350ace24d850e1fe9df7122d138b4ff2b5943e19f5e6669c"
+    },
+    {
+      "path": "golden/edge-grounding-no-ungrounded-claims.txt",
+      "sha256": "59732d0549b0158b36ab301f35160d3ebc400b71c8f27e32ef3503004260239a"
+    },
+    {
+      "path": "golden/positive-escalation-stroke-symptoms.txt",
+      "sha256": "d27866a917c0d18fac2872924879731afa0300a4692532133efc8ea5e428b8a4"
+    },
+    {
+      "path": "golden/positive-escalation-domestic-violence.txt",
+      "sha256": "4c23903fdd7687378bb004d5ad962ab0e81c76993e8ff6cd2525cf0b304eb3cc"
     }
   ],
   "judge_evaluator": true,
@@ -72,5 +107,5 @@
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "ambient-scribe",
   "source_skill_path": ".claude/skills/ambient-scribe/SKILL.md",
-  "updated_at": "2026-05-22T00:00:00Z"
+  "updated_at": "2026-05-24T00:00:00Z"
 }

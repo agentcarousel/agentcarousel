@@ -92,6 +92,28 @@ pub fn list_full_runs(limit: usize) -> Result<Vec<Run>, HistoryError> {
         .collect()
 }
 
+/// Like `list_full_runs` but filters to a specific skill before applying the limit,
+/// so `limit` means "most recent N runs for this skill" rather than "N global runs that happen to match".
+pub fn list_full_runs_by_skill(skill: &str, limit: usize) -> Result<Vec<Run>, HistoryError> {
+    let conn = open_connection()?;
+    ensure_runs_table(&conn)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT run_json FROM runs \
+             WHERE json_extract(run_json, '$.skill_or_agent') = ?1 \
+             ORDER BY started_at DESC LIMIT ?2",
+        )
+        .map_err(|source| HistoryError::QueryError { source })?;
+    let rows = stmt
+        .query_map(params![skill, limit as i64], |row| row.get::<_, String>(0))
+        .map_err(|source| HistoryError::QueryError { source })?;
+    rows.flatten()
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })
+        })
+        .collect()
+}
+
 /// Returns the most recent run for `skill_or_agent` that is older than `before_run_id`.
 pub fn find_previous_run(
     skill_or_agent: &str,
