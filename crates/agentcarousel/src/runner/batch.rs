@@ -118,6 +118,158 @@ impl BatchStateStore {
     }
 }
 
+// ── AnthropicBatch ────────────────────────────────────────────────────────────
+
+use anthropic_sdk::{
+    types::ContentBlock, Anthropic, BatchCreateParams, BatchRequest, BatchResponseBody,
+};
+use indicatif::{ProgressBar, ProgressStyle};
+use std::time::Duration;
+
+/// Concrete [`BatchDispatcher`] that submits cases to the Anthropic Messages Batch API.
+///
+/// Chunks items into slices of at most 50,000 (the Anthropic per-batch limit), creates
+/// one batch per chunk, polls for completion with a progress bar, and collects results.
+/// State is persisted to `.agc/batch_state/` after each batch creation so that a
+/// crashed run can be resumed.
+pub struct AnthropicBatch {
+    api_key: String,
+}
+
+impl AnthropicBatch {
+    pub fn new(api_key: String) -> Self {
+        Self { api_key }
+    }
+}
+
+impl BatchDispatcher for AnthropicBatch {
+    fn dispatch(
+        &self,
+        items: Vec<CaseBatchItem>,
+    ) -> impl std::future::Future<Output = Result<Vec<BatchCaseResult>, BatchError>> + Send {
+        let api_key = self.api_key.clone();
+        async move {
+            let sdk = Anthropic::new(&api_key)
+                .map_err(|e| BatchError::Fatal(format!("anthropic client init failed: {e}")))?;
+
+            const CHUNK_SIZE: usize = 50_000;
+            let mut all_results: Vec<BatchCaseResult> = Vec::with_capacity(items.len());
+
+            for chunk in items.chunks(CHUNK_SIZE) {
+                // Build one BatchRequest per CaseBatchItem.
+                let requests: Vec<BatchRequest> = chunk
+                    .iter()
+                    .map(|item| {
+                        let mut b = BatchRequest::new(
+                            item.case_id.0.as_str(),
+                            &item.model,
+                            item.max_tokens,
+                        )
+                        .temperature(0.2)
+                        .user(&item.user_prompt);
+                        if !item.system.is_empty() {
+                            b = b.system(&item.system);
+                        }
+                        b.build()
+                    })
+                    .collect();
+
+                let params = BatchCreateParams::new(requests);
+
+                // Create the batch.
+                let batch = sdk
+                    .batches()
+                    .create(params)
+                    .await
+                    .map_err(|e| BatchError::Fatal(format!("batch create failed: {e}")))?;
+
+                let batch_id = batch.id.clone();
+
+                // Persist state for resumability.
+                let state = BatchStateRecord {
+                    batch_id: batch_id.clone(),
+                    provider: "anthropic".to_string(),
+                    status: "in_progress".to_string(),
+                    created_at: chrono::Utc::now(),
+                    case_ids: chunk.iter().map(|i| i.case_id.0.clone()).collect(),
+                };
+                let state_dir = std::path::PathBuf::from(".agc/batch_state");
+                let _ = BatchStateStore::save(&state, &state_dir);
+
+                // Progress bar for this chunk.
+                let pb = ProgressBar::new(chunk.len() as u64);
+                pb.set_style(
+                    ProgressStyle::with_template(
+                        "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} batch cases",
+                    )
+                    .expect("progress template")
+                    .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+                );
+                pb.enable_steady_tick(Duration::from_millis(120));
+
+                let pb_for_monitor = pb.clone();
+                // monitor_progress callback: (percentage, completed, total)
+                sdk.batches()
+                    .monitor_progress(
+                        &batch_id,
+                        move |_pct, completed, _total| {
+                            pb_for_monitor.set_position(u64::from(completed));
+                        },
+                        Some(Duration::from_secs(10)),
+                    )
+                    .await
+                    .map_err(|e| BatchError::Transient(format!("batch monitor failed: {e}")))?;
+
+                pb.finish_and_clear();
+
+                // Collect results.
+                let results =
+                    sdk.batches().get_results(&batch_id).await.map_err(|e| {
+                        BatchError::Transient(format!("batch get_results failed: {e}"))
+                    })?;
+
+                // Map BatchResult → BatchCaseResult.
+                for result in results {
+                    let case_id = agentcarousel_core::CaseId(result.custom_id.clone());
+                    let batch_case_result = match result.response.body {
+                        BatchResponseBody::Success(msg) => {
+                            let output = msg.content.iter().find_map(|block| {
+                                if let ContentBlock::Text { text } = block {
+                                    let t = text.trim().to_string();
+                                    if !t.is_empty() {
+                                        Some(t)
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            });
+                            BatchCaseResult {
+                                case_id,
+                                output,
+                                tokens_in: Some(msg.usage.input_tokens as u64),
+                                tokens_out: Some(msg.usage.output_tokens as u64),
+                                error: None,
+                            }
+                        }
+                        BatchResponseBody::Error(e) => BatchCaseResult {
+                            case_id,
+                            output: None,
+                            tokens_in: None,
+                            tokens_out: None,
+                            error: Some(e.message),
+                        },
+                    };
+                    all_results.push(batch_case_result);
+                }
+            }
+
+            Ok(all_results)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -20,7 +20,8 @@ mod sandbox;
 mod tracer;
 
 pub use batch::{
-    BatchCaseResult, BatchDispatcher, BatchError, BatchStateRecord, BatchStateStore, CaseBatchItem,
+    AnthropicBatch, BatchCaseResult, BatchDispatcher, BatchError, BatchStateRecord,
+    BatchStateStore, CaseBatchItem,
 };
 
 use agentcarousel_core::{new_run_id, FixtureFile, Run};
