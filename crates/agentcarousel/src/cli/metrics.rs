@@ -266,7 +266,7 @@ fn resolve_context(
                     ),
                 );
                 return Err(ExitCode::NotFound.as_i32());
-        }
+            }
             let effective_skill = fixtures.first().map(|f| f.skill_or_agent.clone());
             Ok(ResolvedContext {
                 effective_skill,
