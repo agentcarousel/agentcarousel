@@ -84,6 +84,8 @@ pub struct EvalConfig {
     pub judge: bool,
     pub judge_model: Option<String>,
     pub judge_max_tokens: Option<u32>,
+    /// Base URL for a custom/Ollama judge endpoint. Required when `judge_model` is `custom/*` or `ollama/*`.
+    pub judge_endpoint: Option<String>,
     pub effectiveness_threshold: f32,
     /// Case-level progress bar on stderr (indicatif).
     pub progress: bool,

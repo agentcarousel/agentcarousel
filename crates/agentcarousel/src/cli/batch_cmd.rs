@@ -205,6 +205,7 @@ fn run_fetch(batch_id: &str, config: &ResolvedConfig, globals: &GlobalOptions) -
         evaluator: config.eval.default_evaluator.clone(),
         judge: judge_enabled,
         judge_model: Some(judge_model.clone()),
+        judge_endpoint: None,
         effectiveness_threshold: config.eval.effectiveness_threshold,
         judge_max_tokens: config.judge.max_tokens,
         progress: !globals.quiet,

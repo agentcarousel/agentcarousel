@@ -215,6 +215,7 @@ fn run_once(
             evaluator: config.eval.default_evaluator.clone(),
             judge: false,
             judge_model: None,
+            judge_endpoint: None,
             judge_max_tokens: None,
             effectiveness_threshold: config.eval.effectiveness_threshold,
             progress: false,

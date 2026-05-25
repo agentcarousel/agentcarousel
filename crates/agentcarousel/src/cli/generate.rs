@@ -54,6 +54,10 @@ pub struct GenerateArgs {
     #[arg(long, default_value = DEFAULT_MODEL)]
     model: String,
 
+    /// Base URL for a custom/Ollama generator endpoint (required when model is custom/* or ollama/*).
+    #[arg(long, value_name = "URL")]
+    generator_endpoint: Option<String>,
+
     /// Dispatch generation as N focused single-case Anthropic batch calls (50% cost saving).
     /// Requires a Claude model (e.g. --model claude-3-5-haiku-latest) and ANTHROPIC_API_KEY.
     /// Default mode (single call) remains unchanged for backward compatibility.
@@ -118,8 +122,14 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         .build()
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
 
+    let endpoint = args.generator_endpoint.as_deref();
     let yaml_text = runtime
-        .block_on(call_llm(&args.model, &final_prompt, Some(MAX_TOKENS)))
+        .block_on(call_llm(
+            &args.model,
+            &final_prompt,
+            Some(MAX_TOKENS),
+            endpoint,
+        ))
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?
         .output;
 
@@ -133,7 +143,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
             eprintln!("validation failed, retrying with error feedback...");
         }
         let yaml_text2 = runtime
-            .block_on(call_llm(&args.model, &retry_prompt, Some(MAX_TOKENS)))?
+            .block_on(call_llm(&args.model, &retry_prompt, Some(MAX_TOKENS), endpoint))?
             .output;
         let yaml_text2 = strip_markdown_fences(&yaml_text2);
         parse_and_validate(&yaml_text2, &skill_name, Some(&validation_errors))

@@ -87,9 +87,12 @@ pub struct EvalArgs {
     /// Comma-separated tags; keep only cases having any listed tag. Tag judge-only rows (e.g. `judge`) and pass `--filter-tags judge` to skip rules/golden cases.
     #[arg(long = "filter-tags", value_name = "TAG", value_delimiter = ',')]
     filter_tags: Option<Vec<String>>,
-    /// Base URL for a custom agent endpoint (required when --model is 'custom').
+    /// Base URL for a custom agent endpoint (required when --model is 'custom' or 'ollama/<name>').
     #[arg(long)]
     generator_endpoint: Option<String>,
+    /// Base URL for a custom judge endpoint (required when --judge-model is 'custom' or 'ollama/<name>').
+    #[arg(long)]
+    judge_endpoint: Option<String>,
     /// Run 3 eval passes (current / blank / degraded prompt) and attach a discrimination
     /// score to each case. High-discrimination cases (score > 0.2) are valuable tests;
     /// low-discrimination cases (score ≤ 0) pass even with a degraded prompt and may
@@ -138,7 +141,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         .clone()
         .unwrap_or_else(|| config.judge.model.clone());
     let judge_provider = judge_provider_from_model(&judge_model);
-    if judge_selected && resolve_judge_key(judge_provider).is_none() {
+    if judge_selected
+        && !matches!(judge_provider, JudgeProvider::Custom)
+        && resolve_judge_key(judge_provider).is_none()
+    {
         eprintln!(
             "error: set one of {} to run --judge for model '{}'\n  tip: {}",
             judge_key_candidates(judge_provider).join(", "),
@@ -288,12 +294,13 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         },
         judge: judge_enabled,
         judge_model: Some(judge_model.clone()),
-        effectiveness_threshold: config.eval.effectiveness_threshold,
         judge_max_tokens: if args.disable_max_tokens {
             None
         } else {
             config.judge.max_tokens
         },
+        judge_endpoint: args.judge_endpoint.clone(),
+        effectiveness_threshold: config.eval.effectiveness_threshold,
         progress: show_progress,
     };
 
@@ -412,7 +419,13 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
                 None
             };
             let audit_max_tokens = config.judge.max_tokens.map(|t| t.max(2048));
-            match run_prompt_audit(&prompt_text, &run.cases, &judge_model, audit_max_tokens) {
+            match run_prompt_audit(
+                &prompt_text,
+                &run.cases,
+                &judge_model,
+                audit_max_tokens,
+                args.judge_endpoint.as_deref(),
+            ) {
                 Ok(audit) => {
                     if let Some(ref pb) = audit_spinner {
                         pb.finish_and_clear();

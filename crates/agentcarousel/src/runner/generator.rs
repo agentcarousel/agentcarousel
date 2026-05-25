@@ -224,12 +224,12 @@ pub async fn call_custom_endpoint(
                 serde_json::json!({"role": role, "content": m.content})
             })
             .collect();
-        let mut b = serde_json::json!({
-            "messages": messages,
-            "max_tokens": max_tokens.unwrap_or(2048),
-        });
+        let mut b = serde_json::json!({"messages": messages});
         if let Some(m) = model_name {
             b["model"] = serde_json::json!(m);
+        }
+        if let Some(n) = max_tokens {
+            b["max_tokens"] = serde_json::json!(n);
         }
         b
     };
@@ -706,18 +706,30 @@ pub fn generation_step_result(provider: GeneratorProvider, model: &str) -> serde
 }
 
 /// Call an LLM with an arbitrary prompt. Uses the same provider detection and key
-/// resolution as `generate_case_output`. Intended for `agc generate` fixture synthesis.
+/// resolution as `generate_case_output`. Intended for `agc generate` fixture synthesis
+/// and `agc optimize` failure analysis / prompt synthesis.
+///
+/// `endpoint` is required when `model` is `custom/<name>` or `ollama/<name>`.
 pub async fn call_llm(
     model: &str,
     prompt: &str,
     max_tokens: Option<u32>,
+    endpoint: Option<&str>,
 ) -> Result<GenerationResult, String> {
     let provider = GeneratorProvider::from_model(model);
     if let GeneratorProvider::Custom = provider {
-        return Err(
+        let ep = endpoint.ok_or_else(|| {
             "custom provider requires --generator-endpoint; not supported in agc generate"
-                .to_string(),
-        );
+                .to_string()
+        })?;
+        let model_name = model
+            .strip_prefix("ollama/")
+            .or_else(|| model.strip_prefix("custom/"))
+            .filter(|s| !s.is_empty())
+            .unwrap_or(model);
+        return call_llm_custom(ep, model_name, prompt, max_tokens)
+            .await
+            .map_err(|e| e.to_string());
     }
     let key = resolve_generator_key(provider).map_err(|e| e.to_string())?;
     match provider {
@@ -739,4 +751,69 @@ pub async fn call_llm(
         }
         GeneratorProvider::Custom => unreachable!(),
     }
+}
+
+/// Direct HTTP call to a custom (OpenAI-compatible or Ollama) endpoint with a plain prompt.
+async fn call_llm_custom(
+    endpoint: &str,
+    model_name: &str,
+    prompt: &str,
+    max_tokens: Option<u32>,
+) -> Result<GenerationResult, GeneratorError> {
+    let body = if endpoint.contains("/api/generate") {
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "prompt": prompt,
+            "stream": false,
+        });
+        if let Some(n) = max_tokens {
+            b["options"] = serde_json::json!({"num_predict": n});
+        }
+        b
+    } else {
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+        });
+        if let Some(n) = max_tokens {
+            b["max_tokens"] = serde_json::json!(n);
+        }
+        b
+    };
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|e| GeneratorError::Transient(e.to_string()))?;
+    let response = client
+        .post(endpoint)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| GeneratorError::Transient(format!("custom endpoint request failed: {e}")))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        return Err(GeneratorError::Transient(format!(
+            "custom endpoint returned {status}: {body_text}"
+        )));
+    }
+    let json: serde_json::Value = response.json().await.map_err(|e| {
+        GeneratorError::Transient(format!("custom endpoint response parse failed: {e}"))
+    })?;
+    let output = json["choices"][0]["message"]["content"]
+        .as_str()
+        .or_else(|| json["response"].as_str())
+        .or_else(|| json["output"].as_str())
+        .ok_or_else(|| {
+            GeneratorError::Transient(
+                "custom endpoint response missing 'choices[0].message.content', 'response', or 'output'"
+                    .to_string(),
+            )
+        })?
+        .to_string();
+    Ok(GenerationResult {
+        output,
+        tokens_in: None,
+        tokens_out: None,
+    })
 }

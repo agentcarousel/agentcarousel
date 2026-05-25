@@ -829,6 +829,7 @@ async fn evaluate_case_result(
                 case,
                 config.judge_model.as_deref(),
                 config.judge_max_tokens,
+                config.judge_endpoint.as_deref(),
             )?;
             let case_owned = case.clone();
             let result_owned = result.clone();

@@ -56,6 +56,13 @@ pub struct OptimizeArgs {
     /// Show what would happen without running any LLM calls.
     #[arg(long)]
     dry_run: bool,
+    /// Base URL for the generator model endpoint (required when --model is 'custom' or 'ollama/<name>').
+    /// Falls back to `generator.endpoint` in agentcarousel.toml.
+    #[arg(long, value_name = "URL")]
+    generator_endpoint: Option<String>,
+    /// Base URL for the judge model endpoint (required when --judge-model is 'custom' or 'ollama/<name>').
+    #[arg(long, value_name = "URL")]
+    judge_endpoint: Option<String>,
 }
 
 // ── Report types ──────────────────────────────────────────────────────────────
@@ -164,6 +171,11 @@ pub fn run_optimize_command(
         .judge_model
         .clone()
         .unwrap_or_else(|| config.judge.model.clone());
+    let generator_endpoint = args
+        .generator_endpoint
+        .clone()
+        .or_else(|| config.generator.endpoint.clone());
+    let judge_endpoint = args.judge_endpoint.clone();
 
     // Resolve the fixture root from --skill name or positional PATH.
     let fixture_root = match (&args.skill, &args.path) {
@@ -265,6 +277,8 @@ pub fn run_optimize_command(
         prompt_path.clone(),
         &model,
         &judge_model,
+        generator_endpoint.as_deref(),
+        judge_endpoint.as_deref(),
         &args,
         config,
         globals,
@@ -311,6 +325,8 @@ async fn optimize_loop(
     prompt_path: PathBuf,
     model: &str,
     judge_model: &str,
+    generator_endpoint: Option<&str>,
+    judge_endpoint: Option<&str>,
     args: &OptimizeArgs,
     config: &ResolvedConfig,
     globals: &GlobalOptions,
@@ -336,6 +352,8 @@ async fn optimize_loop(
         &current_prompt,
         model,
         judge_model,
+        generator_endpoint,
+        judge_endpoint,
         config,
         globals,
     )
@@ -451,12 +469,20 @@ async fn optimize_loop(
             .iter()
             .map(|c| (c.case_id.clone(), *c))
             .collect();
-        let analyses = analyze_clusters_llm(&clusters, &case_map, judge_model).await;
+        let analyses =
+            analyze_clusters_llm(&clusters, &case_map, judge_model, judge_endpoint).await;
         // Build a flat feedback string for the candidate synthesis step.
         let feedback = if analyses.is_empty() {
             // Fallback to the text-summary path if no structured analysis produced.
             let failure_summary = format_failure_summary(&failing_cases, &current_prompt);
-            match analyze_failures_llm(&failure_summary, &current_prompt, judge_model).await {
+            match analyze_failures_llm(
+                &failure_summary,
+                &current_prompt,
+                judge_model,
+                judge_endpoint,
+            )
+            .await
+            {
                 Ok(f) => f,
                 Err(e) => {
                     eprintln!("  warn: analysis LLM call failed: {e} — skipping iteration");
@@ -484,6 +510,7 @@ async fn optimize_loop(
             &analyses,
             &feedback,
             model,
+            generator_endpoint,
         )
         .await
         {
@@ -520,6 +547,8 @@ async fn optimize_loop(
                 &current_prompt,
                 model,
                 judge_model,
+                generator_endpoint,
+                judge_endpoint,
                 config,
                 globals,
             )
@@ -535,6 +564,8 @@ async fn optimize_loop(
                 &current_prompt,
                 model,
                 judge_model,
+                generator_endpoint,
+                judge_endpoint,
                 config,
                 globals,
             )
@@ -566,6 +597,8 @@ async fn optimize_loop(
                     &applied_prompt,
                     model,
                     judge_model,
+                    generator_endpoint,
+                    judge_endpoint,
                     config,
                     globals,
                 )
@@ -585,6 +618,8 @@ async fn optimize_loop(
                     &applied_prompt,
                     model,
                     judge_model,
+                    generator_endpoint,
+                    judge_endpoint,
                     config,
                     globals,
                 )
@@ -662,6 +697,8 @@ async fn optimize_loop(
                 &current_prompt,
                 model,
                 judge_model,
+                generator_endpoint,
+                judge_endpoint,
                 config,
                 globals,
             )
@@ -821,11 +858,14 @@ fn unified_diff(old: &str, new: &str) -> String {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Run eval with a specific system prompt injected into every case.
+#[allow(clippy::too_many_arguments)]
 async fn eval_with_prompt(
     fixtures: Vec<FixtureFile>,
     system_prompt: &str,
     model: &str,
     judge_model: &str,
+    generator_endpoint: Option<&str>,
+    judge_endpoint: Option<&str>,
     config: &ResolvedConfig,
     globals: &GlobalOptions,
 ) -> agentcarousel_core::Run {
@@ -838,7 +878,7 @@ async fn eval_with_prompt(
         generation_mode: GenerationMode::Live,
         generator_model: Some(model.to_string()),
         generator_max_tokens: config.generator.max_tokens,
-        generator_endpoint: None,
+        generator_endpoint: generator_endpoint.map(|s| s.to_string()),
         fail_fast: false,
         mock_strict: false,
         command: "optimize-eval".to_string(),
@@ -854,6 +894,7 @@ async fn eval_with_prompt(
         evaluator: config.eval.default_evaluator.clone(),
         judge: true,
         judge_model: Some(judge_model.to_string()),
+        judge_endpoint: judge_endpoint.map(|s| s.to_string()),
         effectiveness_threshold: config.eval.effectiveness_threshold,
         judge_max_tokens: config.judge.max_tokens,
         progress: !globals.quiet,
@@ -1097,6 +1138,7 @@ pub async fn analyze_clusters_llm(
     clusters: &[FailureCluster],
     case_map: &HashMap<CaseId, &CaseResult>,
     judge_model: &str,
+    judge_endpoint: Option<&str>,
 ) -> Vec<FailureAnalysis> {
     let mut analyses = Vec::new();
     for cluster in clusters {
@@ -1123,7 +1165,7 @@ pub async fn analyze_clusters_llm(
                 rubric_description = cluster.rubric_description,
                 agent_result = agent_result,
             );
-            match call_llm(judge_model, &prompt, Some(256)).await {
+            match call_llm(judge_model, &prompt, Some(256), judge_endpoint).await {
                 Ok(r) => representative_cases.push((case_id.clone(), r.output)),
                 Err(e) => {
                     representative_cases.push((case_id.clone(), format!("(analysis failed: {e})")))
@@ -1150,7 +1192,7 @@ pub async fn analyze_clusters_llm(
                 rubric_description = cluster.rubric_description,
                 explanations = explanations,
             );
-            match call_llm(judge_model, &synth_prompt, Some(200)).await {
+            match call_llm(judge_model, &synth_prompt, Some(200), judge_endpoint).await {
                 Ok(r) => r.output,
                 Err(_) => representative_cases
                     .first()
@@ -1173,6 +1215,7 @@ async fn analyze_failures_llm(
     failure_summary: &str,
     _current_prompt: &str,
     judge_model: &str,
+    judge_endpoint: Option<&str>,
 ) -> Result<String, String> {
     let prompt = format!(
         r#"You are an expert prompt engineer. Analyze these AI agent test failures and identify the root cause.
@@ -1186,7 +1229,7 @@ Respond concisely with:
 
 Keep your response under 200 words."#
     );
-    let result = call_llm(judge_model, &prompt, Some(512)).await?;
+    let result = call_llm(judge_model, &prompt, Some(512), judge_endpoint).await?;
     Ok(result.output)
 }
 
@@ -1201,6 +1244,7 @@ async fn synthesize_edit_candidates_llm(
     analyses: &[FailureAnalysis],
     feedback: &str,
     model: &str,
+    generator_endpoint: Option<&str>,
 ) -> Result<Vec<PromptEditCandidate>, String> {
     let analysis_block = if analyses.is_empty() {
         feedback.to_string()
@@ -1231,7 +1275,7 @@ Respond with valid JSON only — no markdown, no explanation:
 {{"edits": [{{"id": "edit-1", "original_text": "<exact text from prompt or empty>", "replacement_text": "<new text>", "rationale": "<one sentence>", "targets_cluster": "<cluster id>"}}, {{"id": "edit-2", ...}}, {{"id": "edit-3", ...}}]}}"#
     );
 
-    let result = call_llm(model, &prompt, Some(2048)).await?;
+    let result = call_llm(model, &prompt, Some(8192), generator_endpoint).await?;
     let text = result.output.trim();
     let json_text = if text.starts_with("```") {
         text.lines()
@@ -1243,20 +1287,75 @@ Respond with valid JSON only — no markdown, no explanation:
         text.to_string()
     };
 
-    let parsed: serde_json::Value = serde_json::from_str(&json_text)
-        .map_err(|e| format!("JSON parse error: {e} — raw: {json_text:.200}"))?;
-
-    let edits = parsed["edits"]
-        .as_array()
-        .ok_or("response missing 'edits' array")?
-        .iter()
-        .filter_map(|v| serde_json::from_value::<PromptEditCandidate>(v.clone()).ok())
-        .filter(|e| !e.replacement_text.is_empty())
-        .collect::<Vec<_>>();
+    // Full parse first; fall back to extracting any complete edit objects on truncated JSON.
+    let edits = match serde_json::from_str::<serde_json::Value>(&json_text) {
+        Ok(parsed) => parsed["edits"]
+            .as_array()
+            .ok_or("response missing 'edits' array")?
+            .iter()
+            .filter_map(|v| serde_json::from_value::<PromptEditCandidate>(v.clone()).ok())
+            .filter(|e| !e.replacement_text.is_empty())
+            .collect::<Vec<_>>(),
+        Err(_) => extract_partial_edits(&json_text),
+    };
 
     if edits.is_empty() {
-        return Err("edits array was empty or unparseable".to_string());
+        return Err(format!(
+            "edits array was empty or unparseable — raw: {:.200}",
+            json_text
+        ));
     }
 
     Ok(edits)
+}
+
+/// Extract complete `PromptEditCandidate` objects from a potentially truncated JSON string.
+///
+/// Searches for `{"id":` markers and attempts to parse each complete `{...}` block
+/// as a `PromptEditCandidate`. Stops when a block has no closing brace (mid-truncation).
+fn extract_partial_edits(text: &str) -> Vec<PromptEditCandidate> {
+    let mut edits = Vec::new();
+    let mut search_from = 0;
+
+    while search_from < text.len() {
+        // Find the next edit object start — must begin with {"id": to avoid matching the
+        // outer {"edits": [...]} wrapper.
+        let Some(rel) = text[search_from..].find("{\"id\":") else {
+            break;
+        };
+        let start = search_from + rel;
+
+        // Walk forward to find the matching closing brace.
+        let mut depth: i32 = 0;
+        let mut end = None;
+        for (i, c) in text[start..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(start + i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        match end {
+            Some(e) => {
+                let obj = &text[start..=e];
+                if let Ok(edit) = serde_json::from_str::<PromptEditCandidate>(obj) {
+                    if !edit.replacement_text.is_empty() {
+                        edits.push(edit);
+                    }
+                }
+                search_from = e + 1;
+            }
+            // No closing brace — response was truncated mid-object; stop.
+            None => break,
+        }
+    }
+
+    edits
 }

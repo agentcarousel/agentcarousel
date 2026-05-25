@@ -39,6 +39,8 @@ pub struct JudgeEvaluator {
     pub prompt: Option<String>,
     pub model: String,
     pub max_tokens: Option<u32>,
+    /// Base URL for a custom/Ollama judge endpoint. Required when `model` is `custom/*` or `ollama/*`.
+    pub endpoint: Option<String>,
 }
 
 impl JudgeEvaluator {
@@ -46,6 +48,7 @@ impl JudgeEvaluator {
         case: &Case,
         judge_model: Option<&str>,
         judge_max_tokens: Option<u32>,
+        judge_endpoint: Option<&str>,
     ) -> Result<Self, EvaluatorError> {
         let prompt = case
             .evaluator_config
@@ -55,6 +58,7 @@ impl JudgeEvaluator {
             prompt,
             model: judge_model.unwrap_or("gemini-2.5-flash").to_string(),
             max_tokens: judge_max_tokens,
+            endpoint: judge_endpoint.map(|s| s.to_string()),
         })
     }
 }
@@ -84,7 +88,12 @@ impl Evaluator for JudgeEvaluator {
         }
 
         let provider = judge_provider_from_model(&self.model);
-        let judge_key = resolve_judge_key(provider)?;
+        // Custom provider needs no API key — resolve_judge_key would fail with empty candidates.
+        let judge_key = if matches!(provider, JudgeProvider::Custom) {
+            String::new()
+        } else {
+            resolve_judge_key(provider)?
+        };
         let system_prompt = build_system_prompt(case, self.prompt.as_deref());
         let user_prompt = build_user_prompt(case, &output);
 
@@ -97,6 +106,12 @@ impl Evaluator for JudgeEvaluator {
             JudgeProvider::OpenRouter => {
                 call_openrouter_text(&judge_key, &self.model, max_tok, sp, up)
             }
+            JudgeProvider::Custom => match self.endpoint.as_deref() {
+                Some(ep) => call_custom_judge_blocking(ep, &self.model, max_tok, sp, up),
+                None => Err(EvaluatorError::MissingConfig(
+                    "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
+                )),
+            },
         };
 
         let first_out = call_judge(system_prompt.clone(), user_prompt.clone(), self.max_tokens)?;
@@ -613,6 +628,81 @@ fn call_openrouter_blocking(
     ))
 }
 
+fn call_custom_judge_blocking(
+    endpoint: &str,
+    model: &str,
+    max_tokens: Option<u32>,
+    system_prompt: String,
+    user_prompt: String,
+) -> Result<JudgeCallOutput, EvaluatorError> {
+    let model_name = model
+        .strip_prefix("ollama/")
+        .or_else(|| model.strip_prefix("custom/"))
+        .filter(|s| !s.is_empty())
+        .unwrap_or(model);
+
+    let body = if endpoint.contains("/api/generate") {
+        let combined = format!("{system_prompt}\n\n{user_prompt}");
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "prompt": combined,
+            "stream": false,
+        });
+        if let Some(n) = max_tokens {
+            b["options"] = serde_json::json!({"num_predict": n});
+        }
+        b
+    } else {
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        });
+        if let Some(n) = max_tokens {
+            b["max_tokens"] = serde_json::json!(n);
+        }
+        b
+    };
+
+    let client = shared_blocking_client();
+    let response =
+        client.post(endpoint).json(&body).send().map_err(|e| {
+            EvaluatorError::JudgeFailed(format!("custom judge request failed: {e}"))
+        })?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body_text = response.text().unwrap_or_default();
+        return Err(EvaluatorError::JudgeUnavailable(format!(
+            "custom judge returned {status}: {body_text}"
+        )));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .map_err(|e| EvaluatorError::InvalidOutput(format!("custom judge parse failed: {e}")))?;
+
+    let text = json["choices"][0]["message"]["content"]
+        .as_str()
+        .or_else(|| json["response"].as_str())
+        .or_else(|| json["output"].as_str())
+        .ok_or_else(|| {
+            EvaluatorError::InvalidOutput(
+                "custom judge response missing 'choices[0].message.content', 'response', or 'output'"
+                    .to_string(),
+            )
+        })?
+        .to_string();
+
+    Ok(JudgeCallOutput {
+        text,
+        tokens_in: None,
+        tokens_out: None,
+    })
+}
+
 fn parse_judge_response(raw_text: &str) -> Result<JudgeResponse, EvaluatorError> {
     let trimmed = raw_text.trim();
     if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(trimmed) {
@@ -749,9 +839,14 @@ pub fn run_prompt_audit(
     results: &[CaseResult],
     model: &str,
     max_tokens: Option<u32>,
+    endpoint: Option<&str>,
 ) -> Result<PromptAudit, EvaluatorError> {
     let provider = judge_provider_from_model(model);
-    let judge_key = resolve_judge_key(provider)?;
+    let judge_key = if matches!(provider, JudgeProvider::Custom) {
+        String::new()
+    } else {
+        resolve_judge_key(provider)?
+    };
 
     let system_prompt = build_prompt_audit_system_prompt();
     let user_prompt = build_prompt_audit_user_prompt(prompt_text, results);
@@ -761,6 +856,12 @@ pub fn run_prompt_audit(
         JudgeProvider::OpenAi => call_openai_text(&judge_key, model, max_tok, sp, up),
         JudgeProvider::Anthropic => call_anthropic_text(&judge_key, model, max_tok, sp, up),
         JudgeProvider::OpenRouter => call_openrouter_text(&judge_key, model, max_tok, sp, up),
+        JudgeProvider::Custom => match endpoint {
+            Some(ep) => call_custom_judge_blocking(ep, model, max_tok, sp, up),
+            None => Err(EvaluatorError::MissingConfig(
+                "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
+            )),
+        },
     };
 
     let first_out = call_judge(system_prompt.clone(), user_prompt.clone(), max_tokens)?;
