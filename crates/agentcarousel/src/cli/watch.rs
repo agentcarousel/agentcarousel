@@ -203,6 +203,7 @@ fn run_once(
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: None,
+        batch_collect_id: None,
     };
 
     let generator_model = config.generator.model.clone();

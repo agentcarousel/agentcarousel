@@ -362,6 +362,7 @@ fn build_eval_config(
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: None,
+        batch_collect_id: None,
     };
     EvalConfig {
         runner,

@@ -25,6 +25,7 @@ pub use batch::{
 };
 pub use orchestration::flatten_cases;
 pub use orchestration::run_discrimination;
+pub use orchestration::submit_batch_only;
 
 use agentcarousel_core::{new_run_id, FixtureFile, Run};
 use agentcarousel_fixtures::MockEngine;
@@ -67,6 +68,9 @@ pub struct RunnerConfig {
     pub agentcarousel_version: String,
     pub config_hash: String,
     pub run_id: Option<String>,
+    /// When set with `GenerationMode::Batch`, collect results from this existing
+    /// batch ID instead of submitting a new one.
+    pub batch_collect_id: Option<String>,
 }
 
 /// Extends [`RunnerConfig`] with evaluation-specific options (evaluator id, judge, thresholds,

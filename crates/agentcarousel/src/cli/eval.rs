@@ -6,8 +6,8 @@ use agentcarousel_evaluators::run_prompt_audit;
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{
-    flatten_cases, run_discrimination_eval, run_eval, EvalConfig, GenerationMode,
-    GeneratorProvider, RunnerConfig,
+    flatten_cases, run_discrimination_eval, run_eval, submit_batch_only, EvalConfig,
+    GenerationMode, GeneratorProvider, RunnerConfig,
 };
 use clap::{Parser, ValueEnum};
 use console::style;
@@ -256,6 +256,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: args.run_id.clone(),
+        batch_collect_id: None,
     };
 
     // Clone runner config for discrimination pass (before it is moved into eval_config).
@@ -291,6 +292,46 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         },
         progress: show_progress,
     };
+
+    // ── Batch fire-and-forget ─────────────────────────────────────────────────
+    // Submit to the Anthropic batch API, save state for `agc batch fetch`, and exit.
+    if matches!(generation_mode, GenerationMode::Batch) {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("tokio runtime");
+        let cases_for_batch = flatten_cases(fixtures);
+        let fixture_paths: Vec<String> = args
+            .paths
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        let judge_model_for_batch = if judge_enabled {
+            Some(eval_config.judge_model.clone().unwrap_or_default())
+        } else {
+            None
+        };
+        match runtime.block_on(submit_batch_only(
+            &cases_for_batch,
+            &eval_config.runner,
+            fixture_paths,
+            judge_model_for_batch,
+        )) {
+            Ok(batch_id) => {
+                let n = cases_for_batch.len();
+                eprintln!(
+                    "Batch submitted: {} ({} cases)\n  status : agc batch status {}\n  fetch  : agc batch fetch {}",
+                    batch_id, n, batch_id, batch_id
+                );
+                return ExitCode::Ok.as_i32();
+            }
+            Err(e) => {
+                eprintln!("error: batch submit failed: {e}");
+                return ExitCode::RuntimeError.as_i32();
+            }
+        }
+    }
 
     prefetch_pricing();
 

@@ -111,6 +111,7 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: args.run_id.clone(),
+        batch_collect_id: None,
     };
 
     let runtime = tokio::runtime::Builder::new_multi_thread()

@@ -1,5 +1,6 @@
 mod ab;
 mod audit;
+mod batch_cmd;
 mod bundle;
 mod carousel;
 mod compare;
@@ -89,6 +90,8 @@ enum Command {
     Test(test::TestArgs),
     /// Run evaluation with mock or live generation; optionally score with an LLM judge.
     Eval(eval::EvalArgs),
+    /// Check status or collect results from an async batch job.
+    Batch(batch_cmd::BatchArgs),
     /// Inspect persisted runs: list recent runs or show details of a specific run.
     Report(report::ReportArgs),
     /// Generate fixture cases for a skill using an LLM.
@@ -254,6 +257,13 @@ pub fn run() -> i32 {
         Command::Validate(a) => a.config.as_deref(),
         Command::Test(a) => a.config.as_deref(),
         Command::Eval(a) => a.config.as_deref(),
+        Command::Batch(a) => {
+            if let batch_cmd::BatchCommand::Fetch { config, .. } = &a.command {
+                config.as_deref()
+            } else {
+                None
+            }
+        }
         Command::Report(a) => a.config.as_deref(),
         Command::Bundle(a) => a.config.as_deref(),
         Command::Publish(a) => a.config.as_deref(),
@@ -297,6 +307,7 @@ pub fn run() -> i32 {
         Command::Validate(args) => validate::run_validate(args, &config, &globals),
         Command::Test(args) => test::run_test(args, &config, &globals),
         Command::Eval(args) => eval::run_eval_command(args, &config, &globals),
+        Command::Batch(args) => batch_cmd::run_batch_command(args, &config, &globals),
         Command::Report(args) => report::run_report(args, &config, &globals),
         Command::Generate(args) => generate::run_generate(args, &globals),
         #[cfg(feature = "dashboard")]

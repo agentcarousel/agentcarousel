@@ -202,15 +202,232 @@ pub(super) async fn run_parallel(
     results
 }
 
+/// Submit cases to the Anthropic batch API without blocking on results.
+///
+/// Saves a rich [`BatchStateRecord`] (including fixture paths and judge config) so
+/// `agc batch fetch` can reconstruct the full eval pipeline later. Returns the batch ID.
+pub async fn submit_batch_only(
+    cases: &[agentcarousel_core::Case],
+    config: &super::RunnerConfig,
+    fixture_paths: Vec<String>,
+    judge_model: Option<String>,
+) -> Result<String, super::batch::BatchError> {
+    use super::batch::{AnthropicBatch, BatchStateRecord, BatchStateStore, CaseBatchItem};
+    use super::generator::{
+        build_user_prompt, resolve_generator_key, resolve_system_prompt, GeneratorProvider,
+    };
+
+    let model = config
+        .generator_model
+        .as_deref()
+        .ok_or_else(|| super::batch::BatchError::Fatal("generator model not configured".into()))?
+        .to_string();
+    let provider = GeneratorProvider::from_model(&model);
+    if !matches!(provider, GeneratorProvider::Anthropic) {
+        return Err(super::batch::BatchError::Fatal(format!(
+            "fire-and-forget batch is only supported for Anthropic models; got {provider:?}"
+        )));
+    }
+    let api_key = resolve_generator_key(provider)
+        .map_err(|e| super::batch::BatchError::Fatal(e.to_string()))?;
+
+    let max_tokens = config.generator_max_tokens.unwrap_or(2048);
+    let items: Vec<CaseBatchItem> = cases
+        .iter()
+        .map(|case| CaseBatchItem {
+            case_id: case.id.clone(),
+            system: resolve_system_prompt(case),
+            user_prompt: build_user_prompt(case),
+            model: model.clone(),
+            max_tokens,
+            seed: case.seed,
+        })
+        .collect();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| super::batch::BatchError::Fatal(format!("reqwest build failed: {e}")))?;
+
+    let dispatcher = AnthropicBatch::new(api_key);
+    let (batch_id, case_ids) = dispatcher.submit_only(&items, &client).await?;
+
+    // Overwrite state with the rich record that includes fixture paths and judge config.
+    let rich_state = BatchStateRecord {
+        batch_id: batch_id.clone(),
+        provider: "anthropic".to_string(),
+        status: "in_progress".to_string(),
+        created_at: chrono::Utc::now(),
+        case_ids,
+        fixture_paths,
+        model,
+        max_tokens,
+        judge_model,
+    };
+    let _ = BatchStateStore::save(&rich_state, &std::path::PathBuf::from(".agc/batch_state"));
+
+    Ok(batch_id)
+}
+
+/// Map a batch dispatch result to `Vec<CaseResult>`, falling back to Error for failures.
+fn map_batch_results(
+    dispatch_result: Result<Vec<super::batch::BatchCaseResult>, super::batch::BatchError>,
+    cases: Vec<agentcarousel_core::Case>,
+    case_map: std::collections::HashMap<String, Vec<agentcarousel_core::Message>>,
+) -> Vec<agentcarousel_core::CaseResult> {
+    use agentcarousel_core::{CaseResult, CaseStatus, ExecutionTrace, Metrics};
+    match dispatch_result {
+        Ok(batch_results) => batch_results
+            .into_iter()
+            .map(|br| {
+                let input = case_map.get(&br.case_id.0).cloned().unwrap_or_default();
+                let (status, error) = if br.error.is_some() {
+                    (CaseStatus::Error, br.error)
+                } else {
+                    (CaseStatus::Passed, None)
+                };
+                let has_output = br.output.is_some();
+                CaseResult {
+                    case_id: br.case_id,
+                    status,
+                    error,
+                    trace: ExecutionTrace {
+                        steps: Vec::new(),
+                        final_output: br.output,
+                        redacted: false,
+                    },
+                    metrics: Metrics {
+                        tokens_in: br.tokens_in,
+                        tokens_out: br.tokens_out,
+                        llm_calls: if has_output { 1 } else { 0 },
+                        ..Metrics::default()
+                    },
+                    eval_scores: None,
+                    input,
+                    discrimination_score: None,
+                    discrimination_label: None,
+                }
+            })
+            .collect(),
+        Err(e) => cases
+            .into_iter()
+            .map(|case| CaseResult {
+                case_id: case.id,
+                status: CaseStatus::Error,
+                error: Some(e.to_string()),
+                trace: ExecutionTrace {
+                    steps: Vec::new(),
+                    final_output: None,
+                    redacted: false,
+                },
+                metrics: Metrics::default(),
+                eval_scores: None,
+                input: case.input.messages,
+                discrimination_score: None,
+                discrimination_label: None,
+            })
+            .collect(),
+    }
+}
+
 pub(super) async fn run_batch(
     cases: Vec<agentcarousel_core::Case>,
     config: &super::RunnerConfig,
 ) -> Vec<agentcarousel_core::CaseResult> {
-    use super::batch::{AnthropicBatch, BatchDispatcher, CaseBatchItem, OpenAiBatch};
+    use super::batch::{
+        AnthropicBatch, BatchDispatcher, BatchStateStore, CaseBatchItem, OpenAiBatch,
+    };
     use super::generator::{
         build_user_prompt, resolve_generator_key, resolve_system_prompt, GeneratorProvider,
     };
     use agentcarousel_core::{CaseResult, CaseStatus, ExecutionTrace, Metrics};
+
+    // ── Collect-only path: results from an already-submitted batch ───────────────
+    if let Some(ref collect_id) = config.batch_collect_id {
+        let state_dir = std::path::PathBuf::from(".agc/batch_state");
+        let state = match BatchStateStore::load(collect_id, &state_dir) {
+            Ok(s) => s,
+            Err(e) => {
+                return cases
+                    .into_iter()
+                    .map(|case| CaseResult {
+                        case_id: case.id,
+                        status: CaseStatus::Error,
+                        error: Some(format!("batch state load failed: {e}")),
+                        trace: ExecutionTrace {
+                            steps: Vec::new(),
+                            final_output: None,
+                            redacted: false,
+                        },
+                        metrics: Metrics::default(),
+                        eval_scores: None,
+                        input: case.input.messages,
+                        discrimination_score: None,
+                        discrimination_label: None,
+                    })
+                    .collect();
+            }
+        };
+        let api_key = match resolve_generator_key(GeneratorProvider::Anthropic) {
+            Ok(k) => k,
+            Err(e) => {
+                return cases
+                    .into_iter()
+                    .map(|case| CaseResult {
+                        case_id: case.id,
+                        status: CaseStatus::Error,
+                        error: Some(e.to_string()),
+                        trace: ExecutionTrace {
+                            steps: Vec::new(),
+                            final_output: None,
+                            redacted: false,
+                        },
+                        metrics: Metrics::default(),
+                        eval_scores: None,
+                        input: case.input.messages,
+                        discrimination_score: None,
+                        discrimination_label: None,
+                    })
+                    .collect();
+            }
+        };
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                return cases
+                    .into_iter()
+                    .map(|case| CaseResult {
+                        case_id: case.id,
+                        status: CaseStatus::Error,
+                        error: Some(format!("reqwest build failed: {e}")),
+                        trace: ExecutionTrace {
+                            steps: Vec::new(),
+                            final_output: None,
+                            redacted: false,
+                        },
+                        metrics: Metrics::default(),
+                        eval_scores: None,
+                        input: case.input.messages,
+                        discrimination_score: None,
+                        discrimination_label: None,
+                    })
+                    .collect();
+            }
+        };
+        let case_map: std::collections::HashMap<_, _> = cases
+            .iter()
+            .map(|c| (c.id.0.clone(), c.input.messages.clone()))
+            .collect();
+        let dispatcher = AnthropicBatch::new(api_key);
+        let total = state.case_ids.len();
+        let dispatch_result = dispatcher
+            .collect_batch(collect_id, &state.case_ids, &client, total)
+            .await;
+        return map_batch_results(dispatch_result, cases, case_map);
+    }
 
     if config.fail_fast {
         // batch mode is all-or-nothing; fail-fast is incompatible
@@ -341,62 +558,7 @@ pub(super) async fn run_batch(
         }
     };
 
-    // Map BatchCaseResult → CaseResult
-    match dispatch_result {
-        Ok(batch_results) => batch_results
-            .into_iter()
-            .map(|br| {
-                let input = case_map.get(&br.case_id.0).cloned().unwrap_or_default();
-                let (status, error) = if br.error.is_some() {
-                    (CaseStatus::Error, br.error)
-                } else {
-                    (CaseStatus::Passed, None)
-                };
-                let has_output = br.output.is_some();
-                CaseResult {
-                    case_id: br.case_id,
-                    status,
-                    error,
-                    trace: ExecutionTrace {
-                        steps: Vec::new(),
-                        final_output: br.output,
-                        redacted: false,
-                    },
-                    metrics: Metrics {
-                        tokens_in: br.tokens_in,
-                        tokens_out: br.tokens_out,
-                        llm_calls: if has_output { 1 } else { 0 },
-                        ..Metrics::default()
-                    },
-                    eval_scores: None,
-                    input,
-                    discrimination_score: None,
-                    discrimination_label: None,
-                }
-            })
-            .collect(),
-        Err(e) => cases
-            .into_iter()
-            .map(|case| {
-                let input = case.input.messages;
-                CaseResult {
-                    case_id: case.id,
-                    status: CaseStatus::Error,
-                    error: Some(e.to_string()),
-                    trace: ExecutionTrace {
-                        steps: Vec::new(),
-                        final_output: None,
-                        redacted: false,
-                    },
-                    metrics: Metrics::default(),
-                    eval_scores: None,
-                    input,
-                    discrimination_score: None,
-                    discrimination_label: None,
-                }
-            })
-            .collect(),
-    }
+    map_batch_results(dispatch_result, cases, case_map)
 }
 
 pub(super) async fn run_eval_cases(
