@@ -69,6 +69,17 @@ struct OptimizeReport {
     iterations: Vec<IterationRecord>,
 }
 
+/// Per-cluster structured failure analysis produced by the judge.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct FailureAnalysis {
+    /// The rubric dimension ID this analysis targets.
+    pub cluster_id: String,
+    /// Per-case judge explanations: `(case_id, two-sentence explanation)`.
+    pub representative_cases: Vec<(CaseId, String)>,
+    /// Single actionable sentence synthesized from all per-case explanations.
+    pub synthesis: String,
+}
+
 #[derive(serde::Serialize, Debug)]
 struct IterationRecord {
     iteration: u32,
@@ -76,6 +87,7 @@ struct IterationRecord {
     failure_count: usize,
     top_rubric_failure: Option<String>,
     failure_clusters: Vec<FailureCluster>,
+    failure_analyses: Vec<FailureAnalysis>,
     candidates: Vec<CandidateRecord>,
     applied: Option<usize>,
     score_after: f32,
@@ -385,16 +397,31 @@ async fn optimize_loop(
             );
         }
 
-        // 3. Analyze failures with the judge model.
-        let failure_summary = format_failure_summary(&failing_cases, &current_prompt);
-        let feedback =
+        // 3. Structured per-cluster failure analysis via the judge model.
+        let case_map: HashMap<CaseId, &CaseResult> = failing_cases
+            .iter()
+            .map(|c| (c.case_id.clone(), *c))
+            .collect();
+        let analyses =
+            analyze_clusters_llm(&clusters, &case_map, judge_model).await;
+        // Build a flat feedback string for the candidate synthesis step.
+        let feedback = if analyses.is_empty() {
+            // Fallback to the text-summary path if no structured analysis produced.
+            let failure_summary = format_failure_summary(&failing_cases, &current_prompt);
             match analyze_failures_llm(&failure_summary, &current_prompt, judge_model).await {
                 Ok(f) => f,
                 Err(e) => {
                     eprintln!("  warn: analysis LLM call failed: {e} — skipping iteration");
                     continue;
                 }
-            };
+            }
+        } else {
+            analyses
+                .iter()
+                .map(|a| format!("[{}] {}", a.cluster_id, a.synthesis))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
         if !globals.quiet {
             let first_line = feedback.lines().next().unwrap_or("(no feedback)");
             println!(
@@ -522,6 +549,7 @@ async fn optimize_loop(
             failure_count: failing_cases.len(),
             top_rubric_failure: top_rubric,
             failure_clusters: clusters,
+            failure_analyses: analyses,
             candidates: candidate_records,
             applied,
             score_after,
@@ -771,6 +799,85 @@ fn format_failure_summary(failures: &[&CaseResult], current_prompt: &str) -> Str
         lines.push(format!("  … and {} more", failures.len() - 10));
     }
     lines.join("\n")
+}
+
+/// Run structured per-cluster failure analysis using the judge model.
+///
+/// For each cluster, calls the judge once per representative case to explain
+/// what the system prompt is missing, then synthesizes those explanations into
+/// a single actionable sentence. Returns one `FailureAnalysis` per cluster.
+pub async fn analyze_clusters_llm(
+    clusters: &[FailureCluster],
+    case_map: &HashMap<CaseId, &CaseResult>,
+    judge_model: &str,
+) -> Vec<FailureAnalysis> {
+    let mut analyses = Vec::new();
+    for cluster in clusters {
+        // Per-case judge explanations.
+        let mut representative_cases: Vec<(CaseId, String)> = Vec::new();
+        for case_id in &cluster.representative {
+            let output = case_map
+                .get(case_id)
+                .and_then(|c| c.trace.final_output.as_deref())
+                .unwrap_or("(no output recorded)");
+            let error = case_map
+                .get(case_id)
+                .and_then(|c| c.error.as_deref())
+                .unwrap_or("");
+
+            let agent_result = if !error.is_empty() {
+                format!("Error: {}", &error[..error.len().min(300)])
+            } else {
+                output.chars().take(400).collect::<String>()
+            };
+
+            let prompt = format!(
+                "The agent failed this test case.\nThe case tests: {rubric_description}\nThe agent produced: {agent_result}\n\nIn exactly 2 sentences, explain what the system prompt is missing that would have caused the agent to succeed. Be specific and actionable.",
+                rubric_description = cluster.rubric_description,
+                agent_result = agent_result,
+            );
+            match call_llm(judge_model, &prompt, Some(256)).await {
+                Ok(r) => representative_cases.push((case_id.clone(), r.output)),
+                Err(e) => representative_cases
+                    .push((case_id.clone(), format!("(analysis failed: {e})"))),
+            }
+        }
+
+        // Synthesize per-case explanations into one actionable sentence.
+        let synthesis = if representative_cases.is_empty() {
+            format!(
+                "No representative cases found for cluster '{}'.",
+                cluster.rubric_id
+            )
+        } else {
+            let explanations = representative_cases
+                .iter()
+                .enumerate()
+                .map(|(i, (id, exp))| format!("Case {} ({}): {}", i + 1, id.0, exp))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let synth_prompt = format!(
+                "These are per-case explanations of why an AI agent failed the rubric dimension '{rubric_id}' ({rubric_description}):\n\n{explanations}\n\nSummarize in exactly ONE actionable sentence the single most important change to the system prompt that would fix these failures.",
+                rubric_id = cluster.rubric_id,
+                rubric_description = cluster.rubric_description,
+                explanations = explanations,
+            );
+            match call_llm(judge_model, &synth_prompt, Some(200)).await {
+                Ok(r) => r.output,
+                Err(_) => representative_cases
+                    .first()
+                    .map(|(_, s)| s.clone())
+                    .unwrap_or_default(),
+            }
+        };
+
+        analyses.push(FailureAnalysis {
+            cluster_id: cluster.rubric_id.clone(),
+            representative_cases,
+            synthesis,
+        });
+    }
+    analyses
 }
 
 /// Call the judge model to analyze failures and return actionable feedback.
