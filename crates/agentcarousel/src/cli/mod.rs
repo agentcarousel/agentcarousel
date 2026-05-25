@@ -17,6 +17,7 @@ mod generate;
 mod init;
 mod lint;
 mod metrics;
+mod optimize;
 mod output;
 mod promote;
 mod publish;
@@ -131,6 +132,8 @@ enum Command {
     Ab(ab::AbArgs),
     /// Prompt-audit a saved run, or apply stored suggestions to prompt.md.
     Audit(audit::AuditArgs),
+    /// Automated system prompt optimization loop.
+    Optimize(optimize::OptimizeArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -178,6 +181,7 @@ fn help_template() -> String {
     let publish = c("publish");
     let promote = c("promote");
     let trust_check = c("trust-check");
+    let optimize = c("optimize");
     let completions = c("completions");
     let update = c("update");
     let doctor = c("doctor");
@@ -207,6 +211,7 @@ Usage:
   {ab}           Run the same fixtures against two system prompts and compare head-to-head
   {watch}        Run tests automatically whenever you save a fixture file
   {generate}     Generate fixture cases for a skill using an LLM
+  {optimize}     Automated system prompt optimization loop (iterative LLM-driven tuning)
   {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
   {init}         Scaffold a new skill or agent fixture template
 
@@ -273,6 +278,7 @@ pub fn run() -> i32 {
         Command::Watch(a) => a.config.as_deref(),
         Command::Ab(a) => a.config.as_deref(),
         Command::Audit(a) => a.config.as_deref(),
+        Command::Optimize(a) => a.config.as_deref(),
         _ => None,
     };
 
@@ -328,6 +334,7 @@ pub fn run() -> i32 {
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
         Command::Audit(args) => audit::run_audit_command(args, &config, &globals),
+        Command::Optimize(args) => optimize::run_optimize_command(args, &config, &globals),
     }
 }
 
@@ -337,9 +344,9 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize lint init report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");
