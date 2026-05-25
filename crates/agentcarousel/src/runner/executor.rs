@@ -119,7 +119,7 @@ async fn run_case_inner(
 
         let use_mock = match config.generation_mode {
             GenerationMode::MockOnly => true,
-            GenerationMode::Live => false,
+            GenerationMode::Live | GenerationMode::Batch => false,
         };
 
         if use_mock
@@ -131,7 +131,7 @@ async fn run_case_inner(
             trace.final_output = Some(extract_output(response));
         } else {
             match config.generation_mode {
-                GenerationMode::Live => {
+                GenerationMode::Live | GenerationMode::Batch => {
                     let live_start = Instant::now();
                     match generator::generate_case_output(&case, config).await {
                         Ok(generated) => {

@@ -23,13 +23,15 @@ use super::GlobalOptions;
 enum EvalExecutionMode {
     Mock,
     Live,
+    /// Submit all cases to the provider's async batch API (~50% cost saving).
+    Batch,
 }
 
 /// Run your test suite and see which cases pass, fail, or need attention.
 #[derive(Debug, Parser)]
 #[command(
     long_about = "Run your test suite and see which cases pass, fail, or need attention.\n\nBy default, agc eval uses pre-recorded mock responses so no API key is required and runs finish in seconds. Switch to --execution-mode live to call a real model API. Add --judge to score outputs with an LLM judge on top of rule-based checks.\n\nToken counts and USD cost are shown automatically after each run when data is available.",
-    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --json          # CI-friendly JSON output\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
+    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --json          # CI-friendly JSON output\n  agc eval fixtures/ --execution-mode batch              # async batch API (~50% cheaper)\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
 )]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -149,8 +151,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         eprintln!("error: --disable-max-tokens is not supported with Anthropic models");
         return ExitCode::ConfigError.as_i32();
     }
-    if matches!(args.execution_mode, EvalExecutionMode::Live)
-        && resolve_generator_key(generator_provider).is_none()
+    if matches!(
+        args.execution_mode,
+        EvalExecutionMode::Live | EvalExecutionMode::Batch
+    ) && resolve_generator_key(generator_provider).is_none()
     {
         eprintln!(
             "error: set one of {} to run live generation for model '{}'\n  tip: {}",
@@ -163,6 +167,7 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
     let generation_mode = match args.execution_mode {
         EvalExecutionMode::Mock => GenerationMode::MockOnly,
         EvalExecutionMode::Live => GenerationMode::Live,
+        EvalExecutionMode::Batch => GenerationMode::Batch,
     };
 
     if globals.verbose > 0 {
@@ -176,8 +181,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         );
     }
 
-    let concurrency = if matches!(generation_mode, GenerationMode::Live)
-        && args.concurrency.is_none()
+    let concurrency = if matches!(
+        generation_mode,
+        GenerationMode::Live | GenerationMode::Batch
+    ) && args.concurrency.is_none()
         && config.runner.concurrency.is_none()
     {
         1
@@ -212,7 +219,10 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     let runner = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        offline: if matches!(generation_mode, GenerationMode::Live) {
+        offline: if matches!(
+            generation_mode,
+            GenerationMode::Live | GenerationMode::Batch
+        ) {
             false
         } else {
             config.runner.offline

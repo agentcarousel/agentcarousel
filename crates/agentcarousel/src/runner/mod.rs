@@ -43,6 +43,8 @@ pub enum GenerationMode {
     MockOnly,
     /// Call the configured generator provider (live; may require API keys).
     Live,
+    /// Submit all cases to the provider's async batch API (50% cost saving, async).
+    Batch,
 }
 
 /// Tunables for [`run_fixtures`] (concurrency, timeouts, mocks directory, offline mode, etc.).

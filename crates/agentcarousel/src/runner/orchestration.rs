@@ -200,6 +200,191 @@ pub(super) async fn run_parallel(
     results
 }
 
+pub(super) async fn run_batch(
+    cases: Vec<agentcarousel_core::Case>,
+    config: &super::RunnerConfig,
+) -> Vec<agentcarousel_core::CaseResult> {
+    use super::batch::{AnthropicBatch, BatchDispatcher, CaseBatchItem, OpenAiBatch};
+    use super::generator::{
+        build_user_prompt, resolve_generator_key, resolve_system_prompt, GeneratorProvider,
+    };
+    use agentcarousel_core::{CaseResult, CaseStatus, ExecutionTrace, Metrics};
+
+    if config.fail_fast {
+        // batch mode is all-or-nothing; fail-fast is incompatible
+        return cases
+            .into_iter()
+            .map(|case| CaseResult {
+                case_id: case.id,
+                status: CaseStatus::Error,
+                error: Some("--fail-fast is not supported with --execution-mode batch".to_string()),
+                trace: ExecutionTrace {
+                    steps: Vec::new(),
+                    final_output: None,
+                    redacted: false,
+                },
+                metrics: Metrics::default(),
+                eval_scores: None,
+                input: case.input.messages,
+            })
+            .collect();
+    }
+
+    let model = match config.generator_model.as_deref() {
+        Some(m) => m.to_string(),
+        None => {
+            return cases
+                .into_iter()
+                .map(|case| CaseResult {
+                    case_id: case.id,
+                    status: CaseStatus::Error,
+                    error: Some("generator model is not configured for batch mode".to_string()),
+                    trace: ExecutionTrace {
+                        steps: Vec::new(),
+                        final_output: None,
+                        redacted: false,
+                    },
+                    metrics: Metrics::default(),
+                    eval_scores: None,
+                    input: case.input.messages,
+                })
+                .collect();
+        }
+    };
+
+    let provider = GeneratorProvider::from_model(&model);
+    let max_tokens = config.generator_max_tokens.unwrap_or(2048);
+
+    // Build a lookup map so we can reconstruct CaseResult.input after dispatch
+    let case_map: std::collections::HashMap<_, _> = cases
+        .iter()
+        .map(|c| (c.id.0.clone(), c.input.messages.clone()))
+        .collect();
+
+    // Map Case → CaseBatchItem
+    let batch_items: Vec<CaseBatchItem> = cases
+        .iter()
+        .map(|case| CaseBatchItem {
+            case_id: case.id.clone(),
+            system: resolve_system_prompt(case),
+            user_prompt: build_user_prompt(case),
+            model: model.clone(),
+            max_tokens,
+            seed: case.seed,
+        })
+        .collect();
+
+    // Dispatch to the appropriate batch dispatcher
+    let dispatch_result = match provider {
+        GeneratorProvider::Anthropic => match resolve_generator_key(provider) {
+            Ok(key) => AnthropicBatch::new(key).dispatch(batch_items).await,
+            Err(e) => {
+                return cases
+                    .into_iter()
+                    .map(|case| CaseResult {
+                        case_id: case.id,
+                        status: CaseStatus::Error,
+                        error: Some(e.to_string()),
+                        trace: ExecutionTrace {
+                            steps: Vec::new(),
+                            final_output: None,
+                            redacted: false,
+                        },
+                        metrics: Metrics::default(),
+                        eval_scores: None,
+                        input: case.input.messages,
+                    })
+                    .collect()
+            }
+        },
+        GeneratorProvider::OpenAi => match resolve_generator_key(provider) {
+            Ok(key) => OpenAiBatch::new(key).dispatch(batch_items).await,
+            Err(e) => {
+                return cases
+                    .into_iter()
+                    .map(|case| CaseResult {
+                        case_id: case.id,
+                        status: CaseStatus::Error,
+                        error: Some(e.to_string()),
+                        trace: ExecutionTrace {
+                            steps: Vec::new(),
+                            final_output: None,
+                            redacted: false,
+                        },
+                        metrics: Metrics::default(),
+                        eval_scores: None,
+                        input: case.input.messages,
+                    })
+                    .collect()
+            }
+        },
+        GeneratorProvider::Gemini | GeneratorProvider::OpenRouter | GeneratorProvider::Custom => {
+            eprintln!(
+                "warn: batch mode is not supported for {provider:?}; falling back to parallel live generation"
+            );
+            return run_parallel(
+                cases,
+                &agentcarousel_fixtures::MockEngine::default(),
+                config,
+            )
+            .await;
+        }
+    };
+
+    // Map BatchCaseResult → CaseResult
+    match dispatch_result {
+        Ok(batch_results) => batch_results
+            .into_iter()
+            .map(|br| {
+                let input = case_map.get(&br.case_id.0).cloned().unwrap_or_default();
+                let (status, error) = if br.error.is_some() {
+                    (CaseStatus::Error, br.error)
+                } else {
+                    (CaseStatus::Passed, None)
+                };
+                let has_output = br.output.is_some();
+                CaseResult {
+                    case_id: br.case_id,
+                    status,
+                    error,
+                    trace: ExecutionTrace {
+                        steps: Vec::new(),
+                        final_output: br.output,
+                        redacted: false,
+                    },
+                    metrics: Metrics {
+                        tokens_in: br.tokens_in,
+                        tokens_out: br.tokens_out,
+                        llm_calls: if has_output { 1 } else { 0 },
+                        ..Metrics::default()
+                    },
+                    eval_scores: None,
+                    input,
+                }
+            })
+            .collect(),
+        Err(e) => cases
+            .into_iter()
+            .map(|case| {
+                let input = case.input.messages;
+                CaseResult {
+                    case_id: case.id,
+                    status: CaseStatus::Error,
+                    error: Some(e.to_string()),
+                    trace: ExecutionTrace {
+                        steps: Vec::new(),
+                        final_output: None,
+                        redacted: false,
+                    },
+                    metrics: Metrics::default(),
+                    eval_scores: None,
+                    input,
+                }
+            })
+            .collect(),
+    }
+}
+
 pub(super) async fn run_eval_cases(
     cases: Vec<Case>,
     mock_engine: &MockEngine,
@@ -207,6 +392,72 @@ pub(super) async fn run_eval_cases(
     run_id: &RunId,
     judge_cache: Arc<Mutex<BoundedCache>>,
 ) -> Vec<CaseResult> {
+    // Batch mode: collect all outputs up front, then run the evaluator pipeline on each.
+    if config.runner.generation_mode == super::GenerationMode::Batch {
+        let batch_case_results = run_batch(cases.clone(), &config.runner).await;
+        // Build a map from case_id → CaseResult for the batch outputs
+        let mut output_map: std::collections::HashMap<String, CaseResult> = batch_case_results
+            .into_iter()
+            .map(|r| (r.case_id.0.clone(), r))
+            .collect();
+
+        let judge_unavailable = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut results = Vec::with_capacity(cases.len());
+
+        for case in cases {
+            let case_id_str = case.id.0.clone();
+            let mut result = output_map
+                .remove(&case_id_str)
+                .unwrap_or_else(|| CaseResult {
+                    case_id: case.id.clone(),
+                    status: CaseStatus::Error,
+                    error: Some("batch result missing for case".to_string()),
+                    trace: agentcarousel_core::ExecutionTrace {
+                        steps: Vec::new(),
+                        final_output: None,
+                        redacted: false,
+                    },
+                    metrics: agentcarousel_core::Metrics::default(),
+                    eval_scores: None,
+                    input: case.input.messages.clone(),
+                });
+
+            if result.status == CaseStatus::Passed {
+                match evaluate_case_result(&case, &result, config, run_id, &judge_cache).await {
+                    Ok(scores) => {
+                        result.metrics.judge_tokens_in = scores.judge_tokens_in;
+                        result.metrics.judge_tokens_out = scores.judge_tokens_out;
+                        result.eval_scores = Some(scores.clone());
+                        let threshold = case
+                            .evaluator_config
+                            .as_ref()
+                            .and_then(|c| c.effectiveness_threshold)
+                            .unwrap_or(config.effectiveness_threshold);
+                        if scores.effectiveness_score < threshold {
+                            result.status = CaseStatus::Failed;
+                            result.error = Some(format!(
+                                "effectiveness {:.2} below threshold {:.2}",
+                                scores.effectiveness_score, threshold
+                            ));
+                        }
+                    }
+                    Err(err) => {
+                        if err.is_fatal_for_run()
+                            && !judge_unavailable.swap(true, std::sync::atomic::Ordering::AcqRel)
+                        {
+                            eprintln!("warn: judge permanently unavailable ({}), skipping evaluator for remaining batch cases", err);
+                        }
+                        result.status = CaseStatus::Error;
+                        result.error = Some(err.to_string());
+                    }
+                }
+            }
+            super::aggregation::apply_provider_error_metrics(&mut result);
+            results.push(result);
+        }
+        return results;
+    }
+
     let progress_bar: Option<ProgressBar> = if config.progress && !cases.is_empty() {
         let pb = ProgressBar::new(cases.len() as u64);
         pb.set_style(

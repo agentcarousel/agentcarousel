@@ -238,7 +238,7 @@ pub async fn call_custom_endpoint(
     })
 }
 
-fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, GeneratorError> {
+pub(super) fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, GeneratorError> {
     let key = provider
         .key_candidates()
         .iter()
@@ -261,7 +261,7 @@ fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, Generato
 ///   1. An explicit `role: system` message in the fixture's input.messages.
 ///   2. `fixtures/<skill>/prompt.md` where skill is the prefix of the case ID before `/`.
 ///   3. A minimal generic fallback so generation still works for fixture-less cases.
-fn resolve_system_prompt(case: &Case) -> String {
+pub(super) fn resolve_system_prompt(case: &Case) -> String {
     if let Some(msg) = case.input.messages.iter().find(|m| m.role == Role::System) {
         return msg.content.clone();
     }
@@ -282,7 +282,7 @@ fn load_skill_prompt_for_case(case: &Case) -> Option<String> {
 }
 
 /// Build the user-turn portion of the generation prompt (everything except the system message).
-fn build_user_prompt(case: &Case) -> String {
+pub(super) fn build_user_prompt(case: &Case) -> String {
     let mut prompt = String::new();
     for message in &case.input.messages {
         if message.role == Role::System {
