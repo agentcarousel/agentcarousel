@@ -23,18 +23,21 @@ use super::GlobalOptions;
     after_help = "Examples:\n  agc optimize fixtures/my-skill/\n  agc optimize fixtures/my-skill/ --target-score 0.95 --max-iter 5 --budget 15\n  agc optimize fixtures/my-skill/ --model claude-opus-4-7 --judge-model claude-opus-4-7"
 )]
 pub struct OptimizeArgs {
-    /// Fixture files or directory to optimize against.
-    #[arg(value_name = "PATH")]
-    path: PathBuf,
+    /// Fixture files or directory to optimize against (mutually exclusive with --skill).
+    #[arg(value_name = "PATH", conflicts_with = "skill")]
+    path: Option<PathBuf>,
+    /// Skill name shorthand — resolves to fixtures/<name>/ (mutually exclusive with PATH).
+    #[arg(long, value_name = "NAME", conflicts_with = "path")]
+    skill: Option<String>,
     /// Stop when pass rate reaches this value (0.0–1.0).
     #[arg(long, default_value_t = 0.9)]
     target_score: f32,
     /// Maximum USD to spend across all eval and LLM calls.
     #[arg(long, default_value_t = 10.0)]
     budget: f64,
-    /// Maximum number of optimization iterations.
-    #[arg(long, default_value_t = 5)]
-    max_iter: u32,
+    /// Maximum number of optimization iterations (alias: --max-iter).
+    #[arg(long, alias = "max-iter", default_value_t = 5)]
+    iterations: u32,
     /// Generator model for eval runs (default: from config).
     #[arg(long)]
     model: Option<String>,
@@ -124,8 +127,16 @@ impl PromptEditCandidate {
 #[derive(serde::Serialize, Debug)]
 struct CandidateRecord {
     index: usize,
+    /// Pass rate on the targeted failing-case set after applying this edit.
     score: f32,
+    /// `score` minus the baseline pass rate on the targeted set.
     delta: f32,
+    /// Improvement on the cluster's representative failing cases specifically.
+    delta_failing: f32,
+    /// Degradation on previously-passing cases for the same rubric dimension.
+    regression: f32,
+    /// Selection criterion: `delta_failing - regression` (higher is better).
+    selection_score: f32,
     edit_id: String,
     targets_cluster: String,
     rationale: String,
@@ -147,10 +158,23 @@ pub fn run_optimize_command(
         .clone()
         .unwrap_or_else(|| config.judge.model.clone());
 
+    // Resolve the fixture root from --skill name or positional PATH.
+    let fixture_root = match (&args.skill, &args.path) {
+        (Some(name), _) => PathBuf::from("fixtures").join(name),
+        (_, Some(p)) => p.clone(),
+        (None, None) => {
+            eprintln!("error: provide either a PATH argument or --skill <name>");
+            return ExitCode::ConfigError.as_i32();
+        }
+    };
+
     // Collect fixture paths and load fixtures.
-    let fixture_paths = collect_fixture_paths(std::slice::from_ref(&args.path));
+    let fixture_paths = collect_fixture_paths(std::slice::from_ref(&fixture_root));
     if fixture_paths.is_empty() {
-        eprintln!("error: no fixture files found at '{}'", args.path.display());
+        eprintln!(
+            "error: no fixture files found at '{}'",
+            fixture_root.display()
+        );
         return ExitCode::NotFound.as_i32();
     }
 
@@ -198,7 +222,7 @@ pub fn run_optimize_command(
             total_cases,
             args.target_score * 100.0,
             args.budget,
-            args.max_iter,
+            args.iterations,
         );
         println!("  prompt: {}", prompt_path.display());
         println!("  model: {}  judge: {}\n", model, judge_model);
@@ -374,8 +398,9 @@ async fn optimize_loop(
 
     // ── Iteration loop ────────────────────────────────────────────────────────
     let mut current_score = baseline_score;
+    let mut no_improvement_streak: u32 = 0;
 
-    for iter in 0..args.max_iter {
+    for iter in 0..args.iterations {
         if current_score >= args.target_score {
             break;
         }
@@ -390,13 +415,22 @@ async fn optimize_loop(
             }
             break;
         }
+        if no_improvement_streak >= 2 {
+            if !globals.quiet {
+                eprintln!(
+                    "  {} 2 consecutive iterations with no improvement — stopping early",
+                    style("warn:").yellow()
+                );
+            }
+            break;
+        }
 
         if !globals.quiet {
             println!(
                 "\n  {} Iteration {}/{} (current score: {:.0}%)",
                 style("→").bold(),
                 iter + 1,
-                args.max_iter,
+                args.iterations,
                 current_score * 100.0
             );
         }
@@ -476,46 +510,126 @@ async fn optimize_loop(
                 }
             };
 
-        // 5. Score each edit candidate by applying it to the current prompt.
-        if !globals.quiet {
-            println!("    Scoring {} edit candidates…", edit_candidates.len());
-        }
-        let mut candidate_records: Vec<CandidateRecord> = Vec::new();
-        let mut best_score = current_score;
-        let mut best_idx: Option<usize> = None;
-        let mut best_candidate_prompt: Option<String> = None;
+        // 5. Targeted candidate scoring: eval only failing cluster cases + regression guard.
+        // Build targeted fixture sets once per iteration (shared across candidates).
+        let top_cluster = clusters.first();
+        let failing_target_ids: Vec<CaseId> = top_cluster
+            .map(|c| c.representative.clone())
+            .unwrap_or_default();
+        let passing_target_ids: Vec<CaseId> = top_cluster
+            .map(|c| passing_cases_for_dimension(&baseline_run, &c.rubric_id, 5))
+            .unwrap_or_default();
 
-        for (i, edit) in edit_candidates.iter().enumerate() {
-            let applied_prompt = edit.apply(&current_prompt);
-            let run = eval_with_prompt(
-                fixtures.clone(),
-                &applied_prompt,
+        let failing_fixtures = filter_fixtures_to_cases(&fixtures, &failing_target_ids);
+        let passing_fixtures = filter_fixtures_to_cases(&fixtures, &passing_target_ids);
+
+        // Baseline pass rates on the targeted sets (using current prompt).
+        let baseline_failing_rate = if failing_fixtures.is_empty() {
+            0.0_f32
+        } else {
+            let r = eval_with_prompt(
+                failing_fixtures.clone(),
+                &current_prompt,
                 model,
                 judge_model,
                 config,
                 globals,
             )
             .await;
-            let _ = persist_run(&run);
-            let score = run.summary.pass_rate;
-            total_cost += run.summary.total_cost_usd.unwrap_or(0.0);
+            total_cost += r.summary.total_cost_usd.unwrap_or(0.0);
+            r.summary.pass_rate
+        };
+        let baseline_passing_rate = if passing_fixtures.is_empty() {
+            1.0_f32
+        } else {
+            let r = eval_with_prompt(
+                passing_fixtures.clone(),
+                &current_prompt,
+                model,
+                judge_model,
+                config,
+                globals,
+            )
+            .await;
+            total_cost += r.summary.total_cost_usd.unwrap_or(0.0);
+            r.summary.pass_rate
+        };
+
+        if !globals.quiet {
+            println!(
+                "    Scoring {} edit candidates (targeted: {} failing + {} regression)…",
+                edit_candidates.len(),
+                failing_target_ids.len(),
+                passing_target_ids.len(),
+            );
+        }
+        let mut candidate_records: Vec<CandidateRecord> = Vec::new();
+        let mut best_selection: f32 = 0.0;
+        let mut best_idx: Option<usize> = None;
+        let mut best_candidate_prompt: Option<String> = None;
+
+        for (i, edit) in edit_candidates.iter().enumerate() {
+            let applied_prompt = edit.apply(&current_prompt);
+
+            // Eval on failing cases to measure improvement.
+            let (delta_failing, score_on_failing) = if !failing_fixtures.is_empty() {
+                let r = eval_with_prompt(
+                    failing_fixtures.clone(),
+                    &applied_prompt,
+                    model,
+                    judge_model,
+                    config,
+                    globals,
+                )
+                .await;
+                let _ = persist_run(&r);
+                total_cost += r.summary.total_cost_usd.unwrap_or(0.0);
+                let rate = r.summary.pass_rate;
+                (rate - baseline_failing_rate, rate)
+            } else {
+                (0.0, 0.0)
+            };
+
+            // Eval on passing cases to measure regression.
+            let regression = if !passing_fixtures.is_empty() {
+                let r = eval_with_prompt(
+                    passing_fixtures.clone(),
+                    &applied_prompt,
+                    model,
+                    judge_model,
+                    config,
+                    globals,
+                )
+                .await;
+                total_cost += r.summary.total_cost_usd.unwrap_or(0.0);
+                // Positive value = degradation (lower is better).
+                (baseline_passing_rate - r.summary.pass_rate).max(0.0)
+            } else {
+                0.0
+            };
+
+            let selection_score = delta_failing - regression;
+            let score = score_on_failing;
             let delta = score - current_score;
 
             if !globals.quiet {
-                let arrow = if score > current_score {
-                    style(format!("(+{:.0}%)", delta * 100.0))
+                let arrow = if delta_failing > 0.0 {
+                    style(format!("+{:.0}% failing", delta_failing * 100.0))
                         .green()
                         .to_string()
-                } else if delta < 0.0 {
-                    style(format!("({:.0}%)", delta * 100.0)).red().to_string()
+                } else if delta_failing < 0.0 {
+                    style(format!("{:.0}% failing", delta_failing * 100.0))
+                        .red()
+                        .to_string()
                 } else {
-                    style("(±0%)".to_string()).dim().to_string()
+                    style("±0%".to_string()).dim().to_string()
                 };
                 println!(
-                    "      edit {}: {:.0}%  {}  [→ {}]",
+                    "      edit {}: {}  regression={:.0}%  sel={:.2}  [→ {}]",
                     i + 1,
-                    score * 100.0,
                     arrow,
+                    regression * 100.0,
+                    selection_score,
                     edit.targets_cluster,
                 );
             }
@@ -524,13 +638,17 @@ async fn optimize_loop(
                 index: i + 1,
                 score,
                 delta,
+                delta_failing,
+                regression,
+                selection_score,
                 edit_id: edit.id.clone(),
                 targets_cluster: edit.targets_cluster.clone(),
                 rationale: edit.rationale.clone(),
             });
 
-            if score > best_score {
-                best_score = score;
+            // Select by highest (delta_failing - regression); require positive improvement.
+            if delta_failing > 0.0 && selection_score > best_selection {
+                best_selection = selection_score;
                 best_idx = Some(i + 1);
                 best_candidate_prompt = Some(applied_prompt);
             }
@@ -541,9 +659,15 @@ async fn optimize_loop(
         let applied;
         if let Some(new_prompt) = best_candidate_prompt {
             current_prompt = new_prompt;
+            // Back up current prompt.md before overwriting.
+            let bak_path = prompt_path.with_extension("md.bak");
+            if let Err(e) = std::fs::copy(&prompt_path, &bak_path) {
+                eprintln!("  warn: could not write prompt.md.bak: {e}");
+            }
             if let Err(e) = std::fs::write(&prompt_path, &current_prompt) {
                 eprintln!("  warn: could not write prompt.md: {e}");
             }
+            no_improvement_streak = 0;
             // Re-eval to get official score with the applied prompt.
             let reeval = eval_with_prompt(
                 fixtures.clone(),
@@ -561,20 +685,22 @@ async fn optimize_loop(
             current_score = score_after;
             if !globals.quiet {
                 println!(
-                    "    {} Applied candidate {} ({:.0}% → {:.0}%)",
+                    "    {} Applied edit {} ({:.0}% → {:.0}% on full suite)",
                     style("✓").green(),
                     best_idx.unwrap_or(0),
-                    (score_after - (best_score - current_score + current_score)) * 100.0,
-                    score_after * 100.0
+                    current_score * 100.0,
+                    score_after * 100.0,
                 );
             }
         } else {
             score_after = current_score;
             applied = None;
+            no_improvement_streak += 1;
             if !globals.quiet {
                 println!(
-                    "    {} No candidate improved on current score — holding",
-                    style("→").dim()
+                    "    {} No edit improved failing cases without regression — holding (streak: {})",
+                    style("→").dim(),
+                    no_improvement_streak,
                 );
             }
         }
@@ -697,6 +823,49 @@ fn collect_failures(run: &agentcarousel_core::Run) -> Vec<&CaseResult> {
     run.cases
         .iter()
         .filter(|c| c.status != CaseStatus::Passed)
+        .collect()
+}
+
+/// Filter fixtures to include only cases whose IDs are in `keep`.
+fn filter_fixtures_to_cases(fixtures: &[FixtureFile], keep: &[CaseId]) -> Vec<FixtureFile> {
+    let id_set: std::collections::HashSet<&CaseId> = keep.iter().collect();
+    fixtures
+        .iter()
+        .filter_map(|f| {
+            let cases: Vec<_> = f
+                .cases
+                .iter()
+                .filter(|c| id_set.contains(&c.id))
+                .cloned()
+                .collect();
+            if cases.is_empty() {
+                None
+            } else {
+                let mut filtered = f.clone();
+                filtered.cases = cases;
+                Some(filtered)
+            }
+        })
+        .collect()
+}
+
+/// Return up to `limit` case IDs that passed in `run` and have a rubric score for `rubric_id`.
+fn passing_cases_for_dimension(
+    run: &agentcarousel_core::Run,
+    rubric_id: &str,
+    limit: usize,
+) -> Vec<CaseId> {
+    run.cases
+        .iter()
+        .filter(|c| {
+            c.status == CaseStatus::Passed
+                && c.eval_scores
+                    .as_ref()
+                    .map(|s| s.rubric_scores.iter().any(|rs| rs.rubric_id == rubric_id))
+                    .unwrap_or(false)
+        })
+        .take(limit)
+        .map(|c| c.case_id.clone())
         .collect()
 }
 
