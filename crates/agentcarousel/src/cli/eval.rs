@@ -5,7 +5,10 @@ use agentcarousel_core::{
 use agentcarousel_evaluators::run_prompt_audit;
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_terminal};
-use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
+use agentcarousel_runner::{
+    flatten_cases, run_discrimination_eval, run_eval, EvalConfig, GenerationMode,
+    GeneratorProvider, RunnerConfig,
+};
 use clap::{Parser, ValueEnum};
 use console::style;
 use std::io::{stderr, IsTerminal};
@@ -87,6 +90,12 @@ pub struct EvalArgs {
     /// Base URL for a custom agent endpoint (required when --model is 'custom').
     #[arg(long)]
     generator_endpoint: Option<String>,
+    /// Run 3 eval passes (current / blank / degraded prompt) and attach a discrimination
+    /// score to each case. High-discrimination cases (score > 0.2) are valuable tests;
+    /// low-discrimination cases (score ≤ 0) pass even with a degraded prompt and may
+    /// be noise. Requires --execution-mode live or batch.
+    #[arg(long = "measure-discrimination", short = 'D')]
+    measure_discrimination: bool,
 }
 
 pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -170,6 +179,11 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         EvalExecutionMode::Batch => GenerationMode::Batch,
     };
 
+    if args.measure_discrimination && matches!(args.execution_mode, EvalExecutionMode::Mock) {
+        eprintln!("error: --measure-discrimination requires --execution-mode live or batch");
+        return ExitCode::ConfigError.as_i32();
+    }
+
     if globals.verbose > 0 {
         eprintln!(
             "debug: eval setup mode={:?} generator_model={} judge_model={} judge_enabled={} fixtures={}",
@@ -244,6 +258,20 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         run_id: args.run_id.clone(),
     };
 
+    // Clone runner config for discrimination pass (before it is moved into eval_config).
+    let discrimination_runner = if args.measure_discrimination {
+        Some(runner.clone())
+    } else {
+        None
+    };
+
+    // Clone fixtures for discrimination pass (before they are moved into run_eval).
+    let discrimination_fixtures = if args.measure_discrimination {
+        Some(fixtures.clone())
+    } else {
+        None
+    };
+
     let eval_config = EvalConfig {
         runner,
         runs: args.runs,
@@ -272,6 +300,30 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         .build()
         .expect("tokio runtime");
     let mut run = runtime.block_on(run_eval(fixtures, eval_config));
+
+    // Discrimination pass: run blank/degraded variants and attach scores to cases.
+    if let (Some(disc_fixtures), Some(disc_runner)) =
+        (discrimination_fixtures, discrimination_runner)
+    {
+        let current_passed: Vec<bool> = run
+            .cases
+            .iter()
+            .map(|c| c.status == agentcarousel_core::CaseStatus::Passed)
+            .collect();
+
+        let disc_cases = flatten_cases(disc_fixtures);
+
+        let scores = runtime.block_on(run_discrimination_eval(
+            disc_cases,
+            disc_runner,
+            current_passed,
+        ));
+
+        for (case_result, (score, label)) in run.cases.iter_mut().zip(scores) {
+            case_result.discrimination_score = Some(score);
+            case_result.discrimination_label = Some(label);
+        }
+    }
 
     let judge_model_for_cost = if args.judge {
         Some(judge_model.as_str())
@@ -381,6 +433,32 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         }
         if globals.quiet || format_str == "json" {
             print_eval_saved_run_hint(&run, globals.quiet || format_str == "json");
+        }
+    }
+
+    if args.measure_discrimination && !globals.quiet && format != "json" && !globals.json {
+        let high = run
+            .cases
+            .iter()
+            .filter(|c| c.discrimination_label.as_deref() == Some("high"))
+            .count();
+        let low = run
+            .cases
+            .iter()
+            .filter(|c| c.discrimination_label.as_deref() == Some("low"))
+            .count();
+        println!(
+            "{} discrimination: {} high-value, {} low-value cases",
+            style("info:").cyan().bold(),
+            high,
+            low
+        );
+        if low > 0 {
+            println!(
+                "  {} {} case(s) pass even with blank/degraded prompt — consider revising",
+                style("hint:").yellow().bold(),
+                low
+            );
         }
     }
 

@@ -23,6 +23,8 @@ pub use batch::{
     AnthropicBatch, BatchCaseResult, BatchDispatcher, BatchError, BatchStateRecord,
     BatchStateStore, CaseBatchItem, OpenAiBatch,
 };
+pub use orchestration::flatten_cases;
+pub use orchestration::run_discrimination;
 
 use agentcarousel_core::{new_run_id, FixtureFile, Run};
 use agentcarousel_fixtures::MockEngine;
@@ -124,6 +126,16 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         runner_mock_only: config.generation_mode == GenerationMode::MockOnly,
         prompt_audit: None,
     }
+}
+
+/// Run discrimination scoring for `cases` given `current_passed` outcomes.
+/// Returns `(score, label)` per case, aligned with `cases`.
+pub async fn run_discrimination_eval(
+    cases: Vec<agentcarousel_core::Case>,
+    config: RunnerConfig,
+    current_passed: Vec<bool>,
+) -> Vec<(f32, String)> {
+    orchestration::run_discrimination(cases, &config, &current_passed).await
 }
 
 /// Like [`run_fixtures`], but runs the eval pipeline (repeated runs, effectiveness threshold,

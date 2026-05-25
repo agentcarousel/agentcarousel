@@ -120,11 +120,10 @@ impl BatchStateStore {
 
 // ── AnthropicBatch ────────────────────────────────────────────────────────────
 
-use anthropic_sdk::{
-    types::ContentBlock, Anthropic, BatchCreateParams, BatchRequest, BatchResponseBody,
-};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
+
+const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
 /// Concrete [`BatchDispatcher`] that submits cases to the Anthropic Messages Batch API.
 ///
@@ -132,6 +131,12 @@ use std::time::Duration;
 /// one batch per chunk, polls for completion with a progress bar, and collects results.
 /// State is persisted to `.agc/batch_state/` after each batch creation so that a
 /// crashed run can be resumed.
+///
+/// Uses raw `reqwest`. `anthropic-sdk-rust 0.1.1`'s `BatchesResource` is broken — its
+/// HTTP helpers pass relative paths straight to `reqwest::Client::post`, which fails
+/// with a builder error before the request is sent. Hand-rolling the three calls
+/// (`POST /v1/messages/batches`, `GET /v1/messages/batches/{id}`, `GET {results_url}`)
+/// is cheaper than vendoring the SDK.
 pub struct AnthropicBatch {
     api_key: String,
 }
@@ -149,41 +154,67 @@ impl BatchDispatcher for AnthropicBatch {
     ) -> impl std::future::Future<Output = Result<Vec<BatchCaseResult>, BatchError>> + Send {
         let api_key = self.api_key.clone();
         async move {
-            let sdk = Anthropic::new(&api_key)
-                .map_err(|e| BatchError::Fatal(format!("anthropic client init failed: {e}")))?;
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .map_err(|e| BatchError::Fatal(format!("reqwest client build failed: {e}")))?;
 
             const CHUNK_SIZE: usize = 50_000;
             let mut all_results: Vec<BatchCaseResult> = Vec::with_capacity(items.len());
 
             for chunk in items.chunks(CHUNK_SIZE) {
-                // Build one BatchRequest per CaseBatchItem.
-                let requests: Vec<BatchRequest> = chunk
+                // ── Phase 1: Create the batch ─────────────────────────────────
+
+                let requests: Vec<serde_json::Value> = chunk
                     .iter()
                     .map(|item| {
-                        let mut b = BatchRequest::new(
-                            item.case_id.0.as_str(),
-                            &item.model,
-                            item.max_tokens,
-                        )
-                        .temperature(0.2)
-                        .user(&item.user_prompt);
+                        let mut params = serde_json::json!({
+                            "model": item.model,
+                            "max_tokens": item.max_tokens,
+                            "temperature": 0.2,
+                            "messages": [
+                                {"role": "user", "content": item.user_prompt}
+                            ],
+                        });
                         if !item.system.is_empty() {
-                            b = b.system(&item.system);
+                            params["system"] = serde_json::Value::String(item.system.clone());
                         }
-                        b.build()
+                        serde_json::json!({
+                            "custom_id": item.case_id.0,
+                            "params": params,
+                        })
                     })
                     .collect();
 
-                let params = BatchCreateParams::new(requests);
+                let create_body = serde_json::json!({ "requests": requests });
 
-                // Create the batch.
-                let batch = sdk
-                    .batches()
-                    .create(params)
+                let create_resp = client
+                    .post("https://api.anthropic.com/v1/messages/batches")
+                    .header("x-api-key", &api_key)
+                    .header("anthropic-version", ANTHROPIC_API_VERSION)
+                    .json(&create_body)
+                    .send()
                     .await
-                    .map_err(|e| BatchError::Fatal(format!("batch create failed: {e}")))?;
+                    .map_err(|e| BatchError::Fatal(format!("batch create request failed: {e}")))?;
 
-                let batch_id = batch.id.clone();
+                let create_status = create_resp.status();
+                let create_json: serde_json::Value = create_resp.json().await.map_err(|e| {
+                    BatchError::Fatal(format!("batch create response parse failed: {e}"))
+                })?;
+
+                if !create_status.is_success() {
+                    return Err(BatchError::Fatal(format!(
+                        "batch create HTTP {create_status}: {}",
+                        create_json
+                    )));
+                }
+
+                let batch_id = create_json["id"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        BatchError::Fatal("batch create response missing 'id'".to_string())
+                    })?
+                    .to_string();
 
                 // Persist state for resumability.
                 let state = BatchStateRecord {
@@ -196,7 +227,8 @@ impl BatchDispatcher for AnthropicBatch {
                 let state_dir = std::path::PathBuf::from(".agc/batch_state");
                 let _ = BatchStateStore::save(&state, &state_dir);
 
-                // Progress bar for this chunk.
+                // ── Phase 2: Poll until processing_status == "ended" ──────────
+
                 let pb = ProgressBar::new(chunk.len() as u64);
                 pb.set_style(
                     ProgressStyle::with_template(
@@ -207,59 +239,147 @@ impl BatchDispatcher for AnthropicBatch {
                 );
                 pb.enable_steady_tick(Duration::from_millis(120));
 
-                let pb_for_monitor = pb.clone();
-                // monitor_progress callback: (percentage, completed, total)
-                sdk.batches()
-                    .monitor_progress(
-                        &batch_id,
-                        move |_pct, completed, _total| {
-                            pb_for_monitor.set_position(u64::from(completed));
-                        },
-                        Some(Duration::from_secs(10)),
-                    )
-                    .await
-                    .map_err(|e| BatchError::Transient(format!("batch monitor failed: {e}")))?;
+                let backoff_sequence: [u64; 5] = [5, 10, 20, 40, 60];
+                let mut backoff_idx = 0usize;
+
+                let results_url = loop {
+                    tokio::time::sleep(Duration::from_secs(backoff_sequence[backoff_idx])).await;
+                    if backoff_idx < backoff_sequence.len() - 1 {
+                        backoff_idx += 1;
+                    }
+
+                    let poll_resp = client
+                        .get(format!(
+                            "https://api.anthropic.com/v1/messages/batches/{batch_id}"
+                        ))
+                        .header("x-api-key", &api_key)
+                        .header("anthropic-version", ANTHROPIC_API_VERSION)
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            BatchError::Transient(format!("batch poll request failed: {e}"))
+                        })?;
+
+                    let poll_status = poll_resp.status();
+                    let poll_json: serde_json::Value = poll_resp.json().await.map_err(|e| {
+                        BatchError::Transient(format!("batch poll response parse failed: {e}"))
+                    })?;
+
+                    if !poll_status.is_success() {
+                        return Err(BatchError::Transient(format!(
+                            "batch poll HTTP {poll_status}: {}",
+                            poll_json
+                        )));
+                    }
+
+                    let processing_status =
+                        poll_json["processing_status"].as_str().unwrap_or("unknown");
+                    let succeeded = poll_json["request_counts"]["succeeded"]
+                        .as_u64()
+                        .unwrap_or(0);
+                    let errored = poll_json["request_counts"]["errored"].as_u64().unwrap_or(0);
+                    let canceled = poll_json["request_counts"]["canceled"]
+                        .as_u64()
+                        .unwrap_or(0);
+                    let expired = poll_json["request_counts"]["expired"].as_u64().unwrap_or(0);
+                    pb.set_position(succeeded + errored + canceled + expired);
+
+                    if processing_status == "ended" {
+                        let url = poll_json["results_url"]
+                            .as_str()
+                            .ok_or_else(|| {
+                                BatchError::Transient(
+                                    "ended batch missing 'results_url'".to_string(),
+                                )
+                            })?
+                            .to_string();
+                        break url;
+                    }
+                };
 
                 pb.finish_and_clear();
 
-                // Collect results.
-                let results =
-                    sdk.batches().get_results(&batch_id).await.map_err(|e| {
-                        BatchError::Transient(format!("batch get_results failed: {e}"))
+                // ── Phase 3: Download and parse the JSONL results ─────────────
+
+                let results_resp = client
+                    .get(&results_url)
+                    .header("x-api-key", &api_key)
+                    .header("anthropic-version", ANTHROPIC_API_VERSION)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        BatchError::Transient(format!("results download request failed: {e}"))
                     })?;
 
-                // Map BatchResult → BatchCaseResult.
-                for result in results {
-                    let case_id = agentcarousel_core::CaseId(result.custom_id.clone());
-                    let batch_case_result = match result.response.body {
-                        BatchResponseBody::Success(msg) => {
-                            let output = msg.content.iter().find_map(|block| {
-                                if let ContentBlock::Text { text } = block {
-                                    let t = text.trim().to_string();
-                                    if !t.is_empty() {
-                                        Some(t)
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                }
-                            });
+                let results_status = results_resp.status();
+                if !results_status.is_success() {
+                    return Err(BatchError::Transient(format!(
+                        "results download HTTP {results_status}"
+                    )));
+                }
+
+                let results_text = results_resp
+                    .text()
+                    .await
+                    .map_err(|e| BatchError::Transient(format!("results body read failed: {e}")))?;
+
+                for raw_line in results_text.lines() {
+                    let raw_line = raw_line.trim();
+                    if raw_line.is_empty() {
+                        continue;
+                    }
+
+                    let line: serde_json::Value = serde_json::from_str(raw_line).map_err(|e| {
+                        BatchError::Transient(format!("results JSONL parse error: {e}"))
+                    })?;
+
+                    let custom_id = line["custom_id"].as_str().unwrap_or("").to_string();
+                    let case_id = agentcarousel_core::CaseId(custom_id);
+                    let result = &line["result"];
+                    let result_type = result["type"].as_str().unwrap_or("");
+
+                    let batch_case_result = match result_type {
+                        "succeeded" => {
+                            let message = &result["message"];
+                            let output = message["content"]
+                                .as_array()
+                                .and_then(|blocks| {
+                                    blocks.iter().find_map(|block| {
+                                        if block["type"].as_str() == Some("text") {
+                                            block["text"].as_str().map(|s| s.trim().to_string())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                })
+                                .filter(|s| !s.is_empty());
+
                             BatchCaseResult {
                                 case_id,
                                 output,
-                                tokens_in: Some(msg.usage.input_tokens as u64),
-                                tokens_out: Some(msg.usage.output_tokens as u64),
+                                tokens_in: message["usage"]["input_tokens"].as_u64(),
+                                tokens_out: message["usage"]["output_tokens"].as_u64(),
                                 error: None,
                             }
                         }
-                        BatchResponseBody::Error(e) => BatchCaseResult {
-                            case_id,
-                            output: None,
-                            tokens_in: None,
-                            tokens_out: None,
-                            error: Some(e.message),
-                        },
+                        // "errored" | "canceled" | "expired" — surface a message either way.
+                        _ => {
+                            let err_msg = result["error"]["message"]
+                                .as_str()
+                                .map(str::to_string)
+                                .unwrap_or_else(|| {
+                                    format!(
+                                        "batch result type='{result_type}' had no error message"
+                                    )
+                                });
+                            BatchCaseResult {
+                                case_id,
+                                output: None,
+                                tokens_in: None,
+                                tokens_out: None,
+                                error: Some(err_msg),
+                            }
+                        }
                     };
                     all_results.push(batch_case_result);
                 }

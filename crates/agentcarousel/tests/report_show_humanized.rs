@@ -41,6 +41,8 @@ fn run_with_embedded_api_error() -> Run {
         },
         eval_scores: None,
         input: vec![],
+        discrimination_score: None,
+        discrimination_label: None,
     };
     Run {
         id: RunId("test-report-show-humanize".to_string()),

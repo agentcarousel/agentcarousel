@@ -248,6 +248,10 @@ pub struct CaseResult {
     /// Input messages from the fixture case; stored for human review in reports and dashboard.
     #[serde(default)]
     pub input: Vec<Message>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discrimination_score: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discrimination_label: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

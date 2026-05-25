@@ -50,6 +50,8 @@ fn make_run(id: &str, skill: &str, audit: Option<PromptAudit>) -> Run {
             },
             eval_scores: None,
             input: vec![],
+            discrimination_score: None,
+            discrimination_label: None,
         }],
         summary: RunSummary {
             total: 1,

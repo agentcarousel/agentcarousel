@@ -83,7 +83,7 @@ pub(super) fn bundle_metadata(fixtures: &[FixtureFile]) -> (Option<String>, Opti
     (bundle_id, bundle_version)
 }
 
-pub(super) fn flatten_cases(fixtures: Vec<FixtureFile>) -> Vec<Case> {
+pub fn flatten_cases(fixtures: Vec<FixtureFile>) -> Vec<Case> {
     let mut cases = Vec::new();
     for fixture in fixtures {
         let defaults = fixture.defaults.clone();
@@ -194,6 +194,8 @@ pub(super) async fn run_parallel(
                 metrics: agentcarousel_core::Metrics::default(),
                 eval_scores: None,
                 input: Vec::new(),
+                discrimination_score: None,
+                discrimination_label: None,
             }),
         }
     }
@@ -226,6 +228,8 @@ pub(super) async fn run_batch(
                 metrics: Metrics::default(),
                 eval_scores: None,
                 input: case.input.messages,
+                discrimination_score: None,
+                discrimination_label: None,
             })
             .collect();
     }
@@ -247,6 +251,8 @@ pub(super) async fn run_batch(
                     metrics: Metrics::default(),
                     eval_scores: None,
                     input: case.input.messages,
+                    discrimination_score: None,
+                    discrimination_label: None,
                 })
                 .collect();
         }
@@ -293,6 +299,8 @@ pub(super) async fn run_batch(
                         metrics: Metrics::default(),
                         eval_scores: None,
                         input: case.input.messages,
+                        discrimination_score: None,
+                        discrimination_label: None,
                     })
                     .collect()
             }
@@ -314,6 +322,8 @@ pub(super) async fn run_batch(
                         metrics: Metrics::default(),
                         eval_scores: None,
                         input: case.input.messages,
+                        discrimination_score: None,
+                        discrimination_label: None,
                     })
                     .collect()
             }
@@ -360,6 +370,8 @@ pub(super) async fn run_batch(
                     },
                     eval_scores: None,
                     input,
+                    discrimination_score: None,
+                    discrimination_label: None,
                 }
             })
             .collect(),
@@ -379,6 +391,8 @@ pub(super) async fn run_batch(
                     metrics: Metrics::default(),
                     eval_scores: None,
                     input,
+                    discrimination_score: None,
+                    discrimination_label: None,
                 }
             })
             .collect(),
@@ -420,6 +434,8 @@ pub(super) async fn run_eval_cases(
                     metrics: agentcarousel_core::Metrics::default(),
                     eval_scores: None,
                     input: case.input.messages.clone(),
+                    discrimination_score: None,
+                    discrimination_label: None,
                 });
 
             if result.status == CaseStatus::Passed {
@@ -512,6 +528,8 @@ pub(super) async fn run_eval_cases(
                     metrics: agentcarousel_core::Metrics::default(),
                     eval_scores: None,
                     input: Vec::new(),
+                    discrimination_score: None,
+                    discrimination_label: None,
                 }
             }));
             continue;
@@ -674,4 +692,119 @@ fn resolve_evaluator_id(case: &Case, config: &EvalConfig) -> String {
     } else {
         config.evaluator.clone()
     }
+}
+
+/// Run blank-prompt and degraded-prompt passes to compute per-case discrimination scores.
+///
+/// Returns a `Vec` aligned with `cases` — one `(score, label)` per case.
+/// Uses `run_parallel` for all three internal passes (mock engine is unused here;
+/// pass `MockEngine::default()` since generation_mode is Live or Batch).
+///
+/// Caller passes the `current_passed` outcomes from the already-completed main run.
+pub async fn run_discrimination(
+    cases: Vec<agentcarousel_core::Case>,
+    config: &super::RunnerConfig,
+    current_passed: &[bool],
+) -> Vec<(f32, String)> {
+    use super::generator::resolve_system_prompt;
+    use agentcarousel_core::{CaseStatus, Message, Role};
+    use agentcarousel_fixtures::MockEngine;
+
+    let mock_engine = MockEngine::default();
+
+    // Build blank-prompt cases (system message = empty string)
+    let blank_cases: Vec<agentcarousel_core::Case> = cases
+        .iter()
+        .map(|c| {
+            let mut case = c.clone();
+            if let Some(sys_msg) = case
+                .input
+                .messages
+                .iter_mut()
+                .find(|m| m.role == Role::System)
+            {
+                sys_msg.content = String::new();
+            } else {
+                case.input.messages.insert(
+                    0,
+                    Message {
+                        role: Role::System,
+                        content: String::new(),
+                    },
+                );
+            }
+            case
+        })
+        .collect();
+
+    // Build degraded-prompt cases (first 20% of resolved system prompt)
+    let degraded_cases: Vec<agentcarousel_core::Case> = cases
+        .iter()
+        .map(|c| {
+            let full_system = resolve_system_prompt(c);
+            let cutoff = (full_system.len() as f32 * 0.2) as usize;
+            // Round up to the next char boundary
+            let cutoff = full_system
+                .char_indices()
+                .map(|(i, _)| i)
+                .take_while(|&i| i < cutoff.max(1))
+                .last()
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let degraded_system = full_system[..cutoff].to_string();
+
+            let mut case = c.clone();
+            if let Some(sys_msg) = case
+                .input
+                .messages
+                .iter_mut()
+                .find(|m| m.role == Role::System)
+            {
+                sys_msg.content = degraded_system;
+            } else {
+                case.input.messages.insert(
+                    0,
+                    Message {
+                        role: Role::System,
+                        content: degraded_system,
+                    },
+                );
+            }
+            case
+        })
+        .collect();
+
+    // Run both passes concurrently
+    let (blank_results, degraded_results) = tokio::join!(
+        run_parallel(blank_cases, &mock_engine, config),
+        run_parallel(degraded_cases, &mock_engine, config),
+    );
+
+    // Compute score per case
+    cases
+        .iter()
+        .enumerate()
+        .map(|(i, _)| {
+            let cur = *current_passed.get(i).unwrap_or(&false);
+            let blank_ok = blank_results
+                .get(i)
+                .map(|r| r.status == CaseStatus::Passed)
+                .unwrap_or(false);
+            let deg_ok = degraded_results
+                .get(i)
+                .map(|r| r.status == CaseStatus::Passed)
+                .unwrap_or(false);
+
+            let degraded_passed = blank_ok || deg_ok;
+            let score = (cur as i32 - degraded_passed as i32) as f32;
+            let label = if score > 0.2 {
+                "high".to_string()
+            } else if score <= 0.0 {
+                "low".to_string()
+            } else {
+                "marginal".to_string()
+            };
+            (score, label)
+        })
+        .collect()
 }

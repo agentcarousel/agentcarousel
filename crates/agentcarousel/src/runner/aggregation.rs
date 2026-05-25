@@ -33,6 +33,8 @@ pub(super) fn aggregate_case_results(
         metrics,
         eval_scores,
         input: case.input.messages.clone(),
+        discrimination_score: None,
+        discrimination_label: None,
     }
 }
 

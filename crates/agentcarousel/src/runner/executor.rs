@@ -213,6 +213,8 @@ async fn run_case_inner(
         metrics,
         eval_scores: None,
         input,
+        discrimination_score: None,
+        discrimination_label: None,
     }
 }
 
@@ -232,6 +234,8 @@ pub fn timeout_result(
         metrics: Metrics::default(),
         eval_scores: None,
         input,
+        discrimination_score: None,
+        discrimination_label: None,
     }
 }
 

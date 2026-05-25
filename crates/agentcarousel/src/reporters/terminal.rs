@@ -359,36 +359,53 @@ pub fn print_terminal(run: &Run, verbose: bool) {
         let pad = col_w.saturating_sub(label.chars().count());
         let padding = " ".repeat(pad);
 
+        let disc_suffix = match case.discrimination_label.as_deref() {
+            Some("high") => format!("  {}", style("[disc:high \u{2713}]").green()),
+            Some("low") => format!("  {}", style("[disc:low \u{2717}]").yellow()),
+            Some("marginal") => format!("  {}", style("[disc:marginal]").dim()),
+            _ => String::new(),
+        };
+
         match case.status {
-            CaseStatus::Passed => println!("    ✅  PASS  {}{} ({:.1}s)", label, padding, secs),
-            CaseStatus::Failed => println!("    ❌  FAIL  {}{} ({:.1}s)", label, padding, secs),
+            CaseStatus::Passed => println!(
+                "    \u{2705}  PASS  {}{}  ({:.1}s){}",
+                label, padding, secs, disc_suffix
+            ),
+            CaseStatus::Failed => println!(
+                "    \u{274c}  FAIL  {}{}  ({:.1}s){}",
+                label, padding, secs, disc_suffix
+            ),
             CaseStatus::Skipped => println!(
-                "    {}  SKIP  {}{} ({:.1}s)",
-                style("⏭").yellow(),
+                "    {}  SKIP  {}{}  ({:.1}s){}",
+                style("\u{23ed}").yellow(),
                 label,
                 padding,
-                secs
+                secs,
+                disc_suffix
             ),
             CaseStatus::Flaky => println!(
-                "    {}  FLAKY {}{} ({:.1}s)",
-                style("⚠").yellow(),
+                "    {}  FLAKY {}{}  ({:.1}s){}",
+                style("\u{26a0}").yellow(),
                 label,
                 padding,
-                secs
+                secs,
+                disc_suffix
             ),
             CaseStatus::TimedOut => println!(
-                "    {}  TIMEOUT {}{} ({:.1}s)",
-                style("⏱").red(),
+                "    {}  TIMEOUT {}{}  ({:.1}s){}",
+                style("\u{23f1}").red(),
                 label,
                 padding,
-                secs
+                secs,
+                disc_suffix
             ),
             CaseStatus::Error => println!(
-                "    {}  ERROR {}{} ({:.1}s)",
-                style("✖").red(),
+                "    {}  ERROR {}{}  ({:.1}s){}",
+                style("\u{2716}").red(),
                 label,
                 padding,
-                secs
+                secs,
+                disc_suffix
             ),
         }
 
