@@ -88,10 +88,37 @@ struct IterationRecord {
     top_rubric_failure: Option<String>,
     failure_clusters: Vec<FailureCluster>,
     failure_analyses: Vec<FailureAnalysis>,
+    edit_candidates: Vec<PromptEditCandidate>,
     candidates: Vec<CandidateRecord>,
     applied: Option<usize>,
     score_after: f32,
     cost_usd: f64,
+}
+
+/// A targeted, minimal edit to the system prompt produced by the synthesis LLM.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct PromptEditCandidate {
+    /// Stable identifier within this iteration (e.g. `"edit-1"`).
+    pub id: String,
+    /// The exact substring in the current prompt to replace. Empty string means append.
+    pub original_text: String,
+    /// The text to insert in place of `original_text`.
+    pub replacement_text: String,
+    /// One-sentence rationale for the edit.
+    pub rationale: String,
+    /// The rubric cluster ID this edit is intended to fix.
+    pub targets_cluster: String,
+}
+
+impl PromptEditCandidate {
+    /// Apply this edit to `prompt`, returning the modified string.
+    pub fn apply(&self, prompt: &str) -> String {
+        if self.original_text.is_empty() {
+            format!("{}\n{}", prompt.trim_end(), self.replacement_text)
+        } else {
+            prompt.replacen(&self.original_text, &self.replacement_text, 1)
+        }
+    }
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -99,6 +126,9 @@ struct CandidateRecord {
     index: usize,
     score: f32,
     delta: f32,
+    edit_id: String,
+    targets_cluster: String,
+    rationale: String,
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -430,32 +460,36 @@ async fn optimize_loop(
             );
         }
 
-        // 4. Synthesize 3 prompt candidates.
-        let candidates = match synthesize_candidates_llm(&current_prompt, &feedback, model).await {
-            Ok(c) if !c.is_empty() => c,
-            Ok(_) => {
-                eprintln!("  warn: synthesis returned no candidates — skipping iteration");
-                continue;
-            }
-            Err(e) => {
-                eprintln!("  warn: synthesis LLM call failed: {e} — skipping iteration");
-                continue;
-            }
-        };
+        // 4. Synthesize 3 targeted prompt edits.
+        let edit_candidates =
+            match synthesize_edit_candidates_llm(&current_prompt, &analyses, &feedback, model)
+                .await
+            {
+                Ok(c) if !c.is_empty() => c,
+                Ok(_) => {
+                    eprintln!("  warn: synthesis returned no edit candidates — skipping iteration");
+                    continue;
+                }
+                Err(e) => {
+                    eprintln!("  warn: synthesis LLM call failed: {e} — skipping iteration");
+                    continue;
+                }
+            };
 
-        // 5. Score each candidate.
+        // 5. Score each edit candidate by applying it to the current prompt.
         if !globals.quiet {
-            println!("    Scoring {} candidates…", candidates.len());
+            println!("    Scoring {} edit candidates…", edit_candidates.len());
         }
         let mut candidate_records: Vec<CandidateRecord> = Vec::new();
         let mut best_score = current_score;
         let mut best_idx: Option<usize> = None;
         let mut best_candidate_prompt: Option<String> = None;
 
-        for (i, candidate) in candidates.iter().enumerate() {
+        for (i, edit) in edit_candidates.iter().enumerate() {
+            let applied_prompt = edit.apply(&current_prompt);
             let run = eval_with_prompt(
                 fixtures.clone(),
-                candidate,
+                &applied_prompt,
                 model,
                 judge_model,
                 config,
@@ -478,10 +512,11 @@ async fn optimize_loop(
                     style("(±0%)".to_string()).dim().to_string()
                 };
                 println!(
-                    "      candidate {}: {:.0}%  {}",
+                    "      edit {}: {:.0}%  {}  [→ {}]",
                     i + 1,
                     score * 100.0,
-                    arrow
+                    arrow,
+                    edit.targets_cluster,
                 );
             }
 
@@ -489,12 +524,15 @@ async fn optimize_loop(
                 index: i + 1,
                 score,
                 delta,
+                edit_id: edit.id.clone(),
+                targets_cluster: edit.targets_cluster.clone(),
+                rationale: edit.rationale.clone(),
             });
 
             if score > best_score {
                 best_score = score;
                 best_idx = Some(i + 1);
-                best_candidate_prompt = Some(candidate.clone());
+                best_candidate_prompt = Some(applied_prompt);
             }
         }
 
@@ -550,6 +588,7 @@ async fn optimize_loop(
             top_rubric_failure: top_rubric,
             failure_clusters: clusters,
             failure_analyses: analyses,
+            edit_candidates,
             candidates: candidate_records,
             applied,
             score_after,
@@ -902,31 +941,49 @@ Keep your response under 200 words."#
     Ok(result.output)
 }
 
-/// Call the model to synthesize 3 improved prompt candidates.
-async fn synthesize_candidates_llm(
+/// Synthesize 3 targeted, minimal prompt edits from the failure analyses.
+///
+/// Each edit specifies `original_text` to replace and `replacement_text` to insert,
+/// targeting a specific failure cluster. Returns parsed `PromptEditCandidate` values.
+/// Falls back to `synthesize_candidates_llm` output wrapped as whole-prompt edits when
+/// the structured JSON cannot be parsed.
+async fn synthesize_edit_candidates_llm(
     current_prompt: &str,
+    analyses: &[FailureAnalysis],
     feedback: &str,
     model: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<PromptEditCandidate>, String> {
+    let analysis_block = if analyses.is_empty() {
+        feedback.to_string()
+    } else {
+        analyses
+            .iter()
+            .map(|a| format!("- [{}] {}", a.cluster_id, a.synthesis))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
     let prompt = format!(
-        r#"You are an expert prompt engineer. Given this system prompt and failure analysis, generate 3 improved versions.
+        r#"You are an expert prompt engineer. Here is an AI agent system prompt and the failure patterns observed when evaluating it.
 
 CURRENT SYSTEM PROMPT:
 {current_prompt}
 
 FAILURE ANALYSIS:
-{feedback}
+{analysis_block}
 
-Generate exactly 3 distinct improved system prompt variants that address the identified failures. Each should be a complete, standalone system prompt.
+Generate exactly 3 specific, minimal edits to improve the prompt. Each edit must:
+1. Quote the EXACT text to replace from the current prompt (or use empty string to append at end)
+2. Provide the replacement text
+3. Explain in one sentence which failure it addresses
+4. Name the cluster it targets
 
-Respond with valid JSON only (no markdown, no explanation):
-{{"variants": ["<complete prompt 1>", "<complete prompt 2>", "<complete prompt 3>"]}}"#
+Respond with valid JSON only — no markdown, no explanation:
+{{"edits": [{{"id": "edit-1", "original_text": "<exact text from prompt or empty>", "replacement_text": "<new text>", "rationale": "<one sentence>", "targets_cluster": "<cluster id>"}}, {{"id": "edit-2", ...}}, {{"id": "edit-3", ...}}]}}"#
     );
-    let result = call_llm(model, &prompt, Some(2048)).await?;
 
-    // Parse the JSON response.
+    let result = call_llm(model, &prompt, Some(2048)).await?;
     let text = result.output.trim();
-    // Strip markdown code fences if present.
     let json_text = if text.starts_with("```") {
         text.lines()
             .skip(1)
@@ -940,17 +997,20 @@ Respond with valid JSON only (no markdown, no explanation):
     let parsed: serde_json::Value = serde_json::from_str(&json_text)
         .map_err(|e| format!("JSON parse error: {e} — raw: {json_text:.200}"))?;
 
-    let variants = parsed["variants"]
+    let edits = parsed["edits"]
         .as_array()
-        .ok_or("response missing 'variants' array")?
+        .ok_or("response missing 'edits' array")?
         .iter()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .filter(|s| !s.is_empty())
+        .filter_map(|v| {
+            serde_json::from_value::<PromptEditCandidate>(v.clone()).ok()
+        })
+        .filter(|e| !e.replacement_text.is_empty())
         .collect::<Vec<_>>();
 
-    if variants.is_empty() {
-        return Err("variants array was empty".to_string());
+    if edits.is_empty() {
+        return Err("edits array was empty or unparseable".to_string());
     }
 
-    Ok(variants)
+    Ok(edits)
 }
+
