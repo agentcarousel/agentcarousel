@@ -28,6 +28,7 @@ default = []
 dashboard = ["dep:axum", "dep:tokio-stream"]
 
 [dependencies]
+anthropic-sdk-rust = "0.1.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }

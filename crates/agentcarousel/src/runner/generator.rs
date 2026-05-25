@@ -1,4 +1,8 @@
 use agentcarousel_core::{compute_backoff_ms, is_retryable_status, retry_policy, Case, Role};
+use anthropic_sdk::{
+    types::{ContentBlock, MessageCreateBuilder},
+    Anthropic,
+};
 use serde_json::json;
 use std::fmt;
 use std::sync::OnceLock;
@@ -6,8 +10,8 @@ use std::time::Duration;
 
 use super::RunnerConfig;
 use crate::providers::{
-    AnthropicMessage, AnthropicRequest, AnthropicResponse, GeminiContent, GeminiGenerationConfig,
-    GeminiPart, GeminiRequest, GeminiResponse, OpenAiMessage, OpenAiRequest, OpenAiResponse,
+    GeminiContent, GeminiGenerationConfig, GeminiPart, GeminiRequest, GeminiResponse,
+    OpenAiMessage, OpenAiRequest, OpenAiResponse,
 };
 
 static ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -486,70 +490,71 @@ async fn generate_with_anthropic(
     let max_tokens = max_tokens.ok_or_else(|| {
         GeneratorError::Fatal("max_tokens is required for Anthropic generation".to_string())
     })?;
-    let request = AnthropicRequest {
-        model: model.to_string(),
-        max_tokens,
-        temperature: 0.2,
-        system: system.to_string(),
-        messages: vec![AnthropicMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        }],
-    };
-    let client = shared_client();
+
+    let sdk = Anthropic::new(key)
+        .map_err(|e| GeneratorError::Fatal(format!("anthropic client init failed: {e}")))?;
+
+    let mut builder = MessageCreateBuilder::new(model, max_tokens).temperature(0.2);
+    if !system.is_empty() {
+        builder = builder.system(system);
+    }
+    builder = builder.user(prompt);
+    let params = builder.build();
+
     let retry = retry_policy();
     for attempt in 0..retry.max_attempts {
-        let response = client
-            .post("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
-        let status = response.status();
-        if status.is_success() {
-            let body: AnthropicResponse = response
-                .json()
-                .await
-                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
-            let empty: Vec<_> = Vec::new();
-            let output = body
-                .content
-                .as_deref()
-                .unwrap_or(&empty)
-                .iter()
-                .find(|block| block.block_type.as_deref() == Some("text"))
-                .and_then(|block| block.text.as_ref())
-                .map(|text| text.trim().to_string())
-                .filter(|text| !text.is_empty())
-                .ok_or_else(|| {
-                    GeneratorError::Transient(
-                        "anthropic returned empty generation output".to_string(),
-                    )
-                })?;
-            return Ok(GenerationResult {
-                output,
-                tokens_in: body.usage.as_ref().and_then(|usage| usage.input_tokens),
-                tokens_out: body.usage.as_ref().and_then(|usage| usage.output_tokens),
-            });
+        match sdk.messages().create(params.clone()).await {
+            Ok(msg) => {
+                let output = msg
+                    .content
+                    .iter()
+                    .find_map(|block| {
+                        if let ContentBlock::Text { text } = block {
+                            let t = text.trim().to_string();
+                            if !t.is_empty() {
+                                Some(t)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| {
+                        GeneratorError::Transient(
+                            "anthropic returned empty generation output".to_string(),
+                        )
+                    })?;
+                return Ok(GenerationResult {
+                    output,
+                    tokens_in: Some(msg.usage.input_tokens as u64),
+                    tokens_out: Some(msg.usage.output_tokens as u64),
+                });
+            }
+            Err(e) => {
+                use anthropic_sdk::types::errors::AnthropicError;
+                let retryable = matches!(
+                    e,
+                    AnthropicError::RateLimit { .. }
+                        | AnthropicError::InternalServer { .. }
+                        | AnthropicError::ServiceUnavailable { .. }
+                        | AnthropicError::Connection { .. }
+                        | AnthropicError::ConnectionTimeout
+                        | AnthropicError::NetworkError(_)
+                );
+                if retryable && attempt + 1 < retry.max_attempts {
+                    let backoff_ms = compute_backoff_ms(attempt, &retry);
+                    tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                    continue;
+                }
+                let msg = format!("anthropic generation failed: {e}");
+                return Err(if retryable {
+                    GeneratorError::Transient(msg)
+                } else {
+                    GeneratorError::Fatal(msg)
+                });
+            }
         }
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "unable to read error body".to_string());
-        let retryable = is_retryable_status(status);
-        if retryable && attempt + 1 < retry.max_attempts {
-            let backoff_ms = compute_backoff_ms(attempt, &retry);
-            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-            continue;
-        }
-        let msg = format!("anthropic generation failed ({status}): {body}");
-        return Err(if retryable {
-            GeneratorError::Transient(msg)
-        } else {
-            GeneratorError::Fatal(msg)
-        });
     }
     Err(GeneratorError::Transient(
         "anthropic generation failed after retries".to_string(),
