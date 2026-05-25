@@ -270,6 +270,303 @@ impl BatchDispatcher for AnthropicBatch {
     }
 }
 
+// ── OpenAiBatch ───────────────────────────────────────────────────────────────
+
+/// Concrete [`BatchDispatcher`] that submits cases to the OpenAI Batch API.
+///
+/// Three-phase flow:
+/// 1. Serialize all items as JSONL and upload to the Files API (`purpose=batch`).
+/// 2. Create a batch job referencing the uploaded file; persist a [`BatchStateRecord`].
+/// 3. Poll the batch status with exponential back-off (indicatif spinner), download
+///    and parse the output JSONL when the batch completes.
+///
+/// Uses raw `reqwest` — no OpenAI Rust SDK.
+pub struct OpenAiBatch {
+    api_key: String,
+}
+
+impl OpenAiBatch {
+    pub fn new(api_key: String) -> Self {
+        Self { api_key }
+    }
+}
+
+impl BatchDispatcher for OpenAiBatch {
+    fn dispatch(
+        &self,
+        items: Vec<CaseBatchItem>,
+    ) -> impl std::future::Future<Output = Result<Vec<BatchCaseResult>, BatchError>> + Send {
+        let api_key = self.api_key.clone();
+        async move {
+            // Build a dedicated reqwest client with a 60-second timeout.
+            // We intentionally do NOT reuse the shared ASYNC_CLIENT from generator.rs
+            // because it has a 30-second timeout which is far too short for batch polling.
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .map_err(|e| BatchError::Fatal(format!("reqwest client build failed: {e}")))?;
+
+            // ── Phase 1: Serialize items as JSONL and upload to Files API ─────
+
+            let mut jsonl = String::new();
+            for item in &items {
+                let line = serde_json::json!({
+                    "custom_id": item.case_id.0,
+                    "method": "POST",
+                    "url": "/v1/chat/completions",
+                    "body": {
+                        "model": item.model,
+                        "messages": [
+                            {"role": "system", "content": item.system},
+                            {"role": "user", "content": item.user_prompt}
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": item.max_tokens
+                    }
+                });
+                jsonl.push_str(&line.to_string());
+                jsonl.push('\n');
+            }
+            let jsonl_bytes = jsonl.into_bytes();
+
+            let form = reqwest::multipart::Form::new()
+                .part("purpose", reqwest::multipart::Part::text("batch"))
+                .part(
+                    "file",
+                    reqwest::multipart::Part::bytes(jsonl_bytes)
+                        .file_name("batch.jsonl")
+                        .mime_str("application/jsonl")
+                        .unwrap(),
+                );
+
+            let upload_resp = client
+                .post("https://api.openai.com/v1/files")
+                .bearer_auth(&api_key)
+                .multipart(form)
+                .send()
+                .await
+                .map_err(|e| BatchError::Fatal(format!("file upload request failed: {e}")))?;
+
+            let upload_status = upload_resp.status();
+            let upload_body: serde_json::Value = upload_resp.json().await.map_err(|e| {
+                BatchError::Fatal(format!("file upload response parse failed: {e}"))
+            })?;
+
+            if !upload_status.is_success() {
+                return Err(BatchError::Fatal(format!(
+                    "file upload HTTP {upload_status}: {}",
+                    upload_body
+                )));
+            }
+
+            let file_id = upload_body["id"]
+                .as_str()
+                .ok_or_else(|| BatchError::Fatal("file upload response missing 'id'".to_string()))?
+                .to_string();
+
+            // ── Phase 2: Create the batch job ─────────────────────────────────
+
+            let create_body = serde_json::json!({
+                "input_file_id": file_id,
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h"
+            });
+
+            let create_resp = client
+                .post("https://api.openai.com/v1/batches")
+                .bearer_auth(&api_key)
+                .json(&create_body)
+                .send()
+                .await
+                .map_err(|e| BatchError::Fatal(format!("batch create request failed: {e}")))?;
+
+            let create_status = create_resp.status();
+            let create_json: serde_json::Value = create_resp.json().await.map_err(|e| {
+                BatchError::Fatal(format!("batch create response parse failed: {e}"))
+            })?;
+
+            if !create_status.is_success() {
+                return Err(BatchError::Fatal(format!(
+                    "batch create HTTP {create_status}: {}",
+                    create_json
+                )));
+            }
+
+            let batch_id = create_json["id"]
+                .as_str()
+                .ok_or_else(|| BatchError::Fatal("batch create response missing 'id'".to_string()))?
+                .to_string();
+
+            // Persist state for resumability.
+            let state = BatchStateRecord {
+                batch_id: batch_id.clone(),
+                provider: "openai".to_string(),
+                status: "in_progress".to_string(),
+                created_at: chrono::Utc::now(),
+                case_ids: items.iter().map(|i| i.case_id.0.clone()).collect(),
+            };
+            let state_dir = std::path::PathBuf::from(".agc/batch_state");
+            let _ = BatchStateStore::save(&state, &state_dir);
+
+            // ── Phase 3: Poll until complete, then download results ────────────
+
+            // Indicatif spinner — we don't know total until the batch completes.
+            let spinner = ProgressBar::new_spinner();
+            spinner.set_style(
+                ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {msg}")
+                    .expect("spinner template")
+                    .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+            );
+            spinner.enable_steady_tick(Duration::from_millis(120));
+            spinner.set_message(format!("OpenAI batch {batch_id}: waiting…"));
+
+            // Exponential back-off: 5s → 10s → 20s → 40s → 60s (cap).
+            let backoff_sequence: [u64; 5] = [5, 10, 20, 40, 60];
+            let mut backoff_idx = 0usize;
+
+            let output_file_id = loop {
+                tokio::time::sleep(Duration::from_secs(backoff_sequence[backoff_idx])).await;
+                if backoff_idx < backoff_sequence.len() - 1 {
+                    backoff_idx += 1;
+                }
+
+                let poll_resp = client
+                    .get(format!("https://api.openai.com/v1/batches/{batch_id}"))
+                    .bearer_auth(&api_key)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        BatchError::Transient(format!("batch poll request failed: {e}"))
+                    })?;
+
+                let poll_status = poll_resp.status();
+                let poll_json: serde_json::Value = poll_resp.json().await.map_err(|e| {
+                    BatchError::Transient(format!("batch poll response parse failed: {e}"))
+                })?;
+
+                if !poll_status.is_success() {
+                    return Err(BatchError::Transient(format!(
+                        "batch poll HTTP {poll_status}: {}",
+                        poll_json
+                    )));
+                }
+
+                let status = poll_json["status"].as_str().unwrap_or("unknown");
+                spinner.set_message(format!("OpenAI batch {batch_id}: {status}"));
+
+                match status {
+                    "completed" => {
+                        let ofid = poll_json["output_file_id"]
+                            .as_str()
+                            .ok_or_else(|| {
+                                BatchError::Transient(
+                                    "completed batch missing 'output_file_id'".to_string(),
+                                )
+                            })?
+                            .to_string();
+                        break ofid;
+                    }
+                    "failed" | "expired" | "cancelled" => {
+                        spinner.finish_and_clear();
+                        return Err(BatchError::Fatal(format!(
+                            "OpenAI batch {batch_id} ended with status '{status}'"
+                        )));
+                    }
+                    // "validating" | "in_progress" | "finalizing" | "cancelling" | "queued"
+                    _ => {}
+                }
+            };
+
+            spinner.finish_and_clear();
+
+            // Download the output file.
+            let output_resp = client
+                .get(format!(
+                    "https://api.openai.com/v1/files/{output_file_id}/content"
+                ))
+                .bearer_auth(&api_key)
+                .send()
+                .await
+                .map_err(|e| {
+                    BatchError::Transient(format!("output file download request failed: {e}"))
+                })?;
+
+            let output_status = output_resp.status();
+            if !output_status.is_success() {
+                return Err(BatchError::Transient(format!(
+                    "output file download HTTP {output_status}"
+                )));
+            }
+
+            let output_text = output_resp
+                .text()
+                .await
+                .map_err(|e| BatchError::Transient(format!("output file read failed: {e}")))?;
+
+            // Parse JSONL output. Each line is either a success or an error result.
+            // Partial failures are handled gracefully — we collect all lines.
+            let mut all_results: Vec<BatchCaseResult> = Vec::with_capacity(items.len());
+
+            for raw_line in output_text.lines() {
+                let raw_line = raw_line.trim();
+                if raw_line.is_empty() {
+                    continue;
+                }
+
+                let line: serde_json::Value = serde_json::from_str(raw_line)
+                    .map_err(|e| BatchError::Transient(format!("output JSONL parse error: {e}")))?;
+
+                let custom_id = line["custom_id"].as_str().unwrap_or("").to_string();
+                let case_id = agentcarousel_core::CaseId(custom_id);
+
+                // Check for a top-level error field first.
+                if let Some(err_msg) = line["error"]["message"].as_str() {
+                    all_results.push(BatchCaseResult {
+                        case_id,
+                        output: None,
+                        tokens_in: None,
+                        tokens_out: None,
+                        error: Some(err_msg.to_string()),
+                    });
+                    continue;
+                }
+
+                // Success path.
+                let content = line["response"]["body"]["choices"][0]["message"]["content"]
+                    .as_str()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+
+                let tokens_in = line["response"]["body"]["usage"]["prompt_tokens"].as_u64();
+                let tokens_out = line["response"]["body"]["usage"]["completion_tokens"].as_u64();
+
+                // If there's no content and no error field, treat as an error.
+                let (output, error) = if content.is_some() {
+                    (content, None)
+                } else {
+                    let status_code = line["response"]["status_code"].as_u64().unwrap_or(0);
+                    (
+                        None,
+                        Some(format!(
+                            "no content in response (status_code={status_code})"
+                        )),
+                    )
+                };
+
+                all_results.push(BatchCaseResult {
+                    case_id,
+                    output,
+                    tokens_in,
+                    tokens_out,
+                    error,
+                });
+            }
+
+            Ok(all_results)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

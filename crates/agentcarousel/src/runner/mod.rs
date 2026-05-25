@@ -21,7 +21,7 @@ mod tracer;
 
 pub use batch::{
     AnthropicBatch, BatchCaseResult, BatchDispatcher, BatchError, BatchStateRecord,
-    BatchStateStore, CaseBatchItem,
+    BatchStateStore, CaseBatchItem, OpenAiBatch,
 };
 
 use agentcarousel_core::{new_run_id, FixtureFile, Run};
