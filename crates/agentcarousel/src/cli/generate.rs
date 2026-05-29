@@ -10,6 +10,8 @@ use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
 
+type Trigrams = std::collections::HashSet<(String, String, String)>;
+
 const DEFAULT_MODEL: &str = "gemini-2.5-flash";
 const DEFAULT_COUNT: u32 = 5;
 const MAX_TOKENS: u32 = 8192;
@@ -92,6 +94,11 @@ pub struct GenerateArgs {
     /// per-case prompt, e.g. HIPAA rules, an API spec, or brand guidelines.
     #[arg(long, value_name = "PATH")]
     domain_context: Option<PathBuf>,
+
+    /// Automatically drop generated cases whose Jaccard trigram similarity to any
+    /// existing fixture case exceeds 0.7. Default is to warn only.
+    #[arg(long)]
+    deduplicate: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -196,7 +203,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
     let cases_value = cases_value.map_err(|e| (ExitCode::ValidationFailed.as_i32(), e))?;
 
     // Discriminability pre-screen
-    let valid_cases_arr = cases_value
+    let mut valid_cases_arr = cases_value
         .get("cases")
         .and_then(|c| c.as_array())
         .cloned()
@@ -206,6 +213,26 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         eprintln!("{flagged} case(s) flagged by discriminability pre-screen");
     }
 
+    // Novelty screen — compare new cases against cases already on disk
+    let existing_cases = output_path
+        .as_deref()
+        .map(read_existing_cases)
+        .unwrap_or_default();
+    let novelty_flagged = novelty_screen(
+        &mut valid_cases_arr,
+        &existing_cases,
+        args.deduplicate,
+        globals.quiet || globals.json,
+    );
+    if !globals.quiet && !globals.json && novelty_flagged > 0 {
+        if args.deduplicate {
+            eprintln!("{novelty_flagged} near-duplicate case(s) dropped by novelty screen");
+        } else {
+            eprintln!("{novelty_flagged} case(s) flagged by novelty screen");
+        }
+    }
+
+    let cases_value = serde_json::json!({ "cases": valid_cases_arr });
     let cases_yaml = cases_to_yaml_block(&cases_value);
     let case_count = count_cases(&cases_value);
 
@@ -676,6 +703,144 @@ fn discriminability_prescreen(cases: &[serde_json::Value], quiet: bool) -> usize
     flagged
 }
 
+fn extract_user_message(case: &serde_json::Value) -> String {
+    if let Some(messages) = case
+        .get("input")
+        .and_then(|i| i.get("messages"))
+        .and_then(|m| m.as_array())
+    {
+        for msg in messages {
+            if msg.get("role").and_then(|r| r.as_str()) == Some("user") {
+                if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
+                    return content.to_string();
+                }
+            }
+        }
+    }
+    case.get("description")
+        .and_then(|d| d.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn word_trigrams(text: &str) -> Trigrams {
+    let words: Vec<String> = text
+        .split_whitespace()
+        .map(|w| {
+            w.to_lowercase()
+                .trim_matches(|c: char| !c.is_alphabetic())
+                .to_string()
+        })
+        .filter(|w| !w.is_empty())
+        .collect();
+    let mut trigrams = std::collections::HashSet::new();
+    for i in 0..words.len().saturating_sub(2) {
+        trigrams.insert((words[i].clone(), words[i + 1].clone(), words[i + 2].clone()));
+    }
+    trigrams
+}
+
+fn jaccard_similarity(a: &Trigrams, b: &Trigrams) -> f64 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let intersection = a.intersection(b).count();
+    let union = a.len() + b.len() - intersection;
+    intersection as f64 / union as f64
+}
+
+fn read_existing_cases(cases_path: &Path) -> Vec<serde_json::Value> {
+    let Ok(text) = std::fs::read_to_string(cases_path) else {
+        return vec![];
+    };
+    let Ok(value) = serde_yaml::from_str::<serde_json::Value>(&text) else {
+        return vec![];
+    };
+    value
+        .get("cases")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn novelty_screen(
+    new_cases: &mut Vec<serde_json::Value>,
+    existing_cases: &[serde_json::Value],
+    deduplicate: bool,
+    quiet: bool,
+) -> usize {
+    const SIMILARITY_THRESHOLD: f64 = 0.7;
+
+    if existing_cases.is_empty() {
+        for case in new_cases.iter_mut() {
+            if let Some(obj) = case.as_object_mut() {
+                obj.insert("_novelty_score".to_string(), serde_json::json!(1.0));
+            }
+        }
+        return 0;
+    }
+
+    let existing_trigrams: Vec<(String, Trigrams)> = existing_cases
+        .iter()
+        .map(|c| {
+            let id = c
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            (id, word_trigrams(&extract_user_message(c)))
+        })
+        .collect();
+
+    let mut flagged_indices: Vec<usize> = Vec::new();
+
+    for (i, case) in new_cases.iter_mut().enumerate() {
+        let case_id = case
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("<unknown>")
+            .to_string();
+        let new_trigrams = word_trigrams(&extract_user_message(case));
+
+        let mut max_sim = 0.0f64;
+        let mut max_id = String::new();
+        for (existing_id, existing_tg) in &existing_trigrams {
+            let sim = jaccard_similarity(&new_trigrams, existing_tg);
+            if sim > max_sim {
+                max_sim = sim;
+                max_id = existing_id.clone();
+            }
+        }
+
+        let novelty = 1.0 - max_sim;
+        if let Some(obj) = case.as_object_mut() {
+            obj.insert("_novelty_score".to_string(), serde_json::json!(novelty));
+        }
+
+        if max_sim > SIMILARITY_THRESHOLD {
+            flagged_indices.push(i);
+            if !quiet {
+                let action = if deduplicate {
+                    "dropping"
+                } else {
+                    "consider diversifying"
+                };
+                eprintln!(
+                    "warn: case {case_id}: high similarity ({max_sim:.2}) to {max_id} — {action}"
+                );
+            }
+        }
+    }
+
+    let flagged_count = flagged_indices.len();
+    if deduplicate {
+        for &i in flagged_indices.iter().rev() {
+            new_cases.remove(i);
+        }
+    }
+    flagged_count
+}
+
 fn run_generate_batch(
     args: &GenerateArgs,
     globals: &GlobalOptions,
@@ -856,6 +1021,22 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
     let flagged = discriminability_prescreen(&valid_cases, globals.quiet);
     if !globals.quiet && !globals.json && flagged > 0 {
         eprintln!("{flagged} case(s) flagged by discriminability pre-screen");
+    }
+
+    // Novelty screen — compare new cases against cases already on disk
+    let existing_cases = output_path.map(read_existing_cases).unwrap_or_default();
+    let novelty_flagged = novelty_screen(
+        &mut valid_cases,
+        &existing_cases,
+        args.deduplicate,
+        globals.quiet || globals.json,
+    );
+    if !globals.quiet && !globals.json && novelty_flagged > 0 {
+        if args.deduplicate {
+            eprintln!("{novelty_flagged} near-duplicate case(s) dropped by novelty screen");
+        } else {
+            eprintln!("{novelty_flagged} case(s) flagged by novelty screen");
+        }
     }
 
     if valid_cases.is_empty() {

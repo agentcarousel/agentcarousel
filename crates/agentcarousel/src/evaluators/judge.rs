@@ -22,7 +22,7 @@ static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 fn shared_blocking_client() -> &'static reqwest::blocking::Client {
     BLOCKING_CLIENT.get_or_init(|| {
         reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(300))
             .build()
             .expect("reqwest blocking client")
     })
@@ -647,6 +647,7 @@ fn call_custom_judge_blocking(
             "model": model_name,
             "prompt": combined,
             "stream": false,
+            "think": false,
         });
         if let Some(n) = max_tokens {
             b["options"] = serde_json::json!({"num_predict": n});
@@ -669,7 +670,14 @@ fn call_custom_judge_blocking(
     let client = shared_blocking_client();
     let response =
         client.post(endpoint).json(&body).send().map_err(|e| {
-            EvaluatorError::JudgeFailed(format!("custom judge request failed: {e}"))
+            let msg = if e.is_connect() {
+                format!("custom judge request failed: {e}. Ensure the model server at {endpoint} is running and reachable.")
+            } else if e.is_timeout() {
+                format!("custom judge request failed: {e}. The request timed out.")
+            } else {
+                format!("custom judge request failed: {e}")
+            };
+            EvaluatorError::JudgeFailed(msg)
         })?;
 
     let status = response.status();
