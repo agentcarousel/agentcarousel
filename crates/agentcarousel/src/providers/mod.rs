@@ -112,6 +112,35 @@ pub struct OpenAiChoiceMessage {
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+pub struct AnthropicCacheControl {
+    #[serde(rename = "type")]
+    pub cache_type: &'static str,
+}
+
+/// A single block in the structured `system` array.
+/// Pass `cache_control` on the last block to enable Anthropic prompt caching.
+#[derive(Debug, Serialize)]
+pub struct AnthropicSystemBlock {
+    #[serde(rename = "type")]
+    pub block_type: &'static str,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<AnthropicCacheControl>,
+}
+
+impl AnthropicSystemBlock {
+    pub fn cached(text: String) -> Self {
+        Self {
+            block_type: "text",
+            text,
+            cache_control: Some(AnthropicCacheControl {
+                cache_type: "ephemeral",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct AnthropicMessage {
     pub role: String,
     pub content: String,
@@ -122,7 +151,9 @@ pub struct AnthropicRequest {
     pub model: String,
     pub max_tokens: u32,
     pub temperature: f32,
-    pub system: String,
+    /// Structured system blocks; omitted from JSON when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub system: Vec<AnthropicSystemBlock>,
     pub messages: Vec<AnthropicMessage>,
 }
 

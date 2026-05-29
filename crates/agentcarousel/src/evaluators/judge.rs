@@ -12,9 +12,9 @@ use super::trait_def::{Evaluator, EvaluatorError, EvaluatorKind};
 use serde::Deserialize;
 
 use crate::providers::{
-    AnthropicMessage, AnthropicRequest, AnthropicResponse, GeminiContent, GeminiGenerationConfig,
-    GeminiPart, GeminiRequest, GeminiResponse, GeminiSystemInstruction, OpenAiMessage,
-    OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
+    AnthropicMessage, AnthropicRequest, AnthropicResponse, AnthropicSystemBlock, GeminiContent,
+    GeminiGenerationConfig, GeminiPart, GeminiRequest, GeminiResponse, GeminiSystemInstruction,
+    OpenAiMessage, OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
 };
 
 static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
@@ -474,10 +474,15 @@ fn call_anthropic_blocking(
                 .to_string(),
         ));
     };
+    let system_blocks = if system_prompt.is_empty() {
+        vec![]
+    } else {
+        vec![AnthropicSystemBlock::cached(system_prompt)]
+    };
     let request = AnthropicRequest {
         model: model.to_string(),
         max_tokens,
-        system: system_prompt,
+        system: system_blocks,
         messages: vec![AnthropicMessage {
             role: "user".to_string(),
             content: user_prompt,
@@ -491,6 +496,7 @@ fn call_anthropic_blocking(
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", judge_key)
             .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .json(&request)
             .send()
             .map_err(|err| EvaluatorError::JudgeFailed(redact_api_key(&err.to_string())))?;
