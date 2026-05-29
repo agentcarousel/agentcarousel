@@ -88,7 +88,10 @@ fn validate_value(value: &Value, schema: &Value, path: &str, out: &mut Vec<Strin
         if let Some(s) = value.as_str() {
             if s.len() < min as usize {
                 let loc = if path.is_empty() { "<root>" } else { path };
-                out.push(format!("{loc}: string length {} < minLength {min}", s.len()));
+                out.push(format!(
+                    "{loc}: string length {} < minLength {min}",
+                    s.len()
+                ));
             }
         }
     }
@@ -144,10 +147,7 @@ fn validate_value(value: &Value, schema: &Value, path: &str, out: &mut Vec<Strin
         // items
         if let Some(item_schema) = schema_obj.get("items") {
             for (i, item) in arr.iter().enumerate() {
-                let item_path = format!(
-                    "{}[{i}]",
-                    if path.is_empty() { "<root>" } else { path }
-                );
+                let item_path = format!("{}[{i}]", if path.is_empty() { "<root>" } else { path });
                 validate_value(item, item_schema, &item_path, out);
             }
         }
@@ -174,8 +174,7 @@ fn type_name(v: &Value) -> &'static str {
 }
 
 fn load_schema(path: &Path) -> Result<Value, SchemaValidationIssue> {
-    let contents = fs::read_to_string(path)
-        .map_err(|e| SchemaValidationIssue::SchemaError(e.to_string()))?;
-    serde_json::from_str(&contents)
-        .map_err(|e| SchemaValidationIssue::SchemaError(e.to_string()))
+    let contents =
+        fs::read_to_string(path).map_err(|e| SchemaValidationIssue::SchemaError(e.to_string()))?;
+    serde_json::from_str(&contents).map_err(|e| SchemaValidationIssue::SchemaError(e.to_string()))
 }

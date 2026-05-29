@@ -44,7 +44,11 @@ fn validate_json_includes_atf_summary() {
     let out = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["validate", "--json", "fixtures/github-actions-generator/cases.yaml"])
+        .args([
+            "validate",
+            "--json",
+            "fixtures/github-actions-generator/cases.yaml",
+        ])
         .output()
         .expect("run validate");
     assert!(

@@ -131,6 +131,9 @@ beads_report_*.md
 agentcarousel.toml
 agentcarousel.local.toml
 
+# Runtime candidate store (pipeline state, not source)
+.agents/candidates.json
+
 # bv (beads viewer) local config and caches
 .bv/
 crates/agentcarousel/src/cli/experimental/

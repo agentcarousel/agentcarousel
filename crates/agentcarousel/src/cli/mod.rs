@@ -202,7 +202,8 @@ fn help_template() -> String {
     let dashboard_line = String::new();
 
     #[cfg(feature = "watch")]
-    let watch_line = format!("  {watch}        Run tests automatically whenever you save a fixture file\n");
+    let watch_line =
+        format!("  {watch}        Run tests automatically whenever you save a fixture file\n");
     #[cfg(not(feature = "watch"))]
     let watch_line = String::new();
 

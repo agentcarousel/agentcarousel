@@ -15,7 +15,12 @@ fn bundle_verify_ok_prints_for_bundle_directory() {
     let assert = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["bundle", "verify", "--json", "fixtures/github-actions-generator"])
+        .args([
+            "bundle",
+            "verify",
+            "--json",
+            "fixtures/github-actions-generator",
+        ])
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);

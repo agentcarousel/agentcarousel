@@ -234,7 +234,12 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
 
         // Call LLM — fail immediately on error.
         let raw = runtime
-            .block_on(call_llm(args.model.as_deref().unwrap_or(DEFAULT_MODEL), &prompt, Some(MAX_TOKENS), endpoint))
+            .block_on(call_llm(
+                args.model.as_deref().unwrap_or(DEFAULT_MODEL),
+                &prompt,
+                Some(MAX_TOKENS),
+                endpoint,
+            ))
             .map_err(|e| {
                 if let Some(ref bar) = pb {
                     bar.finish_and_clear();
@@ -482,8 +487,15 @@ fn resolve_inputs(
 
     let fixture_dir = Path::new("fixtures").join(&skill_name);
     if !fixture_dir.exists() {
-        scaffold_skill(&skill_name, &super::GlobalOptions { quiet: true, verbose: 0, json: false })
-            .map_err(|(code, msg)| (code, msg))?;
+        scaffold_skill(
+            &skill_name,
+            &super::GlobalOptions {
+                quiet: true,
+                verbose: 0,
+                json: false,
+            },
+        )
+        .map_err(|(code, msg)| (code, msg))?;
     }
     let output_path = fixture_dir.join("cases.yaml");
     Ok((skill_name, description, Some(output_path), vec![]))
@@ -519,9 +531,7 @@ fn scaffold_skill(skill: &str, globals: &super::GlobalOptions) -> Result<i32, (i
     std::fs::create_dir_all(dir.join("golden"))
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
 
-    let cases_yaml = format!(
-        "schema_version: 1\nskill_or_agent: {skill}\n\ncases: []\n"
-    );
+    let cases_yaml = format!("schema_version: 1\nskill_or_agent: {skill}\n\ncases: []\n");
     std::fs::write(dir.join("cases.yaml"), cases_yaml)
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
 
@@ -1095,7 +1105,9 @@ Use e.g. --model claude-3-5-haiku-latest",
     if !globals.quiet && !globals.json {
         eprintln!(
             "generating {} case(s) for '{}' via Anthropic batch API using {}...",
-            n, skill_name, args.model.as_deref().unwrap_or(DEFAULT_MODEL)
+            n,
+            skill_name,
+            args.model.as_deref().unwrap_or(DEFAULT_MODEL)
         );
     }
 
@@ -1116,7 +1128,10 @@ Use e.g. --model claude-3-5-haiku-latest",
                 case_id: CaseId(format!("gen/slot-{i}")),
                 system: String::new(),
                 user_prompt: prompt,
-                model: args.model.clone().unwrap_or_else(|| DEFAULT_MODEL.to_string()),
+                model: args
+                    .model
+                    .clone()
+                    .unwrap_or_else(|| DEFAULT_MODEL.to_string()),
                 max_tokens: MAX_TOKENS,
                 seed: None,
             }
