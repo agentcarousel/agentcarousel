@@ -12,14 +12,35 @@ use crate::providers::{
 };
 
 static ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static CUSTOM_ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 fn shared_client() -> &'static reqwest::Client {
     ASYNC_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(120))
             .build()
             .expect("reqwest async client")
     })
+}
+
+fn shared_custom_client(timeout_secs: u64) -> reqwest::Client {
+    // Return the cached client if the timeout matches the default; otherwise build a one-off.
+    // The cached client covers the common case where all cases share the same RunnerConfig timeout.
+    const DEFAULT_CUSTOM_TIMEOUT: u64 = 120;
+    if timeout_secs == DEFAULT_CUSTOM_TIMEOUT {
+        return CUSTOM_ASYNC_CLIENT
+            .get_or_init(|| {
+                reqwest::Client::builder()
+                    .timeout(Duration::from_secs(DEFAULT_CUSTOM_TIMEOUT))
+                    .build()
+                    .expect("reqwest custom async client")
+            })
+            .clone();
+    }
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .expect("reqwest async client")
 }
 
 /// Generator error that distinguishes permanent failures from transient ones.
@@ -187,6 +208,8 @@ pub async fn call_custom_endpoint(
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
     // Ollama's /api/generate takes a single prompt string; everything else gets messages.
+    let is_ollama = endpoint.contains("/api/generate") || endpoint.contains("/api/chat");
+
     let body = if endpoint.contains("/api/generate") {
         let system = resolve_system_prompt(case);
         let user = build_user_prompt(case);
@@ -199,6 +222,7 @@ pub async fn call_custom_endpoint(
             "prompt": prompt,
             "stream": false,
             "think": false,
+            "keep_alive": "10m",
         });
         if let Some(m) = model_name {
             b["model"] = serde_json::json!(m);
@@ -223,6 +247,9 @@ pub async fn call_custom_endpoint(
             })
             .collect();
         let mut b = serde_json::json!({"messages": messages});
+        if is_ollama {
+            b["keep_alive"] = serde_json::json!("10m");
+        }
         if let Some(m) = model_name {
             b["model"] = serde_json::json!(m);
         }
@@ -232,10 +259,7 @@ pub async fn call_custom_endpoint(
         b
     };
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| GeneratorError::Transient(e.to_string()))?;
+    let client = shared_custom_client(timeout_secs);
     let response = client
         .post(endpoint)
         .json(&body)
@@ -766,88 +790,16 @@ pub async fn call_llm(
     }
 }
 
-/* /// Direct HTTP call to a custom (OpenAI-compatible or Ollama) endpoint with a plain prompt.
 async fn call_llm_custom(
     endpoint: &str,
     model_name: &str,
     prompt: &str,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
-    let body = if endpoint.contains("/api/generate") {
-        let mut b = serde_json::json!({
-            "model": model_name,
-            "prompt": prompt,
-            "stream": false,
-            "thinking": {"type":"disabled"},
-        });
-        if let Some(n) = max_tokens {
-            b["options"] = serde_json::json!({"num_predict": n});
-        }
-        b
-    } else {
-        let mut b = serde_json::json!({
-            "model": model_name,
-            "messages": [{"role": "user", "content": prompt}],
-        });
-        if let Some(n) = max_tokens {
-            b["max_tokens"] = serde_json::json!(n);
-        }
-        b
-    };
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-        .map_err(|e| GeneratorError::Transient(e.to_string()))?;
-    let response = client
-        .post(endpoint)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
-            let msg = if e.is_connect() {
-                format!("custom endpoint request failed: {e}. Ensure the model server at {endpoint} is running and reachable.")
-            } else if e.is_timeout() {
-                format!("custom endpoint request failed: {e}. The request timed out (timeout: 120s).")
-            } else {
-                format!("custom endpoint request failed: {e}")
-            };
-            GeneratorError::Transient(msg)
-        })?;
-    let status = response.status();
-    if !status.is_success() {
-        let body_text = response.text().await.unwrap_or_default();
-        return Err(GeneratorError::Transient(format!(
-            "custom endpoint returned {status}: {body_text}"
-        )));
-    }
-    let json: serde_json::Value = response.json().await.map_err(|e| {
-        GeneratorError::Transient(format!("custom endpoint response parse failed: {e}"))
-    })?;
-    let output = json["choices"][0]["message"]["content"]
-        .as_str()
-        .or_else(|| json["response"].as_str())
-        .or_else(|| json["output"].as_str())
-        .ok_or_else(|| {
-            GeneratorError::Transient(
-                "custom endpoint response missing 'choices[0].message.content', 'response', or 'output'"
-                    .to_string(),
-            )
-        })?
-        .to_string();
-    Ok(GenerationResult {
-        output,
-        tokens_in: None,
-        tokens_out: None,
-    })
-} */
+    const TIMEOUT_SECS: u64 = 120;
 
-async fn call_llm_custom(
-    endpoint: &str,
-    model_name: &str,
-    prompt: &str,
-    max_tokens: Option<u32>,
-) -> Result<GenerationResult, GeneratorError> {
-    // Build options object if max_tokens is provided
+    let is_ollama = endpoint.contains("/api/generate") || endpoint.contains("/api/chat");
+
     let mut options = serde_json::json!({});
     if let Some(n) = max_tokens {
         options["num_predict"] = serde_json::json!(n);
@@ -859,36 +811,33 @@ async fn call_llm_custom(
             "prompt": prompt,
             "think": false,
             "stream": false,
+            "keep_alive": "10m",
         });
         if max_tokens.is_some() {
             b["options"] = options;
         }
         b
     } else {
-        // Assuming this falls back to Ollama's native /api/chat or OpenAI compatibility layer
         let mut b = serde_json::json!({
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
             "think": false,
-            "stream": false, // It's safe to explicitly set this to false here too
+            "stream": false,
         });
-
+        if is_ollama {
+            b["keep_alive"] = serde_json::json!("10m");
+        }
         if max_tokens.is_some() {
             if endpoint.contains("/v1/chat/completions") {
-                // If using the OpenAI compatibility layer endpoint
                 b["max_tokens"] = serde_json::json!(max_tokens);
             } else {
-                // If using Ollama's native /api/chat endpoint
                 b["options"] = options;
             }
         }
         b
     };
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-        .map_err(|e| GeneratorError::Transient(e.to_string()))?;
+    let client = shared_custom_client(TIMEOUT_SECS);
 
     let response = client
         .post(endpoint)
@@ -899,7 +848,7 @@ async fn call_llm_custom(
             let msg = if e.is_connect() {
                 format!("custom endpoint request failed: {e}. Ensure the model server at {endpoint} is running and reachable.")
             } else if e.is_timeout() {
-                format!("custom endpoint request failed: {e}. The request timed out (timeout: 120s).")
+                format!("custom endpoint request failed: {e}. The request timed out (timeout: {TIMEOUT_SECS}s).")
             } else {
                 format!("custom endpoint request failed: {e}")
             };
@@ -908,8 +857,6 @@ async fn call_llm_custom(
 
     let status = response.status();
 
-    // This part is crucial! If Ollama errors out, we need to read the error body
-    // instead of trying to decode it as a successful response.
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
         return Err(GeneratorError::Transient(format!(

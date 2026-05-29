@@ -28,6 +28,13 @@ fn shared_blocking_client() -> &'static reqwest::blocking::Client {
     })
 }
 
+fn custom_blocking_client(timeout_secs: u64) -> reqwest::blocking::Client {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .expect("reqwest blocking client")
+}
+
 struct JudgeCallOutput {
     text: String,
     tokens_in: Option<u64>,
@@ -41,6 +48,8 @@ pub struct JudgeEvaluator {
     pub max_tokens: Option<u32>,
     /// Base URL for a custom/Ollama judge endpoint. Required when `model` is `custom/*` or `ollama/*`.
     pub endpoint: Option<String>,
+    /// Per-request timeout in seconds. Defaults to 300 for cloud providers, 120 for custom endpoints.
+    pub timeout_secs: u64,
 }
 
 impl JudgeEvaluator {
@@ -54,11 +63,14 @@ impl JudgeEvaluator {
             .evaluator_config
             .as_ref()
             .and_then(|config| config.judge_prompt.clone());
+        let model = judge_model.unwrap_or("gemini-2.5-flash").to_string();
+        let is_custom = judge_provider_from_model(&model) == JudgeProvider::Custom;
         Ok(Self {
             prompt,
-            model: judge_model.unwrap_or("gemini-2.5-flash").to_string(),
+            model,
             max_tokens: judge_max_tokens,
             endpoint: judge_endpoint.map(|s| s.to_string()),
+            timeout_secs: if is_custom { 120 } else { 300 },
         })
     }
 }
@@ -97,6 +109,7 @@ impl Evaluator for JudgeEvaluator {
         let system_prompt = build_system_prompt(case, self.prompt.as_deref());
         let user_prompt = build_user_prompt(case, &output);
 
+        let timeout_secs = self.timeout_secs;
         let call_judge = |sp: String, up: String, max_tok: Option<u32>| match provider {
             JudgeProvider::Gemini => call_gemini_text(&judge_key, &self.model, max_tok, sp, up),
             JudgeProvider::OpenAi => call_openai_text(&judge_key, &self.model, max_tok, sp, up),
@@ -107,7 +120,7 @@ impl Evaluator for JudgeEvaluator {
                 call_openrouter_text(&judge_key, &self.model, max_tok, sp, up)
             }
             JudgeProvider::Custom => match self.endpoint.as_deref() {
-                Some(ep) => call_custom_judge_blocking(ep, &self.model, max_tok, sp, up),
+                Some(ep) => call_custom_judge_blocking(ep, &self.model, max_tok, timeout_secs, sp, up),
                 None => Err(EvaluatorError::MissingConfig(
                     "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
                 )),
@@ -127,7 +140,9 @@ impl Evaluator for JudgeEvaluator {
         let judge_response = match parse_judge_response(&first_out.text) {
             Ok(parsed) => parsed,
             Err(first_err) => {
-                if !looks_truncated_json(&first_out.text) {
+                // For custom/local models skip the retry — they already consumed the timeout
+                // budget and a 4x token retry would hang for another full timeout window.
+                if !looks_truncated_json(&first_out.text) || matches!(provider, JudgeProvider::Custom) {
                     return Err(first_err);
                 }
                 // Retry once with a larger token budget and stricter brevity constraints.
@@ -250,6 +265,7 @@ fn build_system_prompt(case: &Case, custom_prompt: Option<&str>) -> String {
 }
 
 fn build_user_prompt(case: &Case, output: &str) -> String {
+    const OUTPUT_CHAR_LIMIT: usize = 2000;
     let mut prompt = String::new();
     prompt.push_str("Case input messages:\n");
     for message in case.input.messages.iter() {
@@ -260,7 +276,14 @@ fn build_user_prompt(case: &Case, output: &str) -> String {
         prompt.push_str("\n\n");
     }
     prompt.push_str("Case output:\n");
-    prompt.push_str(output.trim());
+    let trimmed = output.trim();
+    if trimmed.chars().count() > OUTPUT_CHAR_LIMIT {
+        let truncated: String = trimmed.chars().take(OUTPUT_CHAR_LIMIT).collect();
+        prompt.push_str(&truncated);
+        prompt.push_str("\n...[truncated]");
+    } else {
+        prompt.push_str(trimmed);
+    }
     prompt
 }
 
@@ -638,6 +661,7 @@ fn call_custom_judge_blocking(
     endpoint: &str,
     model: &str,
     max_tokens: Option<u32>,
+    timeout_secs: u64,
     system_prompt: String,
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
@@ -647,6 +671,8 @@ fn call_custom_judge_blocking(
         .filter(|s| !s.is_empty())
         .unwrap_or(model);
 
+    let is_ollama = endpoint.contains("/api/generate") || endpoint.contains("/api/chat");
+
     let body = if endpoint.contains("/api/generate") {
         let combined = format!("{system_prompt}\n\n{user_prompt}");
         let mut b = serde_json::json!({
@@ -654,6 +680,8 @@ fn call_custom_judge_blocking(
             "prompt": combined,
             "stream": false,
             "think": false,
+            // Keep the model warm across consecutive case judgements.
+            "keep_alive": "10m",
         });
         if let Some(n) = max_tokens {
             b["options"] = serde_json::json!({"num_predict": n});
@@ -667,13 +695,16 @@ fn call_custom_judge_blocking(
                 {"role": "user", "content": user_prompt},
             ],
         });
+        if is_ollama {
+            b["keep_alive"] = serde_json::json!("10m");
+        }
         if let Some(n) = max_tokens {
             b["max_tokens"] = serde_json::json!(n);
         }
         b
     };
 
-    let client = shared_blocking_client();
+    let client = custom_blocking_client(timeout_secs);
     let response =
         client.post(endpoint).json(&body).send().map_err(|e| {
             let msg = if e.is_connect() {
@@ -861,6 +892,7 @@ pub fn run_prompt_audit(
     } else {
         resolve_judge_key(provider)?
     };
+    let timeout_secs: u64 = if matches!(provider, JudgeProvider::Custom) { 120 } else { 300 };
 
     let system_prompt = build_prompt_audit_system_prompt();
     let user_prompt = build_prompt_audit_user_prompt(prompt_text, results);
@@ -871,7 +903,7 @@ pub fn run_prompt_audit(
         JudgeProvider::Anthropic => call_anthropic_text(&judge_key, model, max_tok, sp, up),
         JudgeProvider::OpenRouter => call_openrouter_text(&judge_key, model, max_tok, sp, up),
         JudgeProvider::Custom => match endpoint {
-            Some(ep) => call_custom_judge_blocking(ep, model, max_tok, sp, up),
+            Some(ep) => call_custom_judge_blocking(ep, model, max_tok, timeout_secs, sp, up),
             None => Err(EvaluatorError::MissingConfig(
                 "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
             )),
