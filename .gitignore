@@ -129,6 +129,7 @@ docs/rba/
 beads_report_*.md
 
 agentcarousel.toml
+agentcarousel.local.toml
 
 # bv (beads viewer) local config and caches
 .bv/

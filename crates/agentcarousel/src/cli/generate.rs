@@ -1,6 +1,9 @@
 use clap::{Parser, ValueEnum};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::core::CaseId;
 use crate::fixtures::{validate_fixture_value, SchemaLocation};
@@ -151,21 +154,45 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         );
     }
 
+    let n = args.count as usize;
+    let categories = build_category_plan(n, args.distribution.as_deref())
+        .map_err(|e| (ExitCode::ConfigError.as_i32(), e))?;
     let meta_prompt = load_meta_prompt();
-    let final_prompt = build_prompt(
-        &meta_prompt,
-        &skill_name,
-        &description,
-        args.count,
-        &existing_ids,
-    );
+    let endpoint = args.generator_endpoint.as_deref();
 
-    if !globals.quiet && !globals.json {
-        eprintln!(
-            "generating {} case(s) for '{}' using {}...",
-            args.count, skill_name, args.model
+    // Load domain context once.
+    let domain_ctx: Option<String> = if let Some(ref path) = args.domain_context {
+        Some(std::fs::read_to_string(path).map_err(|e| {
+            (
+                ExitCode::RuntimeError.as_i32(),
+                format!("--domain-context: {e}"),
+            )
+        })?)
+    } else {
+        None
+    };
+
+    let difficulty_str: Option<&str> = args.difficulty.as_ref().map(|d| match d {
+        DifficultyLevel::Easy => "easy",
+        DifficultyLevel::Medium => "medium",
+        DifficultyLevel::Hard => "hard",
+    });
+
+    let show_progress = !globals.quiet && !globals.json && std::io::stderr().is_terminal();
+    let pb: Option<ProgressBar> = if show_progress {
+        let bar = ProgressBar::new(n as u64);
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} cases {msg}",
+            )
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
         );
-    }
+        bar.enable_steady_tick(Duration::from_millis(120));
+        Some(bar)
+    } else {
+        None
+    };
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_io()
@@ -173,42 +200,114 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         .build()
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
 
-    let endpoint = args.generator_endpoint.as_deref();
-    let yaml_text = runtime
-        .block_on(call_llm(
-            &args.model,
-            &final_prompt,
-            Some(MAX_TOKENS),
-            endpoint,
-        ))
-        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?
-        .output;
+    let mut valid_cases: Vec<serde_json::Value> = Vec::new();
 
-    let yaml_text = strip_markdown_fences(&yaml_text);
-
-    let cases_value = parse_and_validate(&yaml_text, &skill_name, None).or_else(|validation_errors| {
-        let retry_prompt = format!(
-            "{final_prompt}\n\nThe previous attempt produced invalid YAML. Errors:\n{validation_errors}\n\nFix all errors and try again. Return only the corrected `cases:` YAML."
-        );
-        if !globals.quiet && !globals.json {
-            eprintln!("validation failed, retrying with error feedback...");
+    for (i, &category) in categories.iter().enumerate() {
+        let slot = i + 1;
+        if let Some(ref bar) = pb {
+            bar.set_message(format!("generating case {slot}/{n}..."));
         }
-        let yaml_text2 = runtime
-            .block_on(call_llm(&args.model, &retry_prompt, Some(MAX_TOKENS), endpoint))?
-            .output;
-        let yaml_text2 = strip_markdown_fences(&yaml_text2);
-        parse_and_validate(&yaml_text2, &skill_name, Some(&validation_errors))
-    });
 
-    let cases_value = cases_value.map_err(|e| (ExitCode::ValidationFailed.as_i32(), e))?;
+        let prompt = build_single_case_prompt(
+            &meta_prompt,
+            &skill_name,
+            &description,
+            category,
+            &existing_ids,
+            difficulty_str,
+            domain_ctx.as_deref(),
+        );
+
+        // Call LLM — fail immediately on error.
+        let raw = runtime
+            .block_on(call_llm(&args.model, &prompt, Some(MAX_TOKENS), endpoint))
+            .map_err(|e| {
+                if let Some(ref bar) = pb {
+                    bar.finish_and_clear();
+                }
+                (
+                    ExitCode::RuntimeError.as_i32(),
+                    format!("case {slot}/{n} — LLM call failed: {e}"),
+                )
+            })?
+            .output;
+
+        let yaml_text = strip_markdown_fences(&raw);
+
+        // Validate; on failure retry once with the actual error text.
+        let case_value = parse_and_validate(&yaml_text, &skill_name, None).or_else(
+            |validation_errors| {
+                if let Some(ref bar) = pb {
+                    bar.suspend(|| {
+                        eprintln!(
+                            "  case {slot}/{n}: validation failed, retrying with error feedback...\n  Errors:\n{}",
+                            validation_errors
+                                .lines()
+                                .map(|l| format!("    {l}"))
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        );
+                    });
+                } else if !globals.quiet && !globals.json {
+                    eprintln!(
+                        "case {slot}/{n}: validation failed, retrying with error feedback...\nErrors:\n{validation_errors}"
+                    );
+                }
+                let retry_prompt = format!(
+                    "{prompt}\n\nThe previous attempt produced invalid YAML. Errors:\n{validation_errors}\n\nFix all errors and try again. Return only the corrected `cases:` YAML."
+                );
+                let raw2 = runtime
+                    .block_on(call_llm(&args.model, &retry_prompt, Some(MAX_TOKENS), endpoint))
+                    .map_err(|e| format!("retry LLM call failed: {e}"))?
+                    .output;
+                let yaml2 = strip_markdown_fences(&raw2);
+                parse_and_validate(&yaml2, &skill_name, Some(&validation_errors))
+            },
+        );
+
+        let case_value = case_value.map_err(|e| {
+            if let Some(ref bar) = pb {
+                bar.finish_and_clear();
+            }
+            (
+                ExitCode::ValidationFailed.as_i32(),
+                format!("case {slot}/{n} failed validation after retry:\n{e}"),
+            )
+        })?;
+
+        let new_cases = case_value
+            .get("cases")
+            .and_then(|c| c.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        // Capture the generated ID for display and duplicate prevention.
+        let case_id = new_cases
+            .first()
+            .and_then(|c| c.get("id"))
+            .and_then(|id| id.as_str())
+            .unwrap_or("(unknown)")
+            .to_string();
+
+        existing_ids.push(case_id.clone());
+        valid_cases.extend(new_cases);
+
+        if let Some(ref bar) = pb {
+            bar.inc(1);
+            bar.suspend(|| {
+                println!("  ✓ case {slot} — {case_id}");
+            });
+        } else if !globals.quiet && !globals.json {
+            println!("  ✓ case {slot} — {case_id}");
+        }
+    }
+
+    if let Some(bar) = pb {
+        bar.finish_and_clear();
+    }
 
     // Discriminability pre-screen
-    let mut valid_cases_arr = cases_value
-        .get("cases")
-        .and_then(|c| c.as_array())
-        .cloned()
-        .unwrap_or_default();
-    let flagged = discriminability_prescreen(&valid_cases_arr, globals.quiet);
+    let flagged = discriminability_prescreen(&valid_cases, globals.quiet);
     if !globals.quiet && !globals.json && flagged > 0 {
         eprintln!("{flagged} case(s) flagged by discriminability pre-screen");
     }
@@ -219,7 +318,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         .map(read_existing_cases)
         .unwrap_or_default();
     let novelty_flagged = novelty_screen(
-        &mut valid_cases_arr,
+        &mut valid_cases,
         &existing_cases,
         args.deduplicate,
         globals.quiet || globals.json,
@@ -232,7 +331,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         }
     }
 
-    let cases_value = serde_json::json!({ "cases": valid_cases_arr });
+    let cases_value = serde_json::json!({ "cases": valid_cases });
     let cases_yaml = cases_to_yaml_block(&cases_value);
     let case_count = count_cases(&cases_value);
 

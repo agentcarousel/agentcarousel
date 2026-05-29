@@ -120,7 +120,9 @@ impl Evaluator for JudgeEvaluator {
                 call_openrouter_text(&judge_key, &self.model, max_tok, sp, up)
             }
             JudgeProvider::Custom => match self.endpoint.as_deref() {
-                Some(ep) => call_custom_judge_blocking(ep, &self.model, max_tok, timeout_secs, sp, up),
+                Some(ep) => {
+                    call_custom_judge_blocking(ep, &self.model, max_tok, timeout_secs, sp, up)
+                }
                 None => Err(EvaluatorError::MissingConfig(
                     "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
                 )),
@@ -142,7 +144,9 @@ impl Evaluator for JudgeEvaluator {
             Err(first_err) => {
                 // For custom/local models skip the retry — they already consumed the timeout
                 // budget and a 4x token retry would hang for another full timeout window.
-                if !looks_truncated_json(&first_out.text) || matches!(provider, JudgeProvider::Custom) {
+                if !looks_truncated_json(&first_out.text)
+                    || matches!(provider, JudgeProvider::Custom)
+                {
                     return Err(first_err);
                 }
                 // Retry once with a larger token budget and stricter brevity constraints.
@@ -892,7 +896,11 @@ pub fn run_prompt_audit(
     } else {
         resolve_judge_key(provider)?
     };
-    let timeout_secs: u64 = if matches!(provider, JudgeProvider::Custom) { 120 } else { 300 };
+    let timeout_secs: u64 = if matches!(provider, JudgeProvider::Custom) {
+        120
+    } else {
+        300
+    };
 
     let system_prompt = build_prompt_audit_system_prompt();
     let user_prompt = build_prompt_audit_user_prompt(prompt_text, results);

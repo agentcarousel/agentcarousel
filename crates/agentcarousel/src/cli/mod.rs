@@ -2,6 +2,8 @@ mod ab;
 mod audit;
 mod batch_cmd;
 mod bundle;
+mod candidate_store;
+mod candidates;
 mod carousel;
 mod compare;
 mod completions;
@@ -16,9 +18,11 @@ mod fixture_utils;
 mod generate;
 mod init;
 mod lint;
+mod local_config;
 mod metrics;
 mod optimize;
 mod output;
+mod pipeline;
 mod promote;
 mod publish;
 mod registry_client;
@@ -134,6 +138,10 @@ enum Command {
     Audit(audit::AuditArgs),
     /// Automated system prompt optimization loop.
     Optimize(optimize::OptimizeArgs),
+    /// Skill lifecycle pipeline: onboard a new skill or improve an existing one.
+    Pipeline(pipeline::PipelineArgs),
+    /// List all pipeline candidate skills with their evaluation scores and metrics.
+    Candidates(candidates::CandidatesArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -182,6 +190,8 @@ fn help_template() -> String {
     let promote = c("promote");
     let trust_check = c("trust-check");
     let optimize = c("optimize");
+    let pipeline = c("pipeline");
+    let candidates = c("candidates");
     let completions = c("completions");
     let update = c("update");
     let doctor = c("doctor");
@@ -212,6 +222,8 @@ Usage:
   {watch}        Run tests automatically whenever you save a fixture file
   {generate}     Generate fixture cases for a skill using an LLM
   {optimize}     Automated system prompt optimization loop (iterative LLM-driven tuning)
+  {pipeline}     Skill lifecycle pipeline: onboard a new skill or improve an existing one
+  {candidates}   List pipeline candidate skills with scores, metrics, and status
   {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
   {init}         Scaffold a new skill or agent fixture template
 
@@ -279,10 +291,12 @@ pub fn run() -> i32 {
         Command::Ab(a) => a.config.as_deref(),
         Command::Audit(a) => a.config.as_deref(),
         Command::Optimize(a) => a.config.as_deref(),
+        Command::Pipeline(a) => a.config.as_deref(),
+        Command::Candidates(a) => a.config.as_deref(),
         _ => None,
     };
 
-    let config = match load_config(config_path) {
+    let mut config = match load_config(config_path) {
         Ok(config) => config,
         Err(err) => {
             if json_mode {
@@ -297,6 +311,9 @@ pub fn run() -> i32 {
             return exit_codes::ExitCode::ConfigError.as_i32();
         }
     };
+
+    let local_profile = local_config::LocalProfile::load();
+    local_profile.apply_to(&mut config);
 
     apply_history_db_env(&config);
     if json_mode {
@@ -335,6 +352,8 @@ pub fn run() -> i32 {
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
         Command::Audit(args) => audit::run_audit_command(args, &config, &globals),
         Command::Optimize(args) => optimize::run_optimize_command(args, &config, &globals),
+        Command::Pipeline(args) => pipeline::run_pipeline(args, &config, &globals),
+        Command::Candidates(args) => candidates::run_candidates(args, &globals),
     }
 }
 
@@ -344,9 +363,9 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize lint init report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates lint init report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc init --skill my-skill");
     println!("  agc test fixtures/my-skill/");

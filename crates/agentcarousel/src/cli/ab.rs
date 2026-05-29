@@ -80,6 +80,12 @@ pub struct AbArgs {
     /// Effectiveness delta threshold for declaring a winner (default: 0.05).
     #[arg(long, default_value_t = 0.05_f32)]
     threshold: f32,
+    /// Base URL for a custom generator endpoint (required when --model is 'custom' or 'ollama/<name>').
+    #[arg(long)]
+    pub generator_endpoint: Option<String>,
+    /// Base URL for a custom judge endpoint (required when --judge-model is 'custom' or 'ollama/<name>').
+    #[arg(long)]
+    pub judge_endpoint: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -153,7 +159,9 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
     };
     if matches!(generation_mode, GenerationMode::Live) {
         let provider = GeneratorProvider::from_model(&generator_model);
-        if resolve_key(provider.key_candidates()).is_none() {
+        if !matches!(provider, GeneratorProvider::Custom)
+            && resolve_key(provider.key_candidates()).is_none()
+        {
             eprintln!(
                 "error: set one of {} to run live generation for model '{}'",
                 provider.key_candidates().join(", "),
@@ -209,6 +217,10 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
 
     let fixtures_a = inject_system_prompt(fixtures.clone(), &prompt_a);
     let fixtures_b = inject_system_prompt(fixtures, &prompt_b);
+    let generator_endpoint = args
+        .generator_endpoint
+        .clone()
+        .or_else(|| config.generator.endpoint.clone());
     let eval_config_a = build_eval_config(
         "a",
         &args,
@@ -217,6 +229,8 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
         judge_active,
         &judge_model,
         &generator_model,
+        generator_endpoint.clone(),
+        args.judge_endpoint.clone(),
     );
     let eval_config_b = build_eval_config(
         "b",
@@ -226,6 +240,8 @@ pub fn run_ab(args: AbArgs, config: &ResolvedConfig, globals: &GlobalOptions) ->
         judge_active,
         &judge_model,
         &generator_model,
+        generator_endpoint,
+        args.judge_endpoint.clone(),
     );
 
     prefetch_pricing();
@@ -330,6 +346,7 @@ fn inject_system_prompt(mut fixtures: Vec<FixtureFile>, system_prompt: &str) -> 
     fixtures
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_eval_config(
     variant: &str,
     args: &AbArgs,
@@ -338,6 +355,8 @@ fn build_eval_config(
     judge: bool,
     judge_model: &str,
     generator_model: &str,
+    generator_endpoint: Option<String>,
+    judge_endpoint: Option<String>,
 ) -> EvalConfig {
     let generation_mode = match args.execution_mode {
         AbExecutionMode::Mock => GenerationMode::MockOnly,
@@ -355,7 +374,7 @@ fn build_eval_config(
         generation_mode,
         generator_model: Some(generator_model.to_string()),
         generator_max_tokens: config.generator.max_tokens,
-        generator_endpoint: None,
+        generator_endpoint,
         fail_fast: false,
         mock_strict: false,
         command: format!("ab-{variant}"),
@@ -375,7 +394,7 @@ fn build_eval_config(
         },
         judge,
         judge_model: Some(judge_model.to_string()),
-        judge_endpoint: None,
+        judge_endpoint,
         judge_max_tokens: config.judge.max_tokens,
         effectiveness_threshold: config.eval.effectiveness_threshold,
         progress: false,
