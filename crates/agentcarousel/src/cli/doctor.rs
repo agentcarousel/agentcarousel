@@ -249,7 +249,7 @@ fn check_fixtures_dir() -> Check {
         Check {
             label: "Fixtures directory",
             status: CheckStatus::Warn,
-            detail: "fixtures/ not found — run `agc init --skill my-skill` to create one"
+            detail: "fixtures/ not found — run `agc generate --from-prompt` to scaffold fixtures"
                 .to_string(),
         }
     }

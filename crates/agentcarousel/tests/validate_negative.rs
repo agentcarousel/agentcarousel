@@ -15,7 +15,7 @@ fn validate_examples() {
     Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["validate", "fixtures/regex-builder/cases.yaml"])
+        .args(["validate", "fixtures/github-actions-generator/cases.yaml"])
         .assert()
         .success();
 }
@@ -44,7 +44,7 @@ fn validate_json_includes_atf_summary() {
     let out = Command::cargo_bin("agentcarousel")
         .unwrap()
         .current_dir(&root)
-        .args(["validate", "--json", "fixtures/regex-builder/cases.yaml"])
+        .args(["validate", "--json", "fixtures/github-actions-generator/cases.yaml"])
         .output()
         .expect("run validate");
     assert!(

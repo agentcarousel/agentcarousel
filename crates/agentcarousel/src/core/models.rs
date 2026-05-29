@@ -85,6 +85,8 @@ pub struct Message {
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     User,
+    // "model" is Gemini's name for the assistant turn — accept it as an alias.
+    #[serde(alias = "model")]
     Assistant,
     System,
     Tool,
@@ -100,6 +102,8 @@ pub struct Expected {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ToolCallExpectation {
+    // Accept "name" and "tool_name" as aliases — LLMs frequently emit those variants.
+    #[serde(alias = "name", alias = "tool_name")]
     pub tool: String,
     pub args_match: Option<Value>,
     #[serde(default = "default_tool_order")]

@@ -93,7 +93,7 @@ impl Default for ResolvedConfig {
         Self {
             runner: RunnerSettings {
                 concurrency: None,
-                timeout_secs: 30,
+                timeout_secs: 120,
                 offline: true,
                 mock_dir: PathBuf::from("mocks"),
             },

@@ -39,16 +39,17 @@ enum DifficultyLevel {
 )]
 pub struct GenerateArgs {
     /// Skill name to generate cases for. Creates output at fixtures/<skill>/cases.yaml.
-    #[arg(long, conflicts_with_all = ["from_prompt", "extend"])]
+    #[arg(long, conflicts_with = "extend")]
     skill: Option<String>,
 
     /// Description of the skill or agent (used to build the generation prompt).
     #[arg(long)]
     description: Option<String>,
 
-    /// Path to an existing system prompt file to use as the skill description.
-    #[arg(long, value_name = "PATH", conflicts_with_all = ["skill", "extend"])]
-    from_prompt: Option<PathBuf>,
+    /// System prompt to use as the skill description — either a path to a file or inline text.
+    /// When passing inline text, also provide --skill to set the output directory.
+    #[arg(long, value_name = "PATH_OR_TEXT", conflicts_with = "extend")]
+    from_prompt: Option<String>,
 
     /// Extend an existing fixture directory with new cases (deduplicates against existing IDs).
     #[arg(long, value_name = "DIR", conflicts_with_all = ["skill", "from_prompt"])]
@@ -62,9 +63,10 @@ pub struct GenerateArgs {
     #[arg(long)]
     dry_run: bool,
 
-    /// LLM model to use for generation (default: gemini-2.5-flash).
-    #[arg(long, default_value = DEFAULT_MODEL)]
-    model: String,
+    /// LLM model to use for generation. Omit to scaffold the fixture directory without calling
+    /// any LLM (requires --skill; creates the directory, a prompt.md stub, and golden/).
+    #[arg(long)]
+    model: Option<String>,
 
     /// Base URL for a custom/Ollama generator endpoint (required when model is custom/* or ollama/*).
     #[arg(long, value_name = "URL")]
@@ -126,6 +128,18 @@ pub fn run_generate(args: GenerateArgs, globals: &GlobalOptions) -> i32 {
 }
 
 fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32, (i32, String)> {
+    // Scaffold-only mode: --skill without --model creates the directory structure and exits.
+    if args.model.is_none() {
+        let skill = args.skill.as_deref().ok_or_else(|| {
+            (
+                ExitCode::ConfigError.as_i32(),
+                "--model is required unless you use --skill to scaffold a new fixture directory"
+                    .to_string(),
+            )
+        })?;
+        return scaffold_skill(skill, globals);
+    }
+
     let (skill_name, description, output_path, mut existing_ids) = resolve_inputs(&args)?;
 
     // Prepend seed case IDs so generation avoids re-generating them.
@@ -220,7 +234,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
 
         // Call LLM — fail immediately on error.
         let raw = runtime
-            .block_on(call_llm(&args.model, &prompt, Some(MAX_TOKENS), endpoint))
+            .block_on(call_llm(args.model.as_deref().unwrap_or(DEFAULT_MODEL), &prompt, Some(MAX_TOKENS), endpoint))
             .map_err(|e| {
                 if let Some(ref bar) = pb {
                     bar.finish_and_clear();
@@ -257,7 +271,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
                     "{prompt}\n\nThe previous attempt produced invalid YAML. Errors:\n{validation_errors}\n\nFix all errors and try again. Return only the corrected `cases:` YAML."
                 );
                 let raw2 = runtime
-                    .block_on(call_llm(&args.model, &retry_prompt, Some(MAX_TOKENS), endpoint))
+                    .block_on(call_llm(args.model.as_deref().unwrap_or(DEFAULT_MODEL), &retry_prompt, Some(MAX_TOKENS), endpoint))
                     .map_err(|e| format!("retry LLM call failed: {e}"))?
                     .output;
                 let yaml2 = strip_markdown_fences(&raw2);
@@ -394,7 +408,7 @@ fn resolve_inputs(
                 .unwrap_or("unknown");
             return Err((
                 ExitCode::NotFound.as_i32(),
-                format!("Directory not found. Run 'agc init --skill {name}' first."),
+                format!("Directory not found. Create fixtures/{name}/prompt.md then run `agc generate --from-prompt`."),
             ));
         }
         let skill_name = dir
@@ -413,20 +427,41 @@ fn resolve_inputs(
         return Ok((skill_name, description, Some(cases_path), existing_ids));
     }
 
-    if let Some(ref prompt_path) = args.from_prompt {
-        let description = std::fs::read_to_string(prompt_path).map_err(|e| {
-            (
-                ExitCode::RuntimeError.as_i32(),
-                format!("failed to read {}: {e}", prompt_path.display()),
-            )
-        })?;
-        let parent = prompt_path.parent().unwrap_or(Path::new("."));
-        let skill_name = parent
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("skill")
-            .to_string();
-        let cases_path = parent.join("cases.yaml");
+    if let Some(ref prompt_input) = args.from_prompt {
+        let path = Path::new(prompt_input);
+        let (description, skill_name, cases_path) = if path.exists() {
+            // File path: read content and derive skill name from parent directory.
+            let description = std::fs::read_to_string(path).map_err(|e| {
+                (
+                    ExitCode::RuntimeError.as_i32(),
+                    format!("failed to read {}: {e}", path.display()),
+                )
+            })?;
+            let parent = path.parent().unwrap_or(Path::new("."));
+            let skill_name = args
+                .skill
+                .clone()
+                .or_else(|| {
+                    parent
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| "skill".to_string());
+            let cases_path = Path::new("fixtures").join(&skill_name).join("cases.yaml");
+            (description, skill_name, cases_path)
+        } else {
+            // Inline text: use the string directly as the prompt.
+            let skill_name = args.skill.clone().ok_or_else(|| {
+                (
+                    ExitCode::ConfigError.as_i32(),
+                    "--skill is required when --from-prompt is inline text (not a file path)"
+                        .to_string(),
+                )
+            })?;
+            let cases_path = Path::new("fixtures").join(&skill_name).join("cases.yaml");
+            (prompt_input.clone(), skill_name, cases_path)
+        };
         let existing_ids = read_existing_case_ids(&cases_path);
         return Ok((skill_name, description, Some(cases_path), existing_ids));
     }
@@ -445,8 +480,64 @@ fn resolve_inputs(
         )
     })?;
 
-    let output_path = Path::new("fixtures").join(&skill_name).join("cases.yaml");
+    let fixture_dir = Path::new("fixtures").join(&skill_name);
+    if !fixture_dir.exists() {
+        scaffold_skill(&skill_name, &super::GlobalOptions { quiet: true, verbose: 0, json: false })
+            .map_err(|(code, msg)| (code, msg))?;
+    }
+    let output_path = fixture_dir.join("cases.yaml");
     Ok((skill_name, description, Some(output_path), vec![]))
+}
+
+/// Create the fixture directory skeleton for a new skill without calling any LLM.
+///
+/// Creates: fixtures/<skill>/, prompt.md (stub), cases.yaml (empty header), golden/.
+fn scaffold_skill(skill: &str, globals: &super::GlobalOptions) -> Result<i32, (i32, String)> {
+    use super::fixture_utils::is_kebab_case;
+
+    if skill.contains('/') || skill.contains("..") {
+        return Err((
+            ExitCode::RuntimeError.as_i32(),
+            format!("skill name '{skill}' must not contain path separators"),
+        ));
+    }
+    if !is_kebab_case(skill) {
+        return Err((
+            ExitCode::RuntimeError.as_i32(),
+            format!("skill name '{skill}' must be kebab-case (lowercase letters, digits, hyphens)"),
+        ));
+    }
+
+    let dir = Path::new("fixtures").join(skill);
+    if dir.exists() {
+        if !globals.quiet {
+            println!("  fixtures/{skill}/ already exists — skipping scaffold");
+        }
+        return Ok(ExitCode::Ok.as_i32());
+    }
+
+    std::fs::create_dir_all(dir.join("golden"))
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
+
+    let cases_yaml = format!(
+        "schema_version: 1\nskill_or_agent: {skill}\n\ncases: []\n"
+    );
+    std::fs::write(dir.join("cases.yaml"), cases_yaml)
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
+
+    let prompt_stub = format!(
+        "---\nname: {skill}\ndescription: <describe what this skill does in 1–2 sentences>\n---\n\nYou are a <role>. <system prompt goes here.>\n"
+    );
+    std::fs::write(dir.join("prompt.md"), prompt_stub)
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
+
+    if !globals.quiet {
+        println!("  scaffolded fixtures/{skill}/");
+        println!("  → edit fixtures/{skill}/prompt.md, then run:");
+        println!("    agc generate --from-prompt fixtures/{skill}/prompt.md --model <model>");
+    }
+
+    Ok(ExitCode::Ok.as_i32())
 }
 
 fn read_existing_case_ids(cases_path: &Path) -> Vec<String> {
@@ -950,14 +1041,14 @@ fn run_generate_batch(
 ) -> Result<i32, (i32, String)> {
     use crate::runner::GeneratorProvider;
 
-    let provider = GeneratorProvider::from_model(&args.model);
+    let provider = GeneratorProvider::from_model(args.model.as_deref().unwrap_or(DEFAULT_MODEL));
     if !matches!(provider, GeneratorProvider::Anthropic) {
         return Err((
             ExitCode::ConfigError.as_i32(),
             format!(
                 "--batch requires an Anthropic (Claude) model; got '{}'. \
 Use e.g. --model claude-3-5-haiku-latest",
-                args.model
+                args.model.as_deref().unwrap_or(DEFAULT_MODEL)
             ),
         ));
     }
@@ -1004,7 +1095,7 @@ Use e.g. --model claude-3-5-haiku-latest",
     if !globals.quiet && !globals.json {
         eprintln!(
             "generating {} case(s) for '{}' via Anthropic batch API using {}...",
-            n, skill_name, args.model
+            n, skill_name, args.model.as_deref().unwrap_or(DEFAULT_MODEL)
         );
     }
 
@@ -1025,7 +1116,7 @@ Use e.g. --model claude-3-5-haiku-latest",
                 case_id: CaseId(format!("gen/slot-{i}")),
                 system: String::new(),
                 user_prompt: prompt,
-                model: args.model.clone(),
+                model: args.model.clone().unwrap_or_else(|| DEFAULT_MODEL.to_string()),
                 max_tokens: MAX_TOKENS,
                 seed: None,
             }
@@ -1095,7 +1186,7 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
                     case_id: CaseId(format!("gen/slot-{i}-retry")),
                     system: String::new(),
                     user_prompt: retry_prompt,
-                    model: args.model.clone(),
+                    model: args.model.clone().unwrap_or_else(|| DEFAULT_MODEL.to_string()),
                     max_tokens: MAX_TOKENS,
                     seed: None,
                 }
@@ -1188,18 +1279,8 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
 }
 
 fn clean_for_append(yaml: &str) -> String {
-    // serde_yaml emits 0-indented items; prepend 2 spaces to nest under the existing cases: block.
+    // Cases are serialized at 0-indent by serde_yaml and the initial file header also writes
+    // them at 0-indent under `cases:`, so appended entries must stay at 0-indent to match.
     let text = yaml.trim();
-    let indented = text
-        .lines()
-        .map(|line| {
-            if line.is_empty() {
-                String::new()
-            } else {
-                format!("  {line}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!("\n{indented}\n")
+    format!("\n{text}\n")
 }

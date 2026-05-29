@@ -33,12 +33,16 @@ cases:
 
     input:
       messages:
-        - role: user
+        - role: user          # valid roles: user | assistant | system | tool  — never "model"
           content: |
             <Realistic user message>
 
     expected:
-      tool_sequence: []                    # list expected tool calls, or [] if none
+      tool_sequence: []                    # [] when no tool calls expected; when tool calls ARE expected:
+      # tool_sequence:
+      #   - tool: <exact-tool-name>        # REQUIRED field is "tool" — never "name" or "tool_name"
+      #     args_match: {key: value}       # optional partial match on arguments
+      #   - tool: <second-tool-name>
 
       output:
         - kind: contains                   # contains | not_contains | regex | json_path
@@ -88,6 +92,8 @@ Generate exactly {{COUNT}} cases covering ALL of the following categories (propo
 - Every case MUST have at least one rubric item and at least one output assertion
 - Use `auto_check` wherever possible; omit it only for rubric items requiring genuine language understanding
 - Keep `description` fields specific — mention what the user asked, what the agent must do, and what constitutes a pass
+- `tool_sequence` items MUST use `tool: <name>` as the key — never `name:` or `tool_name:`. Use `tool_sequence: []` when no tool calls are expected.
+- Message `role` MUST be one of: `user`, `assistant`, `system`, `tool` — never `model` (that is a Gemini-specific variant and will fail deserialization).
 - Do NOT include YAML comments in your output
 - Do NOT wrap the output in markdown fences
 

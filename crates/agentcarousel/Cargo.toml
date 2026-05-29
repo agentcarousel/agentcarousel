@@ -1,6 +1,6 @@
 [package]
 name = "agentcarousel"
-version = "0.6.5"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.95"
 description = "Unit tests for AI agents. Run behavioral tests in CI, score with an LLM judge, and export signed evidence your auditors accept."
@@ -25,10 +25,10 @@ path = "src/bin/agc.rs"
 
 [features]
 default = []
-dashboard = ["dep:axum", "dep:tokio-stream"]
+dashboard = ["dep:axum", "dep:tokio-stream", "tokio/net"]
+watch = ["dep:notify"]
 
 [dependencies]
-anthropic-sdk-rust = "0.1.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
@@ -36,7 +36,6 @@ console = "0.16.3"
 flate2 = "1"
 globset = "0.4"
 indicatif = "0.18.4"
-jsonschema = { version = "0.46", default-features = false, features = ["resolve-file"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 rusqlite = "0.39"
@@ -48,13 +47,13 @@ similar = "3"
 tar = "0.4"
 tempfile = "3"
 thiserror = "2.0.18"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 axum = { version = "0.8", optional = true }
+notify = { version = "6", optional = true }
 toml = "1.1.2"
 ulid = "1"
 walkdir = "2"
-notify = "6"
 
 # Bundled SQLite on Linux and Windows so CI/release binaries link without host libsqlite
 # (cross-compile to aarch64-gnu has no arm64 libsqlite; musl already needed bundled).

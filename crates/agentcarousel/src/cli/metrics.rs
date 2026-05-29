@@ -324,7 +324,7 @@ fn resolve_context(
                     "no_fixtures_found",
                     format!(
                         "no fixture files found for skill '{skill}' — \
-                         expected directory: {} (create it with `agc init --skill {skill}`)",
+                         expected directory: {} (create it then run `agc generate --from-prompt`)",
                         fixture_dir.display()
                     ),
                 );

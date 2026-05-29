@@ -242,6 +242,15 @@ fn run_onboard(args: OnboardArgs, config: &ResolvedConfig, globals: &GlobalOptio
         .judge_endpoint
         .as_deref()
         .or_else(|| local.judge_endpoint())
+        // When the judge is a local/custom model and no dedicated endpoint is given,
+        // inherit the generator endpoint — same ollama server handles both roles.
+        .or_else(|| {
+            if judge_model.starts_with("ollama/") || judge_model.starts_with("custom/") {
+                generator_endpoint.as_deref()
+            } else {
+                None
+            }
+        })
         .map(|s| s.to_string());
 
     let fixture_dir = fixture_path(&args.skill);
@@ -414,6 +423,12 @@ fn run_onboard(args: OnboardArgs, config: &ResolvedConfig, globals: &GlobalOptio
         let tag_name = format!("{}-baseline", args.skill);
         if let Err(e) = tag_run(&tag_name, &run_id) {
             eprintln!("warning: could not tag run as baseline: {e}");
+        } else if !globals.quiet {
+            println!(
+                "  ✓ baseline tagged: run {} · {:.0}%",
+                run_id,
+                pass_rate * 100.0
+            );
         }
     }
 
@@ -504,6 +519,14 @@ fn run_improve(args: ImproveArgs, config: &ResolvedConfig, globals: &GlobalOptio
         .judge_endpoint
         .as_deref()
         .or_else(|| local.judge_endpoint())
+        // Inherit generator endpoint when judge is a local/custom model with no dedicated endpoint.
+        .or_else(|| {
+            if judge_model.starts_with("ollama/") || judge_model.starts_with("custom/") {
+                generator_endpoint.as_deref()
+            } else {
+                None
+            }
+        })
         .map(|s| s.to_string());
 
     let fixture_dir = fixture_path(&args.skill);

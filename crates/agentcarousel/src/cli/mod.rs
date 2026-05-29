@@ -16,8 +16,6 @@ mod exit_codes;
 mod export;
 mod fixture_utils;
 mod generate;
-mod init;
-mod lint;
 mod local_config;
 mod metrics;
 mod optimize;
@@ -31,6 +29,7 @@ mod test;
 mod trust_check;
 mod update;
 mod validate;
+#[cfg(feature = "watch")]
 mod watch;
 
 use clap::builder::styling::{AnsiColor, Color, Effects, RgbColor, Style, Styles};
@@ -105,7 +104,6 @@ enum Command {
     #[cfg(feature = "dashboard")]
     Dashboard(dashboard::DashboardArgs),
     /// Scaffold a new skill or agent fixture template.
-    Init(init::InitArgs),
     /// Pack, verify, or pull fixture bundles.
     Bundle(bundle::BundleArgs),
     /// Publish a bundle and its evidence to the registry.
@@ -122,13 +120,12 @@ enum Command {
     Update(update::UpdateArgs),
     /// Check environment, config, and fixture setup for common issues.
     Doctor(doctor::DoctorArgs),
-    /// Check fixture quality beyond schema: smoke coverage, rubric weights, descriptions.
-    Lint(lint::LintArgs),
     /// Compute compliance metrics: injection resistance, behavioral drift, test coverage, and score calibration.
     Metrics(metrics::MetricsArgs),
     /// Compare two eval runs and gate on regressions.
     Compare(compare::CompareArgs),
     /// Run tests automatically whenever you save a fixture file.
+    #[cfg(feature = "watch")]
     Watch(watch::WatchArgs),
     /// Run the same fixture suite against multiple models and get a ranked comparison.
     Carousel(carousel::CarouselArgs),
@@ -174,12 +171,11 @@ fn help_template() -> String {
     let validate = c("validate");
     let test = c("test");
     let eval = c("eval");
+    #[cfg(feature = "watch")]
     let watch = c("watch");
     let carousel = c("carousel");
     let ab = c("ab");
     let generate = c("generate");
-    let lint = c("lint");
-    let init = c("init");
     let audit = c("audit");
     let report = c("report");
     let metrics = c("metrics");
@@ -205,6 +201,11 @@ fn help_template() -> String {
     #[cfg(not(feature = "dashboard"))]
     let dashboard_line = String::new();
 
+    #[cfg(feature = "watch")]
+    let watch_line = format!("  {watch}        Run tests automatically whenever you save a fixture file\n");
+    #[cfg(not(feature = "watch"))]
+    let watch_line = String::new();
+
     format!(
         r#"{{about}}
 
@@ -219,13 +220,10 @@ Usage:
   {eval}         Run evaluation with mock or live generation; optionally score with an LLM judge
   {carousel}     Run the same fixtures against multiple models and get a ranked comparison table
   {ab}           Run the same fixtures against two system prompts and compare head-to-head
-  {watch}        Run tests automatically whenever you save a fixture file
-  {generate}     Generate fixture cases for a skill using an LLM
+{watch_line}  {generate}     Generate fixture cases for a skill using an LLM
   {optimize}     Automated system prompt optimization loop (iterative LLM-driven tuning)
   {pipeline}     Skill lifecycle pipeline: onboard a new skill or improve an existing one
   {candidates}   List pipeline candidate skills with scores, metrics, and status
-  {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
-  {init}         Scaffold a new skill or agent fixture template
 
 {re}:
   {report}       List recent runs or show details of a run (to compare runs: agc compare)
@@ -287,6 +285,7 @@ pub fn run() -> i32 {
         Command::Promote(a) => a.config.as_deref(),
         Command::TrustCheck(a) => a.config.as_deref(),
         Command::Doctor(a) => a.config.as_deref(),
+        #[cfg(feature = "watch")]
         Command::Watch(a) => a.config.as_deref(),
         Command::Ab(a) => a.config.as_deref(),
         Command::Audit(a) => a.config.as_deref(),
@@ -335,7 +334,6 @@ pub fn run() -> i32 {
         Command::Generate(args) => generate::run_generate(args, &globals),
         #[cfg(feature = "dashboard")]
         Command::Dashboard(args) => dashboard::run_dashboard(args, &globals),
-        Command::Init(args) => init::run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
         Command::Promote(args) => promote::run_promote(args, &config, &globals),
@@ -344,9 +342,9 @@ pub fn run() -> i32 {
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
-        Command::Lint(args) => lint::run_lint(args, &globals),
         Command::Metrics(args) => metrics::run_metrics(args, &globals),
         Command::Compare(args) => compare::run_compare(args, &globals),
+        #[cfg(feature = "watch")]
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
@@ -362,12 +360,16 @@ fn print_compact_help() {
         "agc {} — AI agent behavioral testing\n",
         env!("CARGO_PKG_VERSION")
     );
-    #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates lint init report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
-    #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    #[cfg(all(feature = "dashboard", feature = "watch"))]
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    #[cfg(all(feature = "dashboard", not(feature = "watch")))]
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    #[cfg(all(not(feature = "dashboard"), feature = "watch"))]
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    #[cfg(all(not(feature = "dashboard"), not(feature = "watch")))]
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
-    println!("  agc init --skill my-skill");
+    println!("  agc generate --from-prompt fixtures/my-skill/prompt.md");
     println!("  agc test fixtures/my-skill/");
     println!("  agc eval fixtures/my-skill/ --judge --model gemini-2.5-flash\n");
     println!("FLAGS (global): --json --quiet -v --no-color --config <path>\n");
