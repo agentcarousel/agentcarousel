@@ -10,8 +10,11 @@ pub enum Shell {
 }
 
 #[derive(Debug, clap::Parser)]
+#[command(
+    after_help = "Examples:\n  agc completions bash >> ~/.bashrc\n  agc completions zsh > ~/.zfunc/_agc && echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc\n  agc completions fish > ~/.config/fish/completions/agc.fish"
+)]
 pub struct CompletionsArgs {
-    /// Shell to generate completions for.
+    /// Shell to generate completions for (bash, zsh, fish).
     shell: Shell,
 }
 

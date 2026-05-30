@@ -231,6 +231,7 @@ fn validate_path(
                         }
                     }
                 }
+                validate_rubric(case, &mut errors, &mut warnings);
             }
         } else {
             warnings.push("cases array is empty".to_string());
@@ -281,6 +282,85 @@ fn walk_string_values(value: &Value, f: &mut impl FnMut(&str)) {
         Value::String(s) => f(s),
         _ => {}
     }
+}
+
+/// Error if rubric weights in a case don't sum to 1.0 (±0.001).
+/// Warn if an auto_check pattern is trivially broad (short generic single-word value).
+fn validate_rubric(case: &Value, errors: &mut Vec<String>, warnings: &mut Vec<String>) {
+    let case_id = case
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("<unknown>");
+    let Some(rubric) = case
+        .get("expected")
+        .and_then(|e| e.get("rubric"))
+        .and_then(|r| r.as_array())
+    else {
+        return;
+    };
+    if rubric.is_empty() {
+        return;
+    }
+
+    let weight_sum: f64 = rubric
+        .iter()
+        .filter_map(|item| item.get("weight").and_then(|w| w.as_f64()))
+        .sum();
+    if (weight_sum - 1.0).abs() > 0.001 {
+        errors.push(format!(
+            "case {case_id}: rubric weights sum to {weight_sum:.3}, expected 1.0"
+        ));
+    }
+
+    for item in rubric {
+        let item_id = item
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("<unknown>");
+        let Some(auto_check) = item.get("auto_check") else {
+            continue;
+        };
+        let Some(value_str) = auto_check.get("value").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if is_trivially_broad_check(value_str) {
+            warnings.push(format!(
+                "case {case_id}: rubric item {item_id} auto_check value {value_str:?} may be too generic — tighten or remove auto_check"
+            ));
+        }
+    }
+}
+
+/// Returns true if an auto_check value is a bare generic word that will match on almost anything.
+/// Heuristic: value is a single word (no spaces, no digits, no special chars) under 8 characters
+/// AND it's in a list of known generic English words.
+fn is_trivially_broad_check(value: &str) -> bool {
+    const GENERIC_WORDS: &[&str] = &[
+        "sorry",
+        "cannot",
+        "help",
+        "work",
+        "feature",
+        "implement",
+        "business",
+        "legitimate",
+        "okay",
+        "please",
+        "thank",
+        "yes",
+        "no",
+        "good",
+        "bad",
+        "error",
+        "ok",
+    ];
+    let trimmed = value.trim().to_ascii_lowercase();
+    trimmed.len() < 8
+        && !trimmed.contains(' ')
+        && !trimmed
+            .chars()
+            .any(|c| c.is_ascii_digit() || c == '.' || c == '-')
+        && GENERIC_WORDS.contains(&trimmed.as_str())
 }
 
 fn atf_hints_from_value(value: &Value) -> AtfFileHints {

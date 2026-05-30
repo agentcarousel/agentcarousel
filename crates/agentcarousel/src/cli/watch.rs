@@ -203,6 +203,7 @@ fn run_once(
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: None,
+        batch_collect_id: None,
     };
 
     let generator_model = config.generator.model.clone();
@@ -214,6 +215,7 @@ fn run_once(
             evaluator: config.eval.default_evaluator.clone(),
             judge: false,
             judge_model: None,
+            judge_endpoint: None,
             judge_max_tokens: None,
             effectiveness_threshold: config.eval.effectiveness_threshold,
             progress: false,

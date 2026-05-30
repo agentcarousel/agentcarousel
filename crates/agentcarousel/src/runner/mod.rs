@@ -11,12 +11,21 @@
 //! Requires a Tokio runtime (multi-thread recommended for parallel cases).
 
 mod aggregation;
+mod batch;
 mod executor;
 mod generator;
 mod git_revision;
 mod orchestration;
 mod sandbox;
 mod tracer;
+
+pub use batch::{
+    AnthropicBatch, BatchCaseResult, BatchDispatcher, BatchError, BatchStateRecord,
+    BatchStateStore, CaseBatchItem, OpenAiBatch,
+};
+pub use orchestration::flatten_cases;
+pub use orchestration::run_discrimination;
+pub use orchestration::submit_batch_only;
 
 use agentcarousel_core::{new_run_id, FixtureFile, Run};
 use agentcarousel_fixtures::MockEngine;
@@ -37,6 +46,8 @@ pub enum GenerationMode {
     MockOnly,
     /// Call the configured generator provider (live; may require API keys).
     Live,
+    /// Submit all cases to the provider's async batch API (50% cost saving, async).
+    Batch,
 }
 
 /// Tunables for [`run_fixtures`] (concurrency, timeouts, mocks directory, offline mode, etc.).
@@ -57,6 +68,9 @@ pub struct RunnerConfig {
     pub agentcarousel_version: String,
     pub config_hash: String,
     pub run_id: Option<String>,
+    /// When set with `GenerationMode::Batch`, collect results from this existing
+    /// batch ID instead of submitting a new one.
+    pub batch_collect_id: Option<String>,
 }
 
 /// Extends [`RunnerConfig`] with evaluation-specific options (evaluator id, judge, thresholds,
@@ -70,6 +84,8 @@ pub struct EvalConfig {
     pub judge: bool,
     pub judge_model: Option<String>,
     pub judge_max_tokens: Option<u32>,
+    /// Base URL for a custom/Ollama judge endpoint. Required when `judge_model` is `custom/*` or `ollama/*`.
+    pub judge_endpoint: Option<String>,
     pub effectiveness_threshold: f32,
     /// Case-level progress bar on stderr (indicatif).
     pub progress: bool,
@@ -116,6 +132,16 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         runner_mock_only: config.generation_mode == GenerationMode::MockOnly,
         prompt_audit: None,
     }
+}
+
+/// Run discrimination scoring for `cases` given `current_passed` outcomes.
+/// Returns `(score, label)` per case, aligned with `cases`.
+pub async fn run_discrimination_eval(
+    cases: Vec<agentcarousel_core::Case>,
+    config: RunnerConfig,
+    current_passed: Vec<bool>,
+) -> Vec<(f32, String)> {
+    orchestration::run_discrimination(cases, &config, &current_passed).await
 }
 
 /// Like [`run_fixtures`], but runs the eval pipeline (repeated runs, effectiveness threshold,

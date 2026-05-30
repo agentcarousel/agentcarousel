@@ -46,6 +46,8 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
         },
         eval_scores: None,
         input: vec![],
+        discrimination_score: None,
+        discrimination_label: None,
     };
     let started_at = Utc::now();
     Run {
@@ -123,7 +125,7 @@ fn publish_dry_run_auto_selects_latest_matching_run() {
     std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
     persist_run(&minimal_run(
         "bundle-registry-run-match",
-        "agentcarousel/customer-support",
+        "agentcarousel/github-actions-generator",
         "1.0.0",
     ))
     .expect("persist run");
@@ -148,7 +150,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/customer-support",
+            "fixtures/github-actions-generator",
             "--url",
             "https://registry.example.test",
             "--dry-run",
@@ -163,7 +165,7 @@ history_db = "{}"
         "expected selected run id in output, got: {stdout:?}"
     );
     assert!(
-        stdout.contains("customer-support-1.0.0"),
+        stdout.contains("github-actions-generator-1.0.0"),
         "expected registry bundle id in output, got: {stdout:?}"
     );
 
@@ -177,13 +179,13 @@ fn publish_dry_run_all_runs_lists_multiple_run_ids() {
     std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
     persist_run(&minimal_run(
         "bundle-registry-run-match-a",
-        "agentcarousel/customer-support",
+        "agentcarousel/github-actions-generator",
         "1.0.0",
     ))
     .expect("persist run a");
     persist_run(&minimal_run(
         "bundle-registry-run-match-b",
-        "agentcarousel/customer-support",
+        "agentcarousel/github-actions-generator",
         "1.0.0",
     ))
     .expect("persist run b");
@@ -208,7 +210,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/customer-support",
+            "fixtures/github-actions-generator",
             "--url",
             "https://registry.example.test",
             "--dry-run",
@@ -239,7 +241,7 @@ fn publish_dry_run_all_runs_skips_unreadable_history_rows() {
     insert_legacy_malformed_run(&history_path, "legacy-malformed-run");
     persist_run(&minimal_run(
         "bundle-registry-run-match-good",
-        "agentcarousel/customer-support",
+        "agentcarousel/github-actions-generator",
         "1.0.0",
     ))
     .expect("persist valid run");
@@ -263,7 +265,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/customer-support",
+            "fixtures/github-actions-generator",
             "--url",
             "https://registry.example.test",
             "--dry-run",
@@ -294,7 +296,7 @@ fn publish_rejects_all_runs_with_single_evidence_path() {
         .current_dir(&root)
         .args([
             "publish",
-            "fixtures/customer-support",
+            "fixtures/github-actions-generator",
             "--url",
             "https://registry.example.test",
             "--all-runs",
@@ -320,7 +322,7 @@ fn publish_fails_fast_when_token_missing() {
     std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
     persist_run(&minimal_run(
         "bundle-registry-run-token-missing",
-        "agentcarousel/customer-support",
+        "agentcarousel/github-actions-generator",
         "1.0.0",
     ))
     .expect("persist run");
@@ -331,7 +333,7 @@ fn publish_fails_fast_when_token_missing() {
         .current_dir(&root)
         .args([
             "publish",
-            "fixtures/customer-support",
+            "fixtures/github-actions-generator",
             "--url",
             "https://registry.example.test",
         ])
@@ -371,7 +373,7 @@ history_db = "{}"
             "publish",
             "--config",
             config_path.to_str().expect("config path"),
-            "fixtures/customer-support",
+            "fixtures/github-actions-generator",
             "--url",
             "https://registry.example.test",
             "--dry-run",

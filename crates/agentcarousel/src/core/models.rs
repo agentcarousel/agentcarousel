@@ -85,6 +85,8 @@ pub struct Message {
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     User,
+    // "model" is Gemini's name for the assistant turn — accept it as an alias.
+    #[serde(alias = "model")]
     Assistant,
     System,
     Tool,
@@ -100,6 +102,8 @@ pub struct Expected {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ToolCallExpectation {
+    // Accept "name" and "tool_name" as aliases — LLMs frequently emit those variants.
+    #[serde(alias = "name", alias = "tool_name")]
     pub tool: String,
     pub args_match: Option<Value>,
     #[serde(default = "default_tool_order")]
@@ -151,6 +155,10 @@ pub struct EvaluatorConfig {
     pub evaluator: String,
     pub golden_path: Option<PathBuf>,
     pub golden_threshold: Option<f32>,
+    /// When true, collapse whitespace before diffing golden output.
+    /// Useful for structured output (YAML, JSON, code) where indentation varies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub golden_normalize_whitespace: Option<bool>,
     pub process_cmd: Option<Vec<String>>,
     pub judge_prompt: Option<String>,
     pub effectiveness_threshold: Option<f32>,
@@ -226,6 +234,11 @@ pub struct PromptAudit {
     /// Each element is the actual markdown content to paste into prompt.md.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggested_implementations: Vec<String>,
+    /// Where in prompt.md to apply each implementation — parallel to suggested_implementations.
+    /// Each element is a unique substring of prompt.md (e.g. a section header like "## Instructions")
+    /// used to locate the insertion point. Empty string means append to end.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_locations: Vec<String>,
     pub overall_rationale: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub judge_tokens_in: Option<u64>,
@@ -248,6 +261,10 @@ pub struct CaseResult {
     /// Input messages from the fixture case; stored for human review in reports and dashboard.
     #[serde(default)]
     pub input: Vec<Message>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discrimination_score: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discrimination_label: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

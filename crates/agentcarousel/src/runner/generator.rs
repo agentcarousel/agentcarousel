@@ -6,19 +6,41 @@ use std::time::Duration;
 
 use super::RunnerConfig;
 use crate::providers::{
-    AnthropicMessage, AnthropicRequest, AnthropicResponse, GeminiContent, GeminiGenerationConfig,
-    GeminiPart, GeminiRequest, GeminiResponse, OpenAiMessage, OpenAiRequest, OpenAiResponse,
+    AnthropicMessage, AnthropicRequest, AnthropicResponse, AnthropicSystemBlock, GeminiContent,
+    GeminiGenerationConfig, GeminiPart, GeminiRequest, GeminiResponse, OpenAiMessage,
+    OpenAiRequest, OpenAiResponse,
 };
 
 static ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static CUSTOM_ASYNC_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 fn shared_client() -> &'static reqwest::Client {
     ASYNC_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(120))
             .build()
             .expect("reqwest async client")
     })
+}
+
+fn shared_custom_client(timeout_secs: u64) -> reqwest::Client {
+    // Return the cached client if the timeout matches the default; otherwise build a one-off.
+    // The cached client covers the common case where all cases share the same RunnerConfig timeout.
+    const DEFAULT_CUSTOM_TIMEOUT: u64 = 120;
+    if timeout_secs == DEFAULT_CUSTOM_TIMEOUT {
+        return CUSTOM_ASYNC_CLIENT
+            .get_or_init(|| {
+                reqwest::Client::builder()
+                    .timeout(Duration::from_secs(DEFAULT_CUSTOM_TIMEOUT))
+                    .build()
+                    .expect("reqwest custom async client")
+            })
+            .clone();
+    }
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .expect("reqwest async client")
 }
 
 /// Generator error that distinguishes permanent failures from transient ones.
@@ -60,7 +82,7 @@ pub enum GeneratorProvider {
 
 impl GeneratorProvider {
     pub fn from_model(model: &str) -> Self {
-        if model == "custom" {
+        if model == "custom" || model.starts_with("custom/") || model.starts_with("ollama/") {
             return Self::Custom;
         }
         let normalized = model.to_ascii_lowercase();
@@ -146,11 +168,16 @@ pub async fn generate_case_output(
     if let GeneratorProvider::Custom = provider {
         let endpoint = config.generator_endpoint.as_deref().ok_or_else(|| {
             GeneratorError::Fatal(
-                "--generator-endpoint <URL> is required when --generator-model is 'custom'"
+                "--generator-endpoint <URL> is required when generator model is 'custom' or 'ollama/<name>'"
                     .to_string(),
             )
         })?;
-        return call_custom_endpoint(endpoint, case, config.timeout_secs, max_tokens).await;
+        let model_name = model
+            .strip_prefix("ollama/")
+            .or_else(|| model.strip_prefix("custom/"))
+            .filter(|s| !s.is_empty());
+        return call_custom_endpoint(endpoint, model_name, case, config.timeout_secs, max_tokens)
+            .await;
     }
 
     let key = resolve_generator_key(provider)?;
@@ -175,38 +202,79 @@ pub async fn generate_case_output(
 
 pub async fn call_custom_endpoint(
     endpoint: &str,
+    model_name: Option<&str>,
     case: &Case,
     timeout_secs: u64,
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
-    let messages: Vec<serde_json::Value> = case
-        .input
-        .messages
-        .iter()
-        .map(|m| {
-            let role = match m.role {
-                Role::User => "user",
-                Role::Assistant => "assistant",
-                Role::System => "system",
-                Role::Tool => "tool",
-            };
-            serde_json::json!({"role": role, "content": m.content})
-        })
-        .collect();
-    let body = serde_json::json!({
-        "messages": messages,
-        "max_tokens": max_tokens.unwrap_or(2048),
-    });
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| GeneratorError::Transient(e.to_string()))?;
+    // Ollama's /api/generate takes a single prompt string; everything else gets messages.
+    let is_ollama = endpoint.contains("/api/generate") || endpoint.contains("/api/chat");
+
+    let body = if endpoint.contains("/api/generate") {
+        let system = resolve_system_prompt(case);
+        let user = build_user_prompt(case);
+        let prompt = if system.is_empty() {
+            user
+        } else {
+            format!("{system}\n\n{user}")
+        };
+        let mut b = serde_json::json!({
+            "prompt": prompt,
+            "stream": false,
+            "think": false,
+            "keep_alive": "10m",
+        });
+        if let Some(m) = model_name {
+            b["model"] = serde_json::json!(m);
+        }
+        if let Some(n) = max_tokens {
+            b["options"] = serde_json::json!({"num_predict": n});
+        }
+        b
+    } else {
+        let messages: Vec<serde_json::Value> = case
+            .input
+            .messages
+            .iter()
+            .map(|m| {
+                let role = match m.role {
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::System => "system",
+                    Role::Tool => "tool",
+                };
+                serde_json::json!({"role": role, "content": m.content})
+            })
+            .collect();
+        let mut b = serde_json::json!({"messages": messages});
+        if is_ollama {
+            b["keep_alive"] = serde_json::json!("10m");
+        }
+        if let Some(m) = model_name {
+            b["model"] = serde_json::json!(m);
+        }
+        if let Some(n) = max_tokens {
+            b["max_tokens"] = serde_json::json!(n);
+        }
+        b
+    };
+
+    let client = shared_custom_client(timeout_secs);
     let response = client
         .post(endpoint)
         .json(&body)
         .send()
         .await
-        .map_err(|e| GeneratorError::Transient(format!("custom endpoint request failed: {e}")))?;
+        .map_err(|e| {
+            let msg = if e.is_connect() {
+                format!("custom endpoint request failed: {e}. Ensure the model server at {endpoint} is running and reachable.")
+            } else if e.is_timeout() {
+                format!("custom endpoint request failed: {e}. The request timed out (timeout: {timeout_secs}s).")
+            } else {
+                format!("custom endpoint request failed: {e}")
+            };
+            GeneratorError::Transient(msg)
+        })?;
     let status = response.status();
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
@@ -217,12 +285,14 @@ pub async fn call_custom_endpoint(
     let json: serde_json::Value = response.json().await.map_err(|e| {
         GeneratorError::Transient(format!("custom endpoint response parse failed: {e}"))
     })?;
+    // Accept OpenAI-compat, Ollama /api/generate ("response"), or generic ("output").
     let output = json["choices"][0]["message"]["content"]
         .as_str()
+        .or_else(|| json["response"].as_str())
         .or_else(|| json["output"].as_str())
         .ok_or_else(|| {
             GeneratorError::Transient(
-                "custom endpoint response missing 'choices[0].message.content' or 'output'"
+                "custom endpoint response missing 'choices[0].message.content', 'response', or 'output'"
                     .to_string(),
             )
         })?
@@ -234,7 +304,7 @@ pub async fn call_custom_endpoint(
     })
 }
 
-fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, GeneratorError> {
+pub(super) fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, GeneratorError> {
     let key = provider
         .key_candidates()
         .iter()
@@ -257,7 +327,7 @@ fn resolve_generator_key(provider: GeneratorProvider) -> Result<String, Generato
 ///   1. An explicit `role: system` message in the fixture's input.messages.
 ///   2. `fixtures/<skill>/prompt.md` where skill is the prefix of the case ID before `/`.
 ///   3. A minimal generic fallback so generation still works for fixture-less cases.
-fn resolve_system_prompt(case: &Case) -> String {
+pub(super) fn resolve_system_prompt(case: &Case) -> String {
     if let Some(msg) = case.input.messages.iter().find(|m| m.role == Role::System) {
         return msg.content.clone();
     }
@@ -278,7 +348,7 @@ fn load_skill_prompt_for_case(case: &Case) -> Option<String> {
 }
 
 /// Build the user-turn portion of the generation prompt (everything except the system message).
-fn build_user_prompt(case: &Case) -> String {
+pub(super) fn build_user_prompt(case: &Case) -> String {
     let mut prompt = String::new();
     for message in &case.input.messages {
         if message.role == Role::System {
@@ -486,11 +556,16 @@ async fn generate_with_anthropic(
     let max_tokens = max_tokens.ok_or_else(|| {
         GeneratorError::Fatal("max_tokens is required for Anthropic generation".to_string())
     })?;
+    let system_blocks = if system.is_empty() {
+        vec![]
+    } else {
+        vec![AnthropicSystemBlock::cached(system.to_string())]
+    };
     let request = AnthropicRequest {
         model: model.to_string(),
         max_tokens,
         temperature: 0.2,
-        system: system.to_string(),
+        system: system_blocks,
         messages: vec![AnthropicMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
@@ -503,6 +578,7 @@ async fn generate_with_anthropic(
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .json(&request)
             .send()
             .await
@@ -513,16 +589,17 @@ async fn generate_with_anthropic(
                 .json()
                 .await
                 .map_err(|err| GeneratorError::Transient(err.to_string()))?;
-            let empty: Vec<_> = Vec::new();
             let output = body
                 .content
-                .as_deref()
-                .unwrap_or(&empty)
-                .iter()
-                .find(|block| block.block_type.as_deref() == Some("text"))
-                .and_then(|block| block.text.as_ref())
-                .map(|text| text.trim().to_string())
-                .filter(|text| !text.is_empty())
+                .as_ref()
+                .and_then(|blocks| {
+                    blocks
+                        .iter()
+                        .find(|b| b.block_type.as_deref() == Some("text"))
+                })
+                .and_then(|b| b.text.as_deref())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
                 .ok_or_else(|| {
                     GeneratorError::Transient(
                         "anthropic returned empty generation output".to_string(),
@@ -530,8 +607,8 @@ async fn generate_with_anthropic(
                 })?;
             return Ok(GenerationResult {
                 output,
-                tokens_in: body.usage.as_ref().and_then(|usage| usage.input_tokens),
-                tokens_out: body.usage.as_ref().and_then(|usage| usage.output_tokens),
+                tokens_in: body.usage.as_ref().and_then(|u| u.input_tokens),
+                tokens_out: body.usage.as_ref().and_then(|u| u.output_tokens),
             });
         }
         let body = response
@@ -666,18 +743,30 @@ pub fn generation_step_result(provider: GeneratorProvider, model: &str) -> serde
 }
 
 /// Call an LLM with an arbitrary prompt. Uses the same provider detection and key
-/// resolution as `generate_case_output`. Intended for `agc generate` fixture synthesis.
+/// resolution as `generate_case_output`. Intended for `agc generate` fixture synthesis
+/// and `agc optimize` failure analysis / prompt synthesis.
+///
+/// `endpoint` is required when `model` is `custom/<name>` or `ollama/<name>`.
 pub async fn call_llm(
     model: &str,
     prompt: &str,
     max_tokens: Option<u32>,
+    endpoint: Option<&str>,
 ) -> Result<GenerationResult, String> {
     let provider = GeneratorProvider::from_model(model);
     if let GeneratorProvider::Custom = provider {
-        return Err(
+        let ep = endpoint.ok_or_else(|| {
             "custom provider requires --generator-endpoint; not supported in agc generate"
-                .to_string(),
-        );
+                .to_string()
+        })?;
+        let model_name = model
+            .strip_prefix("ollama/")
+            .or_else(|| model.strip_prefix("custom/"))
+            .filter(|s| !s.is_empty())
+            .unwrap_or(model);
+        return call_llm_custom(ep, model_name, prompt, max_tokens)
+            .await
+            .map_err(|e| e.to_string());
     }
     let key = resolve_generator_key(provider).map_err(|e| e.to_string())?;
     match provider {
@@ -698,5 +787,141 @@ pub async fn call_llm(
                 .map_err(|e| e.to_string())
         }
         GeneratorProvider::Custom => unreachable!(),
+    }
+}
+
+async fn call_llm_custom(
+    endpoint: &str,
+    model_name: &str,
+    prompt: &str,
+    max_tokens: Option<u32>,
+) -> Result<GenerationResult, GeneratorError> {
+    const TIMEOUT_SECS: u64 = 120;
+
+    let is_ollama = endpoint.contains("/api/generate") || endpoint.contains("/api/chat");
+
+    let mut options = serde_json::json!({});
+    if let Some(n) = max_tokens {
+        options["num_predict"] = serde_json::json!(n);
+    }
+
+    let body = if endpoint.contains("/api/generate") {
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "prompt": prompt,
+            "think": false,
+            "stream": false,
+            "keep_alive": "10m",
+        });
+        if max_tokens.is_some() {
+            b["options"] = options;
+        }
+        b
+    } else {
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "think": false,
+            "stream": false,
+        });
+        if is_ollama {
+            b["keep_alive"] = serde_json::json!("10m");
+        }
+        if max_tokens.is_some() {
+            if endpoint.contains("/v1/chat/completions") {
+                b["max_tokens"] = serde_json::json!(max_tokens);
+            } else {
+                b["options"] = options;
+            }
+        }
+        b
+    };
+
+    let client = shared_custom_client(TIMEOUT_SECS);
+
+    let response = client
+        .post(endpoint)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = if e.is_connect() {
+                format!("custom endpoint request failed: {e}. Ensure the model server at {endpoint} is running and reachable.")
+            } else if e.is_timeout() {
+                format!("custom endpoint request failed: {e}. The request timed out (timeout: {TIMEOUT_SECS}s).")
+            } else {
+                format!("custom endpoint request failed: {e}")
+            };
+            GeneratorError::Transient(msg)
+        })?;
+
+    let status = response.status();
+
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        return Err(GeneratorError::Transient(format!(
+            "custom endpoint returned {status}: {body_text}"
+        )));
+    }
+
+    let json: serde_json::Value = response.json().await.map_err(|e| {
+        GeneratorError::Transient(format!("custom endpoint response parse failed: {e}"))
+    })?;
+
+    // Ollama's native /api/chat returns response["message"]["content"]
+    let output = json["choices"][0]["message"]["content"]
+        .as_str()
+        .or_else(|| json["message"]["content"].as_str()) // Added native Ollama /api/chat fallback
+        .or_else(|| json["response"].as_str()) // Native /api/generate
+        .or_else(|| json["output"].as_str())
+        .ok_or_else(|| {
+            GeneratorError::Transient(
+                "custom endpoint response missing expected content fields".to_string(),
+            )
+        })?
+        .to_string();
+
+    Ok(GenerationResult {
+        output,
+        tokens_in: None,
+        tokens_out: None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agentcarousel_core::{CaseId, CaseInput, Expected, Message};
+
+    #[tokio::test]
+    async fn test_custom_endpoint_connection_failure() {
+        let endpoint = "http://127.0.0.1:65530/api/generate";
+        let case = Case {
+            id: CaseId("test/case".to_string()),
+            description: None,
+            tags: vec![],
+            input: CaseInput {
+                messages: vec![Message {
+                    role: Role::User,
+                    content: "hello".to_string(),
+                }],
+                context: None,
+                env_overrides: None,
+            },
+            expected: Expected {
+                tool_sequence: None,
+                output: None,
+                rubric: None,
+            },
+            evaluator_config: None,
+            timeout_secs: None,
+            seed: None,
+        };
+
+        let result = call_custom_endpoint(endpoint, Some("test-model"), &case, 5, None).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Ensure the model server at"));
+        assert!(err_msg.contains(endpoint));
     }
 }

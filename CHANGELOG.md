@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.7.0 — 2026-05-29
+
+### Added
+- `agc pipeline onboard/improve` — end-to-end skill lifecycle automation
+- Fixture generation with novelty screening and deduplication
+- Ollama and custom model judge endpoint support
+- `agc optimize` — automated prompt tuning with failure clustering
+- Batch eval via Anthropic and OpenAI Batch APIs
+- Discrimination scoring flags low-quality generated cases
+- `--distribution`, `--difficulty`, `--domain-context` flags for `agc generate`
+- Judge system prompt includes score calibration anchors (0.0 / 0.5 / 1.0 definitions) for consistent inter-run scoring
+- `golden_normalize_whitespace` option on `evaluator_config` — collapses whitespace before diffing, useful for structured output
+- `agc validate` errors on rubric weights that don't sum to 1.0 and warns on trivially broad `auto_check` values
+
+### Fixed
+- Judge endpoint auto-inherited from generator for ollama/custom models
+- Default runner timeout raised from 30 s to 120 s for local inference
+- `role: model` (Gemini convention) accepted as alias for `assistant`
+- `tool:` field accepts `name`/`tool_name` aliases to survive LLM variants
+- Multi-batch fixture append no longer corrupts case indentation
+
+### Removed
+- 14 bundled example fixture suites trimmed to 3 canonical suites
+
+---
+
 ## 0.6.5 - May 2026
 
 ### Features

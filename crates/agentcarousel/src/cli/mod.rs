@@ -1,6 +1,9 @@
 mod ab;
 mod audit;
+mod batch_cmd;
 mod bundle;
+mod candidate_store;
+mod candidates;
 mod carousel;
 mod compare;
 mod completions;
@@ -13,10 +16,11 @@ mod exit_codes;
 mod export;
 mod fixture_utils;
 mod generate;
-mod init;
-mod lint;
+mod local_config;
 mod metrics;
+mod optimize;
 mod output;
+mod pipeline;
 mod promote;
 mod publish;
 mod registry_client;
@@ -25,6 +29,7 @@ mod test;
 mod trust_check;
 mod update;
 mod validate;
+#[cfg(feature = "watch")]
 mod watch;
 
 use clap::builder::styling::{AnsiColor, Color, Effects, RgbColor, Style, Styles};
@@ -89,6 +94,8 @@ enum Command {
     Test(test::TestArgs),
     /// Run evaluation with mock or live generation; optionally score with an LLM judge.
     Eval(eval::EvalArgs),
+    /// Check status or collect results from an async batch job.
+    Batch(batch_cmd::BatchArgs),
     /// Inspect persisted runs: list recent runs or show details of a specific run.
     Report(report::ReportArgs),
     /// Generate fixture cases for a skill using an LLM.
@@ -97,7 +104,6 @@ enum Command {
     #[cfg(feature = "dashboard")]
     Dashboard(dashboard::DashboardArgs),
     /// Scaffold a new skill or agent fixture template.
-    Init(init::InitArgs),
     /// Pack, verify, or pull fixture bundles.
     Bundle(bundle::BundleArgs),
     /// Publish a bundle and its evidence to the registry.
@@ -114,20 +120,25 @@ enum Command {
     Update(update::UpdateArgs),
     /// Check environment, config, and fixture setup for common issues.
     Doctor(doctor::DoctorArgs),
-    /// Check fixture quality beyond schema: smoke coverage, rubric weights, descriptions.
-    Lint(lint::LintArgs),
     /// Compute compliance metrics: injection resistance, behavioral drift, test coverage, and score calibration.
     Metrics(metrics::MetricsArgs),
     /// Compare two eval runs and gate on regressions.
     Compare(compare::CompareArgs),
     /// Run tests automatically whenever you save a fixture file.
+    #[cfg(feature = "watch")]
     Watch(watch::WatchArgs),
     /// Run the same fixture suite against multiple models and get a ranked comparison.
     Carousel(carousel::CarouselArgs),
     /// Run the same fixture suite against two system prompts and get a head-to-head comparison.
     Ab(ab::AbArgs),
-    /// Re-run the prompt-audit analysis against a previously-saved run.
+    /// Prompt-audit a saved run, or apply stored suggestions to prompt.md.
     Audit(audit::AuditArgs),
+    /// Automated system prompt optimization loop.
+    Optimize(optimize::OptimizeArgs),
+    /// Skill lifecycle pipeline: onboard a new skill or improve an existing one.
+    Pipeline(pipeline::PipelineArgs),
+    /// List all pipeline candidate skills with their evaluation scores and metrics.
+    Candidates(candidates::CandidatesArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -160,12 +171,11 @@ fn help_template() -> String {
     let validate = c("validate");
     let test = c("test");
     let eval = c("eval");
+    #[cfg(feature = "watch")]
     let watch = c("watch");
     let carousel = c("carousel");
     let ab = c("ab");
     let generate = c("generate");
-    let lint = c("lint");
-    let init = c("init");
     let audit = c("audit");
     let report = c("report");
     let metrics = c("metrics");
@@ -175,6 +185,9 @@ fn help_template() -> String {
     let publish = c("publish");
     let promote = c("promote");
     let trust_check = c("trust-check");
+    let optimize = c("optimize");
+    let pipeline = c("pipeline");
+    let candidates = c("candidates");
     let completions = c("completions");
     let update = c("update");
     let doctor = c("doctor");
@@ -187,6 +200,12 @@ fn help_template() -> String {
     };
     #[cfg(not(feature = "dashboard"))]
     let dashboard_line = String::new();
+
+    #[cfg(feature = "watch")]
+    let watch_line =
+        format!("  {watch}        Run tests automatically whenever you save a fixture file\n");
+    #[cfg(not(feature = "watch"))]
+    let watch_line = String::new();
 
     format!(
         r#"{{about}}
@@ -202,10 +221,10 @@ Usage:
   {eval}         Run evaluation with mock or live generation; optionally score with an LLM judge
   {carousel}     Run the same fixtures against multiple models and get a ranked comparison table
   {ab}           Run the same fixtures against two system prompts and compare head-to-head
-  {watch}        Run tests automatically whenever you save a fixture file
-  {generate}     Generate fixture cases for a skill using an LLM
-  {lint}         Check fixture quality: smoke coverage, rubric weights, descriptions
-  {init}         Scaffold a new skill or agent fixture template
+{watch_line}  {generate}     Generate fixture cases for a skill using an LLM
+  {optimize}     Automated system prompt optimization loop (iterative LLM-driven tuning)
+  {pipeline}     Skill lifecycle pipeline: onboard a new skill or improve an existing one
+  {candidates}   List pipeline candidate skills with scores, metrics, and status
 
 {re}:
   {report}       List recent runs or show details of a run (to compare runs: agc compare)
@@ -254,19 +273,30 @@ pub fn run() -> i32 {
         Command::Validate(a) => a.config.as_deref(),
         Command::Test(a) => a.config.as_deref(),
         Command::Eval(a) => a.config.as_deref(),
+        Command::Batch(a) => {
+            if let batch_cmd::BatchCommand::Fetch { config, .. } = &a.command {
+                config.as_deref()
+            } else {
+                None
+            }
+        }
         Command::Report(a) => a.config.as_deref(),
         Command::Bundle(a) => a.config.as_deref(),
         Command::Publish(a) => a.config.as_deref(),
         Command::Promote(a) => a.config.as_deref(),
         Command::TrustCheck(a) => a.config.as_deref(),
         Command::Doctor(a) => a.config.as_deref(),
+        #[cfg(feature = "watch")]
         Command::Watch(a) => a.config.as_deref(),
         Command::Ab(a) => a.config.as_deref(),
         Command::Audit(a) => a.config.as_deref(),
+        Command::Optimize(a) => a.config.as_deref(),
+        Command::Pipeline(a) => a.config.as_deref(),
+        Command::Candidates(a) => a.config.as_deref(),
         _ => None,
     };
 
-    let config = match load_config(config_path) {
+    let mut config = match load_config(config_path) {
         Ok(config) => config,
         Err(err) => {
             if json_mode {
@@ -281,6 +311,9 @@ pub fn run() -> i32 {
             return exit_codes::ExitCode::ConfigError.as_i32();
         }
     };
+
+    let local_profile = local_config::LocalProfile::load();
+    local_profile.apply_to(&mut config);
 
     apply_history_db_env(&config);
     if json_mode {
@@ -297,11 +330,11 @@ pub fn run() -> i32 {
         Command::Validate(args) => validate::run_validate(args, &config, &globals),
         Command::Test(args) => test::run_test(args, &config, &globals),
         Command::Eval(args) => eval::run_eval_command(args, &config, &globals),
+        Command::Batch(args) => batch_cmd::run_batch_command(args, &config, &globals),
         Command::Report(args) => report::run_report(args, &config, &globals),
         Command::Generate(args) => generate::run_generate(args, &globals),
         #[cfg(feature = "dashboard")]
         Command::Dashboard(args) => dashboard::run_dashboard(args, &globals),
-        Command::Init(args) => init::run_init(args),
         Command::Bundle(args) => bundle::run_bundle(args, &config, &globals),
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
         Command::Promote(args) => promote::run_promote(args, &config, &globals),
@@ -310,13 +343,16 @@ pub fn run() -> i32 {
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
-        Command::Lint(args) => lint::run_lint(args, &globals),
         Command::Metrics(args) => metrics::run_metrics(args, &globals),
         Command::Compare(args) => compare::run_compare(args, &globals),
+        #[cfg(feature = "watch")]
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
         Command::Carousel(args) => carousel::run_carousel(args, &config, &globals),
         Command::Ab(args) => ab::run_ab(args, &config, &globals),
         Command::Audit(args) => audit::run_audit_command(args, &config, &globals),
+        Command::Optimize(args) => optimize::run_optimize_command(args, &config, &globals),
+        Command::Pipeline(args) => pipeline::run_pipeline(args, &config, &globals),
+        Command::Candidates(args) => candidates::run_candidates(args, &globals),
     }
 }
 
@@ -325,12 +361,16 @@ fn print_compact_help() {
         "agc {} — AI agent behavioral testing\n",
         env!("CARGO_PKG_VERSION")
     );
-    #[cfg(feature = "dashboard")]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish trust-check compare dashboard doctor completions update\n");
-    #[cfg(not(feature = "dashboard"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate lint init report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    #[cfg(all(feature = "dashboard", feature = "watch"))]
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    #[cfg(all(feature = "dashboard", not(feature = "watch")))]
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    #[cfg(all(not(feature = "dashboard"), feature = "watch"))]
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    #[cfg(all(not(feature = "dashboard"), not(feature = "watch")))]
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
-    println!("  agc init --skill my-skill");
+    println!("  agc generate --from-prompt fixtures/my-skill/prompt.md");
     println!("  agc test fixtures/my-skill/");
     println!("  agc eval fixtures/my-skill/ --judge --model gemini-2.5-flash\n");
     println!("FLAGS (global): --json --quiet -v --no-color --config <path>\n");

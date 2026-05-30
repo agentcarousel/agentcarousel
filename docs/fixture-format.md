@@ -82,14 +82,15 @@ Prefer tags in all new fixtures and examples.
 
 - `id` (string): stable rubric identifier.
 - `description` (string): what the rubric measures.
-- `weight` (number): relative weight in effectiveness score.
-- `auto_check` (object): optional output assertion to score automatically.
+- `weight` (number): relative weight in effectiveness score. Weights across all items in a case **must sum to exactly 1.0** (±0.001); `agc validate` reports an error if they do not.
+- `auto_check` (object): optional output assertion to score automatically. Values must be domain-specific — single generic words (`sorry`, `help`, `work`) will match nearly any response and are flagged as warnings by `agc validate`.
 
 ## evaluator_config
 
 - `evaluator` (string): `rules`, `golden`, `process`, or `judge`.
 - `golden_path` (string): relative path to golden output fixture.
 - `golden_threshold` (number): diff threshold for golden evaluator.
+- `golden_normalize_whitespace` (boolean, optional): when `true`, collapse whitespace runs per line before diffing. Useful for structured output (YAML, JSON, code) where indentation may vary. Default: `false`.
 - `process_cmd` (array): command and args for external evaluator.
 - `judge_prompt` (string): extra prompt for the judge evaluator.
 - `effectiveness_threshold` (number, optional): per-case override for the effectiveness pass threshold (0.0–1.0). Takes precedence over the global `--effectiveness-threshold` flag when set.

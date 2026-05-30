@@ -1,4 +1,6 @@
-use agentcarousel_core::{judge_key_candidates, judge_provider_from_model, prefetch_pricing};
+use agentcarousel_core::{
+    judge_key_candidates, judge_provider_from_model, prefetch_pricing, JudgeProvider,
+};
 use agentcarousel_evaluators::run_prompt_audit;
 use agentcarousel_reporters::{fetch_run, persist_run, print_audit};
 use chrono::Utc;
@@ -44,6 +46,9 @@ enum AuditCommand {
         /// Judge model to use (overrides config judge.model).
         #[arg(long)]
         model: Option<String>,
+        /// Base URL for a custom/Ollama judge endpoint (required when judge model is custom/* or ollama/*).
+        #[arg(long, value_name = "URL")]
+        judge_endpoint: Option<String>,
         /// Do not save the audit result back to the history database.
         #[arg(long)]
         no_save: bool,
@@ -74,8 +79,17 @@ pub fn run_audit_command(args: AuditArgs, config: &ResolvedConfig, globals: &Glo
             run_id,
             prompt,
             model,
+            judge_endpoint,
             no_save,
-        } => run_audit(run_id, prompt, model, no_save, config, globals),
+        } => run_audit(
+            run_id,
+            prompt,
+            model,
+            judge_endpoint,
+            no_save,
+            config,
+            globals,
+        ),
         AuditCommand::Suggest {
             run_id,
             apply,
@@ -88,6 +102,7 @@ fn run_audit(
     run_id: String,
     prompt_path: Option<PathBuf>,
     model: Option<String>,
+    judge_endpoint: Option<String>,
     no_save: bool,
     config: &ResolvedConfig,
     globals: &GlobalOptions,
@@ -128,19 +143,33 @@ fn run_audit(
     };
 
     let judge_model = model.unwrap_or_else(|| config.judge.model.clone());
+    let resolved_judge_endpoint = judge_endpoint.as_deref();
     let judge_provider = judge_provider_from_model(&judge_model);
 
-    let has_key = judge_key_candidates(judge_provider)
-        .iter()
-        .any(|k| std::env::var(k).is_ok());
-    if !has_key {
-        let keys = judge_key_candidates(judge_provider).join(", ");
+    if !matches!(judge_provider, JudgeProvider::Custom) {
+        let has_key = judge_key_candidates(judge_provider)
+            .iter()
+            .any(|k| std::env::var(k).is_ok());
+        if !has_key {
+            let keys = judge_key_candidates(judge_provider).join(", ");
+            let msg = format!(
+                "set one of {} to run audit for model '{}'",
+                keys, judge_model
+            );
+            if globals.json {
+                JsonOutput::err("audit", JsonError::new("auth_error", msg)).print();
+            } else {
+                eprintln!("error: {msg}");
+            }
+            return ExitCode::ConfigError.as_i32();
+        }
+    } else if resolved_judge_endpoint.is_none() {
         let msg = format!(
-            "set one of {} to run audit for model '{}'",
-            keys, judge_model
+            "--judge-endpoint is required for custom model '{}'",
+            judge_model
         );
         if globals.json {
-            JsonOutput::err("audit", JsonError::new("auth_error", msg)).print();
+            JsonOutput::err("audit", JsonError::new("config_error", msg)).print();
         } else {
             eprintln!("error: {msg}");
         }
@@ -167,7 +196,13 @@ fn run_audit(
     };
 
     let audit_max_tokens = config.judge.max_tokens.map(|t| t.max(4096));
-    let audit = match run_prompt_audit(&prompt_text, &run.cases, &judge_model, audit_max_tokens) {
+    let audit = match run_prompt_audit(
+        &prompt_text,
+        &run.cases,
+        &judge_model,
+        audit_max_tokens,
+        resolved_judge_endpoint,
+    ) {
         Ok(a) => {
             if let Some(ref pb) = spinner {
                 pb.finish_and_clear();

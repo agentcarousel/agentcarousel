@@ -5,7 +5,10 @@ use agentcarousel_core::{
 use agentcarousel_evaluators::run_prompt_audit;
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_terminal};
-use agentcarousel_runner::{run_eval, EvalConfig, GenerationMode, GeneratorProvider, RunnerConfig};
+use agentcarousel_runner::{
+    flatten_cases, run_discrimination_eval, run_eval, submit_batch_only, EvalConfig,
+    GenerationMode, GeneratorProvider, RunnerConfig,
+};
 use clap::{Parser, ValueEnum};
 use console::style;
 use std::io::{stderr, IsTerminal};
@@ -23,13 +26,15 @@ use super::GlobalOptions;
 enum EvalExecutionMode {
     Mock,
     Live,
+    /// Submit all cases to the provider's async batch API (~50% cost saving).
+    Batch,
 }
 
 /// Run your test suite and see which cases pass, fail, or need attention.
 #[derive(Debug, Parser)]
 #[command(
     long_about = "Run your test suite and see which cases pass, fail, or need attention.\n\nBy default, agc eval uses pre-recorded mock responses so no API key is required and runs finish in seconds. Switch to --execution-mode live to call a real model API. Add --judge to score outputs with an LLM judge on top of rule-based checks.\n\nToken counts and USD cost are shown automatically after each run when data is available.",
-    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --json          # CI-friendly JSON output\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
+    after_help = "Examples:\n  agc eval fixtures/                                      # mock run, rules evaluator (fast, no API key)\n  agc eval fixtures/ --execution-mode live               # call a real model API\n  agc eval fixtures/ --execution-mode live --judge       # live generation + LLM judge scoring\n  agc eval fixtures/ --evaluator judge --judge           # force judge scoring on every case\n  agc eval fixtures/ --filter-tags smoke --json          # CI-friendly JSON output\n  agc eval fixtures/ --execution-mode batch              # async batch API (~50% cheaper)\n\nTo promote a saved run to golden:  agc promote <run_id>\n\nExit codes:\n  0  all cases passed\n  1  one or more cases failed or scored below threshold\n  4  runtime error (network, disk, config)\n  5  fixture path not found"
 )]
 pub struct EvalArgs {
     /// Fixture files or dirs (default: fixtures).
@@ -82,9 +87,18 @@ pub struct EvalArgs {
     /// Comma-separated tags; keep only cases having any listed tag. Tag judge-only rows (e.g. `judge`) and pass `--filter-tags judge` to skip rules/golden cases.
     #[arg(long = "filter-tags", value_name = "TAG", value_delimiter = ',')]
     filter_tags: Option<Vec<String>>,
-    /// Base URL for a custom agent endpoint (required when --model is 'custom').
+    /// Base URL for a custom agent endpoint (required when --model is 'custom' or 'ollama/<name>').
     #[arg(long)]
     generator_endpoint: Option<String>,
+    /// Base URL for a custom judge endpoint (required when --judge-model is 'custom' or 'ollama/<name>').
+    #[arg(long)]
+    judge_endpoint: Option<String>,
+    /// Run 3 eval passes (current / blank / degraded prompt) and attach a discrimination
+    /// score to each case. High-discrimination cases (score > 0.2) are valuable tests;
+    /// low-discrimination cases (score ≤ 0) pass even with a degraded prompt and may
+    /// be noise. Requires --execution-mode live or batch.
+    #[arg(long = "measure-discrimination", short = 'D')]
+    measure_discrimination: bool,
 }
 
 pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -127,7 +141,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         .clone()
         .unwrap_or_else(|| config.judge.model.clone());
     let judge_provider = judge_provider_from_model(&judge_model);
-    if judge_selected && resolve_judge_key(judge_provider).is_none() {
+    if judge_selected
+        && !matches!(judge_provider, JudgeProvider::Custom)
+        && resolve_judge_key(judge_provider).is_none()
+    {
         eprintln!(
             "error: set one of {} to run --judge for model '{}'\n  tip: {}",
             judge_key_candidates(judge_provider).join(", "),
@@ -149,7 +166,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         eprintln!("error: --disable-max-tokens is not supported with Anthropic models");
         return ExitCode::ConfigError.as_i32();
     }
-    if matches!(args.execution_mode, EvalExecutionMode::Live)
+    if matches!(
+        args.execution_mode,
+        EvalExecutionMode::Live | EvalExecutionMode::Batch
+    ) && !matches!(generator_provider, GeneratorProvider::Custom)
         && resolve_generator_key(generator_provider).is_none()
     {
         eprintln!(
@@ -163,7 +183,13 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
     let generation_mode = match args.execution_mode {
         EvalExecutionMode::Mock => GenerationMode::MockOnly,
         EvalExecutionMode::Live => GenerationMode::Live,
+        EvalExecutionMode::Batch => GenerationMode::Batch,
     };
+
+    if args.measure_discrimination && matches!(args.execution_mode, EvalExecutionMode::Mock) {
+        eprintln!("error: --measure-discrimination requires --execution-mode live or batch");
+        return ExitCode::ConfigError.as_i32();
+    }
 
     if globals.verbose > 0 {
         eprintln!(
@@ -176,8 +202,10 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
         );
     }
 
-    let concurrency = if matches!(generation_mode, GenerationMode::Live)
-        && args.concurrency.is_none()
+    let concurrency = if matches!(
+        generation_mode,
+        GenerationMode::Live | GenerationMode::Batch
+    ) && args.concurrency.is_none()
         && config.runner.concurrency.is_none()
     {
         1
@@ -187,6 +215,18 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
             .or_else(default_concurrency)
             .unwrap_or(1)
     };
+    let total_cases_for_hint: usize = fixtures.iter().map(|f| f.cases.len()).sum();
+    if !globals.quiet
+        && config.output.format != "json"
+        && matches!(args.execution_mode, EvalExecutionMode::Live)
+        && total_cases_for_hint > 50
+    {
+        eprintln!(
+            "{} {} cases detected in live mode; use --execution-mode batch for ~50% cost savings",
+            style("hint:").yellow().bold(),
+            total_cases_for_hint
+        );
+    }
     let format = config.output.format.clone();
     let show_progress = !globals.quiet && (format != "json" && stderr().is_terminal());
     if !globals.quiet && format != "json" && args.judge && !judge_enabled {
@@ -200,7 +240,10 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
     let runner = RunnerConfig {
         concurrency,
         timeout_secs: args.timeout.unwrap_or(config.runner.timeout_secs),
-        offline: if matches!(generation_mode, GenerationMode::Live) {
+        offline: if matches!(
+            generation_mode,
+            GenerationMode::Live | GenerationMode::Batch
+        ) {
             false
         } else {
             config.runner.offline
@@ -213,13 +256,31 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         } else {
             config.generator.max_tokens
         },
-        generator_endpoint: args.generator_endpoint.clone(),
+        generator_endpoint: args
+            .generator_endpoint
+            .clone()
+            .or_else(|| config.generator.endpoint.clone()),
         fail_fast: false,
         mock_strict: std::env::var("agentcarousel_MOCK_STRICT").ok().as_deref() == Some("1"),
         command: "eval".to_string(),
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: args.run_id.clone(),
+        batch_collect_id: None,
+    };
+
+    // Clone runner config for discrimination pass (before it is moved into eval_config).
+    let discrimination_runner = if args.measure_discrimination {
+        Some(runner.clone())
+    } else {
+        None
+    };
+
+    // Clone fixtures for discrimination pass (before they are moved into run_eval).
+    let discrimination_fixtures = if args.measure_discrimination {
+        Some(fixtures.clone())
+    } else {
+        None
     };
 
     let eval_config = EvalConfig {
@@ -233,14 +294,55 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         },
         judge: judge_enabled,
         judge_model: Some(judge_model.clone()),
-        effectiveness_threshold: config.eval.effectiveness_threshold,
         judge_max_tokens: if args.disable_max_tokens {
             None
         } else {
             config.judge.max_tokens
         },
+        judge_endpoint: args.judge_endpoint.clone(),
+        effectiveness_threshold: config.eval.effectiveness_threshold,
         progress: show_progress,
     };
+
+    // ── Batch fire-and-forget ─────────────────────────────────────────────────
+    // Submit to the Anthropic batch API, save state for `agc batch fetch`, and exit.
+    if matches!(generation_mode, GenerationMode::Batch) {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("tokio runtime");
+        let cases_for_batch = flatten_cases(fixtures);
+        let fixture_paths: Vec<String> = args
+            .paths
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        let judge_model_for_batch = if judge_enabled {
+            Some(eval_config.judge_model.clone().unwrap_or_default())
+        } else {
+            None
+        };
+        match runtime.block_on(submit_batch_only(
+            &cases_for_batch,
+            &eval_config.runner,
+            fixture_paths,
+            judge_model_for_batch,
+        )) {
+            Ok(batch_id) => {
+                let n = cases_for_batch.len();
+                eprintln!(
+                    "Batch submitted: {} ({} cases)\n  status : agc batch status {}\n  fetch  : agc batch fetch {}",
+                    batch_id, n, batch_id, batch_id
+                );
+                return ExitCode::Ok.as_i32();
+            }
+            Err(e) => {
+                eprintln!("error: batch submit failed: {e}");
+                return ExitCode::RuntimeError.as_i32();
+            }
+        }
+    }
 
     prefetch_pricing();
 
@@ -250,6 +352,30 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         .build()
         .expect("tokio runtime");
     let mut run = runtime.block_on(run_eval(fixtures, eval_config));
+
+    // Discrimination pass: run blank/degraded variants and attach scores to cases.
+    if let (Some(disc_fixtures), Some(disc_runner)) =
+        (discrimination_fixtures, discrimination_runner)
+    {
+        let current_passed: Vec<bool> = run
+            .cases
+            .iter()
+            .map(|c| c.status == agentcarousel_core::CaseStatus::Passed)
+            .collect();
+
+        let disc_cases = flatten_cases(disc_fixtures);
+
+        let scores = runtime.block_on(run_discrimination_eval(
+            disc_cases,
+            disc_runner,
+            current_passed,
+        ));
+
+        for (case_result, (score, label)) in run.cases.iter_mut().zip(scores) {
+            case_result.discrimination_score = Some(score);
+            case_result.discrimination_label = Some(label);
+        }
+    }
 
     let judge_model_for_cost = if args.judge {
         Some(judge_model.as_str())
@@ -293,7 +419,13 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
                 None
             };
             let audit_max_tokens = config.judge.max_tokens.map(|t| t.max(2048));
-            match run_prompt_audit(&prompt_text, &run.cases, &judge_model, audit_max_tokens) {
+            match run_prompt_audit(
+                &prompt_text,
+                &run.cases,
+                &judge_model,
+                audit_max_tokens,
+                args.judge_endpoint.as_deref(),
+            ) {
                 Ok(audit) => {
                     if let Some(ref pb) = audit_spinner {
                         pb.finish_and_clear();
@@ -359,6 +491,32 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         }
         if globals.quiet || format_str == "json" {
             print_eval_saved_run_hint(&run, globals.quiet || format_str == "json");
+        }
+    }
+
+    if args.measure_discrimination && !globals.quiet && format != "json" && !globals.json {
+        let high = run
+            .cases
+            .iter()
+            .filter(|c| c.discrimination_label.as_deref() == Some("high"))
+            .count();
+        let low = run
+            .cases
+            .iter()
+            .filter(|c| c.discrimination_label.as_deref() == Some("low"))
+            .count();
+        println!(
+            "{} discrimination: {} high-value, {} low-value cases",
+            style("info:").cyan().bold(),
+            high,
+            low
+        );
+        if low > 0 {
+            println!(
+                "  {} {} case(s) pass even with blank/degraded prompt — consider revising",
+                style("hint:").yellow().bold(),
+                low
+            );
         }
     }
 

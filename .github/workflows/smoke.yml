@@ -101,7 +101,7 @@ jobs:
         run: echo "$(pwd)/target/release" >> "${GITHUB_PATH}"
 
       - name: Validate good fixture
-        run: agentcarousel validate fixtures/regex-builder/cases.yaml
+        run: agentcarousel validate fixtures/prompt-injection-detector/cases.yaml
 
       - name: Validate bad fixture (expect failure)
         shell: bash
@@ -116,4 +116,4 @@ jobs:
           fi
 
       - name: Smoke tests
-        run: agentcarousel test fixtures/regex-builder/cases.yaml --filter-tags smoke
+        run: agentcarousel test fixtures/prompt-injection-detector/cases.yaml --filter-tags smoke

@@ -352,6 +352,7 @@ fn build_eval_config(
         agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
         config_hash: config_hash(config),
         run_id: None,
+        batch_collect_id: None,
     };
     EvalConfig {
         runner,
@@ -364,6 +365,7 @@ fn build_eval_config(
         },
         judge,
         judge_model: Some(judge_model.to_string()),
+        judge_endpoint: None,
         judge_max_tokens: config.judge.max_tokens,
         effectiveness_threshold: config.eval.effectiveness_threshold,
         progress: false,

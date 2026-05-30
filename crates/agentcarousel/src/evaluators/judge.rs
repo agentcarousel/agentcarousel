@@ -12,9 +12,9 @@ use super::trait_def::{Evaluator, EvaluatorError, EvaluatorKind};
 use serde::Deserialize;
 
 use crate::providers::{
-    AnthropicMessage, AnthropicRequest, AnthropicResponse, GeminiContent, GeminiGenerationConfig,
-    GeminiPart, GeminiRequest, GeminiResponse, GeminiSystemInstruction, OpenAiMessage,
-    OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
+    AnthropicMessage, AnthropicRequest, AnthropicResponse, AnthropicSystemBlock, GeminiContent,
+    GeminiGenerationConfig, GeminiPart, GeminiRequest, GeminiResponse, GeminiSystemInstruction,
+    OpenAiMessage, OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
 };
 
 static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
@@ -22,10 +22,17 @@ static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 fn shared_blocking_client() -> &'static reqwest::blocking::Client {
     BLOCKING_CLIENT.get_or_init(|| {
         reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(300))
             .build()
             .expect("reqwest blocking client")
     })
+}
+
+fn custom_blocking_client(timeout_secs: u64) -> reqwest::blocking::Client {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .expect("reqwest blocking client")
 }
 
 struct JudgeCallOutput {
@@ -39,6 +46,13 @@ pub struct JudgeEvaluator {
     pub prompt: Option<String>,
     pub model: String,
     pub max_tokens: Option<u32>,
+    /// Base URL for a custom/Ollama judge endpoint. Required when `model` is `custom/*` or `ollama/*`.
+    pub endpoint: Option<String>,
+    /// Per-request timeout in seconds. Defaults to 300 for cloud providers, 120 for custom endpoints.
+    pub timeout_secs: u64,
+    /// Minimum effectiveness score for `passed: true`. Sourced from per-case EvaluatorConfig or
+    /// the global eval config; defaults to 1.0 if neither provides a value.
+    pub effectiveness_threshold: f32,
 }
 
 impl JudgeEvaluator {
@@ -46,15 +60,23 @@ impl JudgeEvaluator {
         case: &Case,
         judge_model: Option<&str>,
         judge_max_tokens: Option<u32>,
+        judge_endpoint: Option<&str>,
+        global_effectiveness_threshold: f32,
     ) -> Result<Self, EvaluatorError> {
-        let prompt = case
-            .evaluator_config
-            .as_ref()
-            .and_then(|config| config.judge_prompt.clone());
+        let eval_config = case.evaluator_config.as_ref();
+        let prompt = eval_config.and_then(|config| config.judge_prompt.clone());
+        let effectiveness_threshold = eval_config
+            .and_then(|c| c.effectiveness_threshold)
+            .unwrap_or(global_effectiveness_threshold);
+        let model = judge_model.unwrap_or("gemini-2.5-flash").to_string();
+        let is_custom = judge_provider_from_model(&model) == JudgeProvider::Custom;
         Ok(Self {
             prompt,
-            model: judge_model.unwrap_or("gemini-2.5-flash").to_string(),
+            model,
             max_tokens: judge_max_tokens,
+            endpoint: judge_endpoint.map(|s| s.to_string()),
+            timeout_secs: if is_custom { 120 } else { 300 },
+            effectiveness_threshold,
         })
     }
 }
@@ -84,10 +106,16 @@ impl Evaluator for JudgeEvaluator {
         }
 
         let provider = judge_provider_from_model(&self.model);
-        let judge_key = resolve_judge_key(provider)?;
+        // Custom provider needs no API key — resolve_judge_key would fail with empty candidates.
+        let judge_key = if matches!(provider, JudgeProvider::Custom) {
+            String::new()
+        } else {
+            resolve_judge_key(provider)?
+        };
         let system_prompt = build_system_prompt(case, self.prompt.as_deref());
         let user_prompt = build_user_prompt(case, &output);
 
+        let timeout_secs = self.timeout_secs;
         let call_judge = |sp: String, up: String, max_tok: Option<u32>| match provider {
             JudgeProvider::Gemini => call_gemini_text(&judge_key, &self.model, max_tok, sp, up),
             JudgeProvider::OpenAi => call_openai_text(&judge_key, &self.model, max_tok, sp, up),
@@ -97,6 +125,14 @@ impl Evaluator for JudgeEvaluator {
             JudgeProvider::OpenRouter => {
                 call_openrouter_text(&judge_key, &self.model, max_tok, sp, up)
             }
+            JudgeProvider::Custom => match self.endpoint.as_deref() {
+                Some(ep) => {
+                    call_custom_judge_blocking(ep, &self.model, max_tok, timeout_secs, sp, up)
+                }
+                None => Err(EvaluatorError::MissingConfig(
+                    "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
+                )),
+            },
         };
 
         let first_out = call_judge(system_prompt.clone(), user_prompt.clone(), self.max_tokens)?;
@@ -112,7 +148,11 @@ impl Evaluator for JudgeEvaluator {
         let judge_response = match parse_judge_response(&first_out.text) {
             Ok(parsed) => parsed,
             Err(first_err) => {
-                if !looks_truncated_json(&first_out.text) {
+                // For custom/local models skip the retry — they already consumed the timeout
+                // budget and a 4x token retry would hang for another full timeout window.
+                if !looks_truncated_json(&first_out.text)
+                    || matches!(provider, JudgeProvider::Custom)
+                {
                     return Err(first_err);
                 }
                 // Retry once with a larger token budget and stricter brevity constraints.
@@ -188,7 +228,7 @@ impl Evaluator for JudgeEvaluator {
             evaluator: self.id().to_string(),
             rubric_scores,
             effectiveness_score,
-            passed: effectiveness_score >= 1.0,
+            passed: effectiveness_score >= self.effectiveness_threshold,
             judge_rationale: judge_response
                 .overall_rationale
                 .or_else(|| Some("judge completed without rationale".to_string())),
@@ -218,6 +258,7 @@ fn build_system_prompt(case: &Case, custom_prompt: Option<&str>) -> String {
         prompt.push('\n');
     }
     prompt.push_str("\nYou are an evaluation judge. Score each rubric item from 0.0 to 1.0.\n");
+    prompt.push_str("Score calibration: 0.0 = criterion not present or directly violated; 0.5 = partially addressed with notable gaps; 1.0 = criterion fully met with no gaps.\n");
     prompt.push_str(
         "Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.\n",
     );
@@ -235,6 +276,7 @@ fn build_system_prompt(case: &Case, custom_prompt: Option<&str>) -> String {
 }
 
 fn build_user_prompt(case: &Case, output: &str) -> String {
+    const OUTPUT_CHAR_LIMIT: usize = 2000;
     let mut prompt = String::new();
     prompt.push_str("Case input messages:\n");
     for message in case.input.messages.iter() {
@@ -245,7 +287,14 @@ fn build_user_prompt(case: &Case, output: &str) -> String {
         prompt.push_str("\n\n");
     }
     prompt.push_str("Case output:\n");
-    prompt.push_str(output.trim());
+    let trimmed = output.trim();
+    if trimmed.chars().count() > OUTPUT_CHAR_LIMIT {
+        let truncated: String = trimmed.chars().take(OUTPUT_CHAR_LIMIT).collect();
+        prompt.push_str(&truncated);
+        prompt.push_str("\n...[truncated]");
+    } else {
+        prompt.push_str(trimmed);
+    }
     prompt
 }
 
@@ -459,10 +508,15 @@ fn call_anthropic_blocking(
                 .to_string(),
         ));
     };
+    let system_blocks = if system_prompt.is_empty() {
+        vec![]
+    } else {
+        vec![AnthropicSystemBlock::cached(system_prompt)]
+    };
     let request = AnthropicRequest {
         model: model.to_string(),
         max_tokens,
-        system: system_prompt,
+        system: system_blocks,
         messages: vec![AnthropicMessage {
             role: "user".to_string(),
             content: user_prompt,
@@ -476,6 +530,7 @@ fn call_anthropic_blocking(
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", judge_key)
             .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .json(&request)
             .send()
             .map_err(|err| EvaluatorError::JudgeFailed(redact_api_key(&err.to_string())))?;
@@ -613,6 +668,97 @@ fn call_openrouter_blocking(
     ))
 }
 
+fn call_custom_judge_blocking(
+    endpoint: &str,
+    model: &str,
+    max_tokens: Option<u32>,
+    timeout_secs: u64,
+    system_prompt: String,
+    user_prompt: String,
+) -> Result<JudgeCallOutput, EvaluatorError> {
+    let model_name = model
+        .strip_prefix("ollama/")
+        .or_else(|| model.strip_prefix("custom/"))
+        .filter(|s| !s.is_empty())
+        .unwrap_or(model);
+
+    let is_ollama = endpoint.contains("/api/generate") || endpoint.contains("/api/chat");
+
+    let body = if endpoint.contains("/api/generate") {
+        let combined = format!("{system_prompt}\n\n{user_prompt}");
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "prompt": combined,
+            "stream": false,
+            "think": false,
+            // Keep the model warm across consecutive case judgements.
+            "keep_alive": "10m",
+        });
+        if let Some(n) = max_tokens {
+            b["options"] = serde_json::json!({"num_predict": n});
+        }
+        b
+    } else {
+        let mut b = serde_json::json!({
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        });
+        if is_ollama {
+            b["keep_alive"] = serde_json::json!("10m");
+        }
+        if let Some(n) = max_tokens {
+            b["max_tokens"] = serde_json::json!(n);
+        }
+        b
+    };
+
+    let client = custom_blocking_client(timeout_secs);
+    let response =
+        client.post(endpoint).json(&body).send().map_err(|e| {
+            let msg = if e.is_connect() {
+                format!("custom judge request failed: {e}. Ensure the model server at {endpoint} is running and reachable.")
+            } else if e.is_timeout() {
+                format!("custom judge request failed: {e}. The request timed out.")
+            } else {
+                format!("custom judge request failed: {e}")
+            };
+            EvaluatorError::JudgeFailed(msg)
+        })?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body_text = response.text().unwrap_or_default();
+        return Err(EvaluatorError::JudgeUnavailable(format!(
+            "custom judge returned {status}: {body_text}"
+        )));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .map_err(|e| EvaluatorError::InvalidOutput(format!("custom judge parse failed: {e}")))?;
+
+    let text = json["choices"][0]["message"]["content"]
+        .as_str()
+        .or_else(|| json["response"].as_str())
+        .or_else(|| json["output"].as_str())
+        .ok_or_else(|| {
+            EvaluatorError::InvalidOutput(
+                "custom judge response missing 'choices[0].message.content', 'response', or 'output'"
+                    .to_string(),
+            )
+        })?
+        .to_string();
+
+    Ok(JudgeCallOutput {
+        text,
+        tokens_in: None,
+        tokens_out: None,
+    })
+}
+
 fn parse_judge_response(raw_text: &str) -> Result<JudgeResponse, EvaluatorError> {
     let trimmed = raw_text.trim();
     if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(trimmed) {
@@ -622,13 +768,22 @@ fn parse_judge_response(raw_text: &str) -> Result<JudgeResponse, EvaluatorError>
         if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(&fenced_json) {
             return Ok(parsed);
         }
+        let sanitized = escape_literal_control_chars(&fenced_json);
+        if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(&sanitized) {
+            return Ok(parsed);
+        }
     }
     let start = raw_text.find('{');
     let end = raw_text.rfind('}');
     if let (Some(start), Some(end)) = (start, end) {
         let candidate = &raw_text[start..=end];
-        return serde_json::from_str::<JudgeResponse>(candidate)
-            .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()));
+        if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(candidate) {
+            return Ok(parsed);
+        }
+        let sanitized = escape_literal_control_chars(candidate);
+        if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(&sanitized) {
+            return Ok(parsed);
+        }
     }
     if std::env::var("AGENTCAROUSEL_DEBUG_JUDGE").ok().as_deref() == Some("1") {
         return Err(EvaluatorError::InvalidOutput(format!(
@@ -723,6 +878,11 @@ struct PromptAuditResponse {
     /// Actual prompt text to paste for each fix — parallel to suggested_fixes.
     #[serde(default)]
     suggested_implementations: Vec<String>,
+    /// Where in prompt.md each implementation goes — parallel to suggested_implementations.
+    /// A unique substring (e.g. "## Instructions") the pipeline can search for with rg
+    /// to locate the insertion point. Empty string means append to end.
+    #[serde(default)]
+    suggested_locations: Vec<String>,
     #[serde(default)]
     overall_rationale: String,
 }
@@ -749,9 +909,19 @@ pub fn run_prompt_audit(
     results: &[CaseResult],
     model: &str,
     max_tokens: Option<u32>,
+    endpoint: Option<&str>,
 ) -> Result<PromptAudit, EvaluatorError> {
     let provider = judge_provider_from_model(model);
-    let judge_key = resolve_judge_key(provider)?;
+    let judge_key = if matches!(provider, JudgeProvider::Custom) {
+        String::new()
+    } else {
+        resolve_judge_key(provider)?
+    };
+    let timeout_secs: u64 = if matches!(provider, JudgeProvider::Custom) {
+        120
+    } else {
+        300
+    };
 
     let system_prompt = build_prompt_audit_system_prompt();
     let user_prompt = build_prompt_audit_user_prompt(prompt_text, results);
@@ -761,6 +931,12 @@ pub fn run_prompt_audit(
         JudgeProvider::OpenAi => call_openai_text(&judge_key, model, max_tok, sp, up),
         JudgeProvider::Anthropic => call_anthropic_text(&judge_key, model, max_tok, sp, up),
         JudgeProvider::OpenRouter => call_openrouter_text(&judge_key, model, max_tok, sp, up),
+        JudgeProvider::Custom => match endpoint {
+            Some(ep) => call_custom_judge_blocking(ep, model, max_tok, timeout_secs, sp, up),
+            None => Err(EvaluatorError::MissingConfig(
+                "--judge-endpoint is required when judge model is 'custom' or 'ollama/<name>'",
+            )),
+        },
     };
 
     let first_out = call_judge(system_prompt.clone(), user_prompt.clone(), max_tokens)?;
@@ -812,6 +988,7 @@ pub fn run_prompt_audit(
             .into_iter()
             .filter(|s| !s.trim().is_empty())
             .collect(),
+        suggested_locations: parsed.suggested_locations,
         overall_rationale: parsed.overall_rationale,
         judge_tokens_in: tokens_in,
         judge_tokens_out: tokens_out,
@@ -819,7 +996,7 @@ pub fn run_prompt_audit(
 }
 
 fn build_prompt_audit_system_prompt() -> String {
-    r#"You are a prompt-audit judge. You have just seen the results of an agentcarousel eval run.
+    r###"You are a prompt-audit judge. You have just seen the results of an agentcarousel eval run.
 Your job is to diagnose WHY cases are failing and WHERE the fix should be applied.
 
 Classify the primary failure mode as exactly one of:
@@ -863,6 +1040,10 @@ Return JSON only:
     "<complete markdown block to paste into prompt.md for fix 1 — full worked example, restructured section, or new rule, ready to use as-is>",
     "<complete markdown block to paste into prompt.md for fix 2>"
   ],
+  "suggested_locations": [
+    "<exact section header or unique phrase from prompt.md where fix 1 should be inserted, e.g. '## Instructions' or '## Safety'; empty string to append at end of file>",
+    "<location for fix 2>"
+  ],
   "overall_rationale": "<2–3 sentence synthesis>"
 }
 
@@ -873,7 +1054,14 @@ Rules for suggested_implementations:
 - Include the restructured section text when the fix is about reorganising a section.
 - Keep each implementation under 800 characters; use \n for line breaks inside the JSON string.
 - If a fix applies only to model or fixture issues (not prompt text), write an empty string "".
-Keep each finding.pattern under 80 chars. Keep each suggested_fix title under 100 chars. JSON only — no prose outside the JSON object."#.to_string()
+
+Rules for suggested_locations (parallel to suggested_implementations, same index):
+- Provide the exact text you would search for with `rg '<pattern>' prompt.md` to locate where the fix belongs.
+- Use the nearest `##` section header (e.g. "## Instructions", "## Safety", "## Examples").
+- If no matching section exists, use "" — the pipeline will append the implementation to the end of prompt.md.
+- The implementation will be inserted at the END of the identified section, before the next `##` header.
+- Never reference line numbers; only use text patterns that uniquely identify the target section.
+Keep each finding.pattern under 80 chars. Keep each suggested_fix title under 100 chars. JSON only — no prose outside the JSON object."###.to_string()
 }
 
 fn build_prompt_audit_user_prompt(prompt_text: &str, results: &[CaseResult]) -> String {
@@ -935,14 +1123,57 @@ fn parse_prompt_audit_response(raw_text: &str) -> Result<PromptAuditResponse, Ev
         if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(&fenced) {
             return Ok(parsed);
         }
+        // Models sometimes emit literal newlines inside strings (common in suggested_implementations).
+        let sanitized = escape_literal_control_chars(&fenced);
+        if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(&sanitized) {
+            return Ok(parsed);
+        }
     }
     let start = raw_text.find('{');
     let end = raw_text.rfind('}');
     if let (Some(s), Some(e)) = (start, end) {
-        return serde_json::from_str::<PromptAuditResponse>(&raw_text[s..=e])
+        let candidate = &raw_text[s..=e];
+        if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(candidate) {
+            return Ok(parsed);
+        }
+        let sanitized = escape_literal_control_chars(candidate);
+        return serde_json::from_str::<PromptAuditResponse>(&sanitized)
             .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()));
     }
     Err(EvaluatorError::InvalidOutput(
         "prompt audit response was not valid JSON".to_string(),
     ))
+}
+
+/// Escape literal newlines and tabs inside JSON string values.
+///
+/// Models generating `suggested_implementations` often emit real `\n` bytes instead of
+/// the JSON escape sequence `\n`, which makes serde_json fail mid-array. This walks the
+/// text character by character, tracking whether we're inside a quoted string, and
+/// replaces bare control characters with their escape equivalents.
+fn escape_literal_control_chars(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 64);
+    let mut in_string = false;
+    let mut escaped = false;
+    for ch in s.chars() {
+        if escaped {
+            out.push(ch);
+            escaped = false;
+        } else if ch == '\\' && in_string {
+            out.push(ch);
+            escaped = true;
+        } else if ch == '"' {
+            in_string = !in_string;
+            out.push(ch);
+        } else if in_string && ch == '\n' {
+            out.push_str("\\n");
+        } else if in_string && ch == '\r' {
+            out.push_str("\\r");
+        } else if in_string && ch == '\t' {
+            out.push_str("\\t");
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }

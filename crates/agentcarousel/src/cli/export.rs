@@ -156,6 +156,20 @@ pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
     }
 }
 
+fn infer_domain_from_skill(skill: Option<&str>) -> Option<&'static str> {
+    let lo = skill?.to_lowercase();
+    if lo.contains("healthcare")
+        || lo.contains("hipaa")
+        || lo.contains("phi")
+        || lo.contains("clinical")
+        || lo.contains("medical")
+    {
+        Some("healthcare")
+    } else {
+        None
+    }
+}
+
 fn export_last_n(n: usize, out_dir: Option<&Path>) -> Result<Vec<PathBuf>, String> {
     if n == 0 || n > EXPORT_LAST_MAX {
         return Err(format!(
@@ -245,7 +259,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     // Compute compliance metrics for this run's skill and embed in the tarball.
     let skill = run.skill_or_agent.as_deref();
     let (effective_skill, metrics_results, runs_analyzed) =
-        super::metrics::compute_metrics_for_export(skill, 20);
+        super::metrics::compute_metrics_for_export(skill, 20, infer_domain_from_skill(skill));
     let metrics_json_path = root.join("metrics.json");
     let metrics_json_payload = json!({
         "generated_at": Utc::now().to_rfc3339(),
@@ -262,6 +276,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
                 "finding": m.finding,
                 "sample_size": m.sample_size,
                 "detail": m.detail,
+                "compliance_hook": m.compliance_hook,
             }))
             .collect::<Vec<_>>()
     });

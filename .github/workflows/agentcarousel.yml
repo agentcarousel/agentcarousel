@@ -50,10 +50,12 @@ jobs:
           path: validate-report.json
       - name: Bundle verify (contract)
         run: |
-          ./target/release/agentcarousel bundle verify fixtures/customer-support
-          ./target/release/agentcarousel bundle verify fixtures/customer-support/bundle.manifest.json
-          ./target/release/agentcarousel bundle verify fixtures/code-reviewer
-          ./target/release/agentcarousel bundle verify fixtures/code-reviewer/bundle.manifest.json
+          ./target/release/agentcarousel bundle verify fixtures/ambient-scribe
+          ./target/release/agentcarousel bundle verify fixtures/ambient-scribe/bundle.manifest.json
+          ./target/release/agentcarousel bundle verify fixtures/github-actions-generator
+          ./target/release/agentcarousel bundle verify fixtures/github-actions-generator/bundle.manifest.json
+          ./target/release/agentcarousel bundle verify fixtures/prompt-injection-detector
+          ./target/release/agentcarousel bundle verify fixtures/prompt-injection-detector/bundle.manifest.json
       - name: Upload release binary
         uses: actions/upload-artifact@v4
         with:
@@ -151,21 +153,9 @@ jobs:
       - name: Phase 1 — offline eval (10 runs per bundle)
         run: |
           BUNDLES=(
-            accessibility-auditor
-            ci-failure-triager
-            code-reviewer
-            customer-support
-            data-privacy-classifier
-            database-migration-advisor
-            dockerfile-linter
-            env-file-auditor
-            error-message-improver
+            ambient-scribe
             github-actions-generator
             prompt-injection-detector
-            regex-builder
-            sql-query-generator
-            terraform-sentinel-scaffold
-            unit-test-generator
           )
 
           for skill in "${BUNDLES[@]}"; do
@@ -251,21 +241,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.AGENTCAROUSEL_JUDGE_KEY }}
         run: |
           BUNDLES=(
-            accessibility-auditor
-            ci-failure-triager
-            code-reviewer
-            customer-support
-            data-privacy-classifier
-            database-migration-advisor
-            dockerfile-linter
-            env-file-auditor
-            error-message-improver
+            ambient-scribe
             github-actions-generator
             prompt-injection-detector
-            regex-builder
-            sql-query-generator
-            terraform-sentinel-scaffold
-            unit-test-generator
           )
 
           for skill in "${BUNDLES[@]}"; do
@@ -288,21 +266,9 @@ jobs:
           mkdir -p carousel-results
 
           BUNDLES=(
-            accessibility-auditor
-            ci-failure-triager
-            code-reviewer
-            customer-support
-            data-privacy-classifier
-            database-migration-advisor
-            dockerfile-linter
-            env-file-auditor
-            error-message-improver
+            ambient-scribe
             github-actions-generator
             prompt-injection-detector
-            regex-builder
-            sql-query-generator
-            terraform-sentinel-scaffold
-            unit-test-generator
           )
 
           CAROUSEL_MODELS="${{ secrets.AGENTCAROUSEL_CAROUSEL_MODELS }}"
@@ -325,21 +291,9 @@ jobs:
       - name: Aggregate KPI summary
         run: |
           BUNDLES=(
-            accessibility-auditor
-            ci-failure-triager
-            code-reviewer
-            customer-support
-            data-privacy-classifier
-            database-migration-advisor
-            dockerfile-linter
-            env-file-auditor
-            error-message-improver
+            ambient-scribe
             github-actions-generator
             prompt-injection-detector
-            regex-builder
-            sql-query-generator
-            terraform-sentinel-scaffold
-            unit-test-generator
           )
 
           BUNDLES_JSON="[]"
@@ -450,21 +404,9 @@ jobs:
 
           if ls carousel-results/*.json 1>/dev/null 2>&1; then
             BUNDLES=(
-              accessibility-auditor
-              ci-failure-triager
-              code-reviewer
-              customer-support
-              data-privacy-classifier
-              database-migration-advisor
-              dockerfile-linter
-              env-file-auditor
-              error-message-improver
+              ambient-scribe
               github-actions-generator
               prompt-injection-detector
-              regex-builder
-              sql-query-generator
-              terraform-sentinel-scaffold
-              unit-test-generator
             )
             printf '\n## Model Carousel Results\n\n' >> "$GITHUB_STEP_SUMMARY"
             printf '| Skill | #1 Model | Pass Rate | Eff. Score | Latency p50 |\n' >> "$GITHUB_STEP_SUMMARY"
