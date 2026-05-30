@@ -10,6 +10,9 @@
 - Batch eval via Anthropic and OpenAI Batch APIs
 - Discrimination scoring flags low-quality generated cases
 - `--distribution`, `--difficulty`, `--domain-context` flags for `agc generate`
+- Judge system prompt includes score calibration anchors (0.0 / 0.5 / 1.0 definitions) for consistent inter-run scoring
+- `golden_normalize_whitespace` option on `evaluator_config` — collapses whitespace before diffing, useful for structured output
+- `agc validate` errors on rubric weights that don't sum to 1.0 and warns on trivially broad `auto_check` values
 
 ### Fixed
 - Judge endpoint auto-inherited from generator for ollama/custom models
