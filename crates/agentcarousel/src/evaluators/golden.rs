@@ -15,6 +15,7 @@ const CRITICAL_WEIGHT_FALLBACK: f32 = 0.45;
 pub struct GoldenEvaluator {
     pub golden_path: std::path::PathBuf,
     pub threshold: f32,
+    pub normalize_whitespace: bool,
 }
 
 impl GoldenEvaluator {
@@ -28,11 +29,21 @@ impl GoldenEvaluator {
             .clone()
             .ok_or(EvaluatorError::MissingConfig("golden_path"))?;
         let threshold = config.golden_threshold.unwrap_or(DEFAULT_GOLDEN_THRESHOLD);
+        let normalize_whitespace = config.golden_normalize_whitespace.unwrap_or(false);
         Ok(Self {
             golden_path,
             threshold,
+            normalize_whitespace,
         })
     }
+}
+
+/// Collapse runs of whitespace to a single space and strip leading/trailing whitespace per line.
+fn normalize(s: &str) -> String {
+    s.lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 impl Evaluator for GoldenEvaluator {
@@ -48,8 +59,15 @@ impl Evaluator for GoldenEvaluator {
                 path: self.golden_path.clone(),
                 source,
             })?;
-        let diff = TextDiff::from_lines(&expected, &actual);
-        let ratio = diff.ratio() as f32;
+
+        let (cmp_expected, cmp_actual) = if self.normalize_whitespace {
+            (normalize(&expected), normalize(&actual))
+        } else {
+            (expected, actual)
+        };
+
+        let diff = TextDiff::from_lines(&cmp_expected, &cmp_actual);
+        let ratio = diff.ratio();
         let passed = ratio >= self.threshold;
 
         Ok(EvalScores {

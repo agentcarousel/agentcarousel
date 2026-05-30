@@ -155,6 +155,10 @@ pub struct EvaluatorConfig {
     pub evaluator: String,
     pub golden_path: Option<PathBuf>,
     pub golden_threshold: Option<f32>,
+    /// When true, collapse whitespace before diffing golden output.
+    /// Useful for structured output (YAML, JSON, code) where indentation varies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub golden_normalize_whitespace: Option<bool>,
     pub process_cmd: Option<Vec<String>>,
     pub judge_prompt: Option<String>,
     pub effectiveness_threshold: Option<f32>,

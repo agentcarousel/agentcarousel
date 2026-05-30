@@ -43,6 +43,10 @@ cases:
       #   - tool: <exact-tool-name>        # REQUIRED field is "tool" — never "name" or "tool_name"
       #     args_match: {key: value}       # optional partial match on arguments
       #   - tool: <second-tool-name>
+      # order semantics (set via evaluator_config.tool_sequence_order):
+      #   strict      = exact sequence and count — every tool must appear in this order, no extras
+      #   subsequence = order preserved, extras allowed between — use this for most multi-tool cases
+      #   unordered   = presence only, any order — use when call order genuinely does not matter
 
       output:
         - kind: contains                   # contains | not_contains | regex | json_path
@@ -65,6 +69,9 @@ cases:
           auto_check:
             kind: regex
             value: '<regex pattern>'
+
+    # Optional: override default timeout (120 s) for slow skills or fast CI gates.
+    # timeout_secs: 60
 ```
 
 ## Coverage Requirements
@@ -92,6 +99,8 @@ Generate exactly {{COUNT}} cases covering ALL of the following categories (propo
 - Every case MUST have at least one rubric item and at least one output assertion
 - Use `auto_check` wherever possible; omit it only for rubric items requiring genuine language understanding
 - Keep `description` fields specific — mention what the user asked, what the agent must do, and what constitutes a pass
+- Each rubric item MUST measure a distinct dimension — do not create multiple items that all test the same property with fake weight distribution (e.g., three items all measuring "correctness" with weights 0.3/0.3/0.4 is one dimension, not three)
+- `auto_check` values must be domain-specific; single generic words ("sorry", "help", "work") will match on almost any response and defeat the purpose of the check
 - `tool_sequence` items MUST use `tool: <name>` as the key — never `name:` or `tool_name:`. Use `tool_sequence: []` when no tool calls are expected.
 - Message `role` MUST be one of: `user`, `assistant`, `system`, `tool` — never `model` (that is a Gemini-specific variant and will fail deserialization).
 - Do NOT include YAML comments in your output

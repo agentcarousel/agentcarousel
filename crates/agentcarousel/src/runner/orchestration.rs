@@ -111,6 +111,7 @@ fn apply_defaults(case: &mut Case, defaults: &Option<CaseDefaults>) {
                     evaluator: evaluator.clone(),
                     golden_path: None,
                     golden_threshold: None,
+                    golden_normalize_whitespace: None,
                     process_cmd: None,
                     judge_prompt: None,
                     effectiveness_threshold: None,
