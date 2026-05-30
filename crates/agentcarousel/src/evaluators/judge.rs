@@ -258,6 +258,7 @@ fn build_system_prompt(case: &Case, custom_prompt: Option<&str>) -> String {
         prompt.push('\n');
     }
     prompt.push_str("\nYou are an evaluation judge. Score each rubric item from 0.0 to 1.0.\n");
+    prompt.push_str("Score calibration: 0.0 = criterion not present or directly violated; 0.5 = partially addressed with notable gaps; 1.0 = criterion fully met with no gaps.\n");
     prompt.push_str(
         "Return JSON only with keys: rubric (array of {rubric_id, score, rationale}) and overall_rationale.\n",
     );
