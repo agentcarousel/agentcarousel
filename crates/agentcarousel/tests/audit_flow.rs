@@ -102,6 +102,7 @@ fn sample_audit(suggestions: &[&str]) -> PromptAudit {
         }],
         suggested_fixes: suggestions.iter().map(|s| s.to_string()).collect(),
         suggested_implementations: vec![],
+        suggested_locations: vec![],
         overall_rationale: "The prompt lacks explicit citation requirements.".to_string(),
         judge_tokens_in: None,
         judge_tokens_out: None,

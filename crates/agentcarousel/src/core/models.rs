@@ -230,6 +230,11 @@ pub struct PromptAudit {
     /// Each element is the actual markdown content to paste into prompt.md.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggested_implementations: Vec<String>,
+    /// Where in prompt.md to apply each implementation — parallel to suggested_implementations.
+    /// Each element is a unique substring of prompt.md (e.g. a section header like "## Instructions")
+    /// used to locate the insertion point. Empty string means append to end.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_locations: Vec<String>,
     pub overall_rationale: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub judge_tokens_in: Option<u64>,

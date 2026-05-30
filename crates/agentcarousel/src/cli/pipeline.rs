@@ -736,42 +736,25 @@ fn run_improve(args: ImproveArgs, config: &ResolvedConfig, globals: &GlobalOptio
             }
         }
 
+        // ── j. Prompt audit → apply fixes to prompt.md ───────────────────────
+        // Run after every re-eval so each round benefits from the latest diagnosis.
+        if let Some(ref audit_run_id) = current_run_id {
+            run_audit_and_apply(
+                audit_run_id,
+                &prompt_path(&args.skill),
+                &judge_model,
+                judge_endpoint.as_deref(),
+                globals,
+            );
+        }
+
         // Check for stuck condition.
         if no_improvement_streak >= 2 {
             if !globals.quiet {
                 println!(
-                    "  warning: stuck after {} rounds — running audit for diagnosis",
+                    "  stuck after {} rounds with no improvement — stopping",
                     no_improvement_streak
                 );
-            }
-            // Run audit to surface diagnosis.
-            if let Some(ref audit_run_id) = current_run_id {
-                use super::audit::{run_audit_command, AuditArgs};
-                let mut argv = vec![
-                    "audit".to_string(),
-                    "run".to_string(),
-                    audit_run_id.clone(),
-                    "--model".to_string(),
-                    judge_model.clone(),
-                ];
-                if let Some(ref jep) = judge_endpoint {
-                    argv.push("--judge-endpoint".to_string());
-                    argv.push(jep.clone());
-                }
-                let audit_args = AuditArgs::parse_from(&argv);
-                let _ = run_audit_command(audit_args, config, globals);
-                if !globals.quiet {
-                    println!();
-                    println!("  Audit complete. Review findings above or run:");
-                    println!(
-                        "    agc audit suggest {} --apply   # append suggestions to prompt.md",
-                        audit_run_id
-                    );
-                    println!("  Then re-run: agc pipeline improve {}", args.skill);
-                }
-            } else if !globals.quiet {
-                println!("  No completed re-eval run ID available for audit.");
-                println!("  Then re-run: agc pipeline improve {}", args.skill);
             }
             entry.status = CandidateStatus::Improving;
             entry.last_updated = now_rfc3339();
@@ -805,6 +788,135 @@ fn fmt_metric(value: Option<f32>) -> String {
     match value {
         Some(v) => format!("{:.0}%", v * 100.0),
         None => "—".to_string(),
+    }
+}
+
+/// Run the prompt audit for a completed eval run and apply any suggested fixes
+/// directly to prompt.md before the next improvement round.
+fn run_audit_and_apply(
+    run_id: &str,
+    prompt_path: &Path,
+    judge_model: &str,
+    judge_endpoint: Option<&str>,
+    globals: &GlobalOptions,
+) {
+    use agentcarousel_evaluators::run_prompt_audit;
+    use agentcarousel_reporters::fetch_run;
+
+    let run = match fetch_run(run_id) {
+        Ok(r) => r,
+        Err(e) => {
+            if !globals.quiet {
+                eprintln!("  audit: could not fetch run {run_id}: {e}");
+            }
+            return;
+        }
+    };
+
+    let prompt_text = match std::fs::read_to_string(prompt_path) {
+        Ok(t) => t,
+        Err(e) => {
+            if !globals.quiet {
+                eprintln!("  audit: could not read {}: {e}", prompt_path.display());
+            }
+            return;
+        }
+    };
+
+    if !globals.quiet {
+        println!("  Running prompt audit for round diagnosis...");
+    }
+
+    let audit = match run_prompt_audit(&prompt_text, &run.cases, judge_model, None, judge_endpoint)
+    {
+        Ok(a) => a,
+        Err(e) => {
+            if !globals.quiet {
+                eprintln!("  audit: {e}");
+            }
+            return;
+        }
+    };
+
+    if audit.suggested_implementations.is_empty() {
+        if !globals.quiet {
+            println!(
+                "  audit: {} — no prompt fixes suggested",
+                format!("{:?}", audit.failure_mode).to_lowercase()
+            );
+        }
+        return;
+    }
+
+    if !globals.quiet {
+        println!(
+            "  audit: {} (confidence {:.0}%) — applying {} fix(es) to prompt.md",
+            format!("{:?}", audit.failure_mode).to_lowercase(),
+            audit.confidence * 100.0,
+            audit.suggested_implementations.len(),
+        );
+    }
+
+    let mut current = prompt_text;
+    for (i, implementation) in audit.suggested_implementations.iter().enumerate() {
+        let location = audit
+            .suggested_locations
+            .get(i)
+            .map(String::as_str)
+            .unwrap_or("");
+        let title = audit
+            .suggested_fixes
+            .get(i)
+            .map(String::as_str)
+            .unwrap_or("fix");
+        let updated = apply_audit_fix(&current, implementation, location);
+        if updated != current {
+            if !globals.quiet {
+                println!("    ✓ applied: {title}");
+            }
+            current = updated;
+        }
+    }
+
+    if let Err(e) = std::fs::write(prompt_path, &current) {
+        eprintln!("  audit: could not write {}: {e}", prompt_path.display());
+    }
+}
+
+/// Insert `implementation` into `prompt` at the end of the section identified by `location`.
+///
+/// `location` is a substring to search for (e.g. "## Instructions"). The implementation
+/// is inserted at the end of that section, before the next `##` header. If `location` is
+/// empty or not found, the implementation is appended to the end of the file.
+fn apply_audit_fix(prompt: &str, implementation: &str, location: &str) -> String {
+    let impl_text = implementation.trim();
+    if impl_text.is_empty() {
+        return prompt.to_string();
+    }
+
+    let insert_at = if location.is_empty() {
+        None
+    } else {
+        prompt.find(location).map(|pos| {
+            // Advance past the located text, then find where this section ends
+            // (next `\n##` header or end of string).
+            let after = pos + location.len();
+            prompt[after..]
+                .find("\n##")
+                .map(|rel| after + rel)
+                .unwrap_or(prompt.len())
+        })
+    };
+
+    match insert_at {
+        Some(end) => {
+            let before = prompt[..end].trim_end();
+            let after = &prompt[end..];
+            format!("{}\n\n{}\n{}", before, impl_text, after)
+        }
+        None => {
+            format!("{}\n\n{}\n", prompt.trim_end(), impl_text)
+        }
     }
 }
 

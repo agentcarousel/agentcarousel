@@ -50,6 +50,9 @@ pub struct JudgeEvaluator {
     pub endpoint: Option<String>,
     /// Per-request timeout in seconds. Defaults to 300 for cloud providers, 120 for custom endpoints.
     pub timeout_secs: u64,
+    /// Minimum effectiveness score for `passed: true`. Sourced from per-case EvaluatorConfig or
+    /// the global eval config; defaults to 1.0 if neither provides a value.
+    pub effectiveness_threshold: f32,
 }
 
 impl JudgeEvaluator {
@@ -58,11 +61,13 @@ impl JudgeEvaluator {
         judge_model: Option<&str>,
         judge_max_tokens: Option<u32>,
         judge_endpoint: Option<&str>,
+        global_effectiveness_threshold: f32,
     ) -> Result<Self, EvaluatorError> {
-        let prompt = case
-            .evaluator_config
-            .as_ref()
-            .and_then(|config| config.judge_prompt.clone());
+        let eval_config = case.evaluator_config.as_ref();
+        let prompt = eval_config.and_then(|config| config.judge_prompt.clone());
+        let effectiveness_threshold = eval_config
+            .and_then(|c| c.effectiveness_threshold)
+            .unwrap_or(global_effectiveness_threshold);
         let model = judge_model.unwrap_or("gemini-2.5-flash").to_string();
         let is_custom = judge_provider_from_model(&model) == JudgeProvider::Custom;
         Ok(Self {
@@ -71,6 +76,7 @@ impl JudgeEvaluator {
             max_tokens: judge_max_tokens,
             endpoint: judge_endpoint.map(|s| s.to_string()),
             timeout_secs: if is_custom { 120 } else { 300 },
+            effectiveness_threshold,
         })
     }
 }
@@ -222,7 +228,7 @@ impl Evaluator for JudgeEvaluator {
             evaluator: self.id().to_string(),
             rubric_scores,
             effectiveness_score,
-            passed: effectiveness_score >= 1.0,
+            passed: effectiveness_score >= self.effectiveness_threshold,
             judge_rationale: judge_response
                 .overall_rationale
                 .or_else(|| Some("judge completed without rationale".to_string())),
@@ -761,13 +767,22 @@ fn parse_judge_response(raw_text: &str) -> Result<JudgeResponse, EvaluatorError>
         if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(&fenced_json) {
             return Ok(parsed);
         }
+        let sanitized = escape_literal_control_chars(&fenced_json);
+        if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(&sanitized) {
+            return Ok(parsed);
+        }
     }
     let start = raw_text.find('{');
     let end = raw_text.rfind('}');
     if let (Some(start), Some(end)) = (start, end) {
         let candidate = &raw_text[start..=end];
-        return serde_json::from_str::<JudgeResponse>(candidate)
-            .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()));
+        if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(candidate) {
+            return Ok(parsed);
+        }
+        let sanitized = escape_literal_control_chars(candidate);
+        if let Ok(parsed) = serde_json::from_str::<JudgeResponse>(&sanitized) {
+            return Ok(parsed);
+        }
     }
     if std::env::var("AGENTCAROUSEL_DEBUG_JUDGE").ok().as_deref() == Some("1") {
         return Err(EvaluatorError::InvalidOutput(format!(
@@ -862,6 +877,11 @@ struct PromptAuditResponse {
     /// Actual prompt text to paste for each fix — parallel to suggested_fixes.
     #[serde(default)]
     suggested_implementations: Vec<String>,
+    /// Where in prompt.md each implementation goes — parallel to suggested_implementations.
+    /// A unique substring (e.g. "## Instructions") the pipeline can search for with rg
+    /// to locate the insertion point. Empty string means append to end.
+    #[serde(default)]
+    suggested_locations: Vec<String>,
     #[serde(default)]
     overall_rationale: String,
 }
@@ -967,6 +987,7 @@ pub fn run_prompt_audit(
             .into_iter()
             .filter(|s| !s.trim().is_empty())
             .collect(),
+        suggested_locations: parsed.suggested_locations,
         overall_rationale: parsed.overall_rationale,
         judge_tokens_in: tokens_in,
         judge_tokens_out: tokens_out,
@@ -974,7 +995,7 @@ pub fn run_prompt_audit(
 }
 
 fn build_prompt_audit_system_prompt() -> String {
-    r#"You are a prompt-audit judge. You have just seen the results of an agentcarousel eval run.
+    r###"You are a prompt-audit judge. You have just seen the results of an agentcarousel eval run.
 Your job is to diagnose WHY cases are failing and WHERE the fix should be applied.
 
 Classify the primary failure mode as exactly one of:
@@ -1018,6 +1039,10 @@ Return JSON only:
     "<complete markdown block to paste into prompt.md for fix 1 — full worked example, restructured section, or new rule, ready to use as-is>",
     "<complete markdown block to paste into prompt.md for fix 2>"
   ],
+  "suggested_locations": [
+    "<exact section header or unique phrase from prompt.md where fix 1 should be inserted, e.g. '## Instructions' or '## Safety'; empty string to append at end of file>",
+    "<location for fix 2>"
+  ],
   "overall_rationale": "<2–3 sentence synthesis>"
 }
 
@@ -1028,7 +1053,14 @@ Rules for suggested_implementations:
 - Include the restructured section text when the fix is about reorganising a section.
 - Keep each implementation under 800 characters; use \n for line breaks inside the JSON string.
 - If a fix applies only to model or fixture issues (not prompt text), write an empty string "".
-Keep each finding.pattern under 80 chars. Keep each suggested_fix title under 100 chars. JSON only — no prose outside the JSON object."#.to_string()
+
+Rules for suggested_locations (parallel to suggested_implementations, same index):
+- Provide the exact text you would search for with `rg '<pattern>' prompt.md` to locate where the fix belongs.
+- Use the nearest `##` section header (e.g. "## Instructions", "## Safety", "## Examples").
+- If no matching section exists, use "" — the pipeline will append the implementation to the end of prompt.md.
+- The implementation will be inserted at the END of the identified section, before the next `##` header.
+- Never reference line numbers; only use text patterns that uniquely identify the target section.
+Keep each finding.pattern under 80 chars. Keep each suggested_fix title under 100 chars. JSON only — no prose outside the JSON object."###.to_string()
 }
 
 fn build_prompt_audit_user_prompt(prompt_text: &str, results: &[CaseResult]) -> String {
@@ -1090,14 +1122,57 @@ fn parse_prompt_audit_response(raw_text: &str) -> Result<PromptAuditResponse, Ev
         if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(&fenced) {
             return Ok(parsed);
         }
+        // Models sometimes emit literal newlines inside strings (common in suggested_implementations).
+        let sanitized = escape_literal_control_chars(&fenced);
+        if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(&sanitized) {
+            return Ok(parsed);
+        }
     }
     let start = raw_text.find('{');
     let end = raw_text.rfind('}');
     if let (Some(s), Some(e)) = (start, end) {
-        return serde_json::from_str::<PromptAuditResponse>(&raw_text[s..=e])
+        let candidate = &raw_text[s..=e];
+        if let Ok(parsed) = serde_json::from_str::<PromptAuditResponse>(candidate) {
+            return Ok(parsed);
+        }
+        let sanitized = escape_literal_control_chars(candidate);
+        return serde_json::from_str::<PromptAuditResponse>(&sanitized)
             .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()));
     }
     Err(EvaluatorError::InvalidOutput(
         "prompt audit response was not valid JSON".to_string(),
     ))
+}
+
+/// Escape literal newlines and tabs inside JSON string values.
+///
+/// Models generating `suggested_implementations` often emit real `\n` bytes instead of
+/// the JSON escape sequence `\n`, which makes serde_json fail mid-array. This walks the
+/// text character by character, tracking whether we're inside a quoted string, and
+/// replaces bare control characters with their escape equivalents.
+fn escape_literal_control_chars(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 64);
+    let mut in_string = false;
+    let mut escaped = false;
+    for ch in s.chars() {
+        if escaped {
+            out.push(ch);
+            escaped = false;
+        } else if ch == '\\' && in_string {
+            out.push(ch);
+            escaped = true;
+        } else if ch == '"' {
+            in_string = !in_string;
+            out.push(ch);
+        } else if in_string && ch == '\n' {
+            out.push_str("\\n");
+        } else if in_string && ch == '\r' {
+            out.push_str("\\r");
+        } else if in_string && ch == '\t' {
+            out.push_str("\\t");
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }

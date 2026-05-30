@@ -494,8 +494,7 @@ fn resolve_inputs(
                 verbose: 0,
                 json: false,
             },
-        )
-        .map_err(|(code, msg)| (code, msg))?;
+        )?;
     }
     let output_path = fixture_dir.join("cases.yaml");
     Ok((skill_name, description, Some(output_path), vec![]))
