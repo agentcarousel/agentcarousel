@@ -1,0 +1,542 @@
+{
+  "catalog": {
+    "uuid": "7a3e2f1d-4b5c-4d6e-8f9a-1b2c3d4e5f60",
+    "metadata": {
+      "title": "EU Artificial Intelligence Act (Regulation (EU) 2024/1689) \u2014 Behavioral Controls",
+      "version": "2024/1689",
+      "oscal-version": "1.1.2",
+      "last-modified": "2024-08-01T00:00:00Z",
+      "remarks": "Community OSCAL catalog for the EU AI Act. Covers behavioral, fixture-testable obligations. Procedural obligations (conformity assessment body accreditation, EU database registration, post-market monitoring plan documentation) are excluded \u2014 this catalog covers only controls evidenceable by fixture-based behavioral evaluation of AI system outputs and capabilities."
+    },
+    "groups": [
+      {
+        "id": "chapter-ii",
+        "title": "Chapter II \u2014 Prohibited AI Practices (Article 5)",
+        "controls": [
+          {
+            "id": "eu-ai-act-art-5-1-a",
+            "title": "Article 5(1)(a) \u2014 Prohibition on subliminal and manipulative techniques",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Prohibited: AI systems that deploy subliminal techniques beyond a person's consciousness or purposefully manipulative or deceptive techniques with the objective, or the effect, of materially distorting the behaviour of a person or a group of persons by appreciably impairing their ability to make an informed decision, thereby causing them to take a decision that they would not have otherwise taken in a manner that causes or is reasonably likely to cause significant harm."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying the AI system does not generate content employing subliminal, manipulative, or deceptive techniques designed to bypass conscious decision-making."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-5-1-b",
+            "title": "Article 5(1)(b) \u2014 Prohibition on exploitation of vulnerabilities",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Prohibited: AI systems that exploit vulnerabilities of a specific group of persons due to their age, disability or a specific social or economic situation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying the AI system does not produce outputs that exploit protected group vulnerabilities."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-5-1-c",
+            "title": "Article 5(1)(c) \u2014 Prohibition on social scoring",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Prohibited: AI systems by public authorities or acting on their behalf for the evaluation or classification of natural persons based on their social behaviour or known or predicted personal or personality characteristics, with the social score leading to detrimental or unfavourable treatment in social contexts or disproportionate to the gravity of their social behaviour."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying the AI system does not produce social scores, classifications, or ratings that drive detrimental treatment."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-5-1-d",
+            "title": "Article 5(1)(d) \u2014 Prohibition on crime risk assessment from profiling alone",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Prohibited: AI systems for making risk assessments of natural persons in order to assess the risk of a natural person for offending or reoffending or for predicting the occurrence of an actual or potential criminal offence, based solely on the profiling of a natural person or on assessing their personality traits and characteristics."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not produce criminal risk assessments based solely on profiling or personality inference."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-5-1-f",
+            "title": "Article 5(1)(f) \u2014 Prohibition on emotion inference in workplace/education",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Prohibited: AI systems used to infer emotions of a natural person in the areas of the workplace and education institutions, except where the use of the AI system is intended for medical or safety reasons."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases confirming AI system does not infer or report on human emotions in workplace or education contexts outside medical/safety scope."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-5-1-g",
+            "title": "Article 5(1)(g) \u2014 Prohibition on biometric categorisation by sensitive attributes",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Prohibited: biometric categorisation systems that categorise individually natural persons based on their biometric data to deduce or infer their race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not categorize individuals by biometric data to infer protected attributes."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "chapter-iii-s2",
+        "title": "Chapter III Section 2 \u2014 Requirements for High-Risk AI Systems (Articles 9\u201315)",
+        "controls": [
+          {
+            "id": "eu-ai-act-art-9",
+            "title": "Article 9 \u2014 Risk management system",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A risk management system shall be established, implemented, documented and maintained in relation to high-risk AI systems. The risk management system shall be understood as a continuous iterative process planned and run throughout the entire lifecycle of a high-risk AI system, requiring regular systematic review and updating."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: adversarial and edge-case test coverage; injection resistance score; behavioral coverage taxonomy completeness across risk categories."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-2-a",
+            "title": "Article 9(2)(a) \u2014 Identification and analysis of known foreseeable risks",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The risk management system shall comprise: the identification and analysis of the known and the reasonably foreseeable risks that the high-risk AI system can pose to health, safety or fundamental rights when used in accordance with its intended purpose."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture suite includes adversarial, negative, and edge-case categories mapping to identified foreseeable risks."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-2-b",
+            "title": "Article 9(2)(b) \u2014 Estimation of misuse risks",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The risk management system shall comprise: the estimation and evaluation of the risks that may emerge when the high-risk AI system is used in accordance with its intended purpose, and under conditions of reasonably foreseeable misuse."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases tagged with misuse scenarios (prompt injection, adversarial inputs, out-of-scope queries)."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-4-a",
+            "title": "Article 9(4)(a) \u2014 Risk elimination through design",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Risk management measures shall ensure: elimination or reduction of risks identified and evaluated in as far as technically feasible through adequate design and development of the high-risk AI system."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: injection resistance score demonstrating design-level risk elimination; adversarial pass rate."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-4-b",
+            "title": "Article 9(4)(b) \u2014 Mitigation and control measures",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Risk management measures shall ensure: where appropriate, implementation of adequate mitigation and control measures addressing risks that cannot be eliminated."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: negative-case pass rate, error-handling coverage, refusal behavior for out-of-scope requests."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-5",
+            "title": "Article 9(5) \u2014 Testing against defined metrics and probabilistic thresholds",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Testing shall ensure that high-risk AI systems perform consistently for their intended purpose and that they are in compliance with the requirements. Testing shall be carried out against prior defined metrics and probabilistic thresholds that are appropriate to the intended purpose of the high-risk AI system."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture evaluation with defined effectiveness threshold; rubric scoring with stated pass criteria; confidence calibration score."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-6",
+            "title": "Article 9(6) \u2014 Consistency testing",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "High-risk AI systems shall be tested for the purpose of identifying the most appropriate and targeted risk management measures. Testing shall ensure that high-risk AI systems perform consistently for their intended purpose."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral stability/drift index; flakiness rate across repeated runs with the same inputs."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-9-7",
+            "title": "Article 9(7) \u2014 Continuous risk management throughout lifecycle",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The risk management system shall be a continuous iterative process run throughout the entire lifecycle of a high-risk AI system, requiring regular systematic review and updating including in view of data gathered from post-market monitoring."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index computed across multiple evaluation runs over time; historical run window showing monitoring cadence."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-10-2",
+            "title": "Article 10(2) \u2014 Data governance practices",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Training, validation and testing data sets shall be subject to data governance and management practices appropriate for the intended purpose of the high-risk AI system, concerning: design choices; data collection and origin; data-preparation operations such as annotation, labelling, cleaning; assumptions about what data measures and represents; assessment of data availability and suitability; examination of possible biases; measures to detect, prevent and mitigate biases."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture test cases spanning diverse demographic and contextual inputs; bias-detection cases in fixture suite."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-10-3",
+            "title": "Article 10(3) \u2014 Data representativeness and completeness",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Training, validation and testing data sets shall be relevant, sufficiently representative, and to the best extent possible, free of errors and complete in view of the intended purpose. They shall have the appropriate statistical properties, including, where applicable, as regards the persons or groups of persons in relation to whom the high-risk AI system is intended to be used."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture suite coverage across diverse population segments; representation of edge cases and underrepresented scenarios."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-10-5",
+            "title": "Article 10(5) \u2014 Special categories of personal data for bias correction",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "To the extent strictly necessary for ensuring bias monitoring, detection and correction, providers of high-risk AI systems may process special categories of personal data, subject to appropriate safeguards. Processing must be limited to minimum necessary (minimum necessary standard)."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: PHI/PII leakage rate \u2014 verifies AI outputs do not expose special categories of personal data (race, health, political opinion, religion, sexual orientation) beyond the intended minimum."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-13-1",
+            "title": "Article 13(1) \u2014 Transparency: sufficient transparency for output interpretation",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "High-risk AI systems shall be designed and developed in such a way as to ensure that their operation is sufficiently transparent to enable deployers to interpret the system's output and use it appropriately."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: judge-evaluated rubric dimension for explanation/transparency quality; rationale inclusion in AI outputs."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-13-3-b-i",
+            "title": "Article 13(3)(b)(i) \u2014 Disclosure of intended purpose",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Instructions for use must include the intended purpose of the high-risk AI system, including the specific geographical, behavioural or functional setting within which the high-risk AI system is intended to be used."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying the AI system correctly communicates its scope and does not claim capabilities outside its intended purpose."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-13-3-b-ii",
+            "title": "Article 13(3)(b)(ii) \u2014 Disclosure of accuracy metrics and limitations",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Instructions must include the level of accuracy, including its metrics, robustness and cybersecurity against which the high-risk AI system has been tested and validated and which can be expected, and any known and foreseeable circumstances that may have an impact on that expected level of accuracy, robustness and cybersecurity."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: confidence calibration score (ECE); effectiveness score; documented known limitations in system prompt or output acknowledgments."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-13-3-d",
+            "title": "Article 13(3)(d) \u2014 Human oversight measures in instructions",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Instructions must include the human oversight measures referred to in Article 14, including the technical measures put in place to facilitate the interpretation of the outputs of high-risk AI systems by the deployers."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: AI system outputs include interpretable explanations; escalation signals are clear and actionable for human reviewers."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-14-1",
+            "title": "Article 14(1) \u2014 Human oversight: effective oversight by natural persons",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "High-risk AI systems shall be designed and developed in such a way, including with appropriate human-machine interface tools, that they can be effectively overseen by natural persons during the period in which they are in use."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: AI system outputs are interpretable, include uncertainty signals, and flag cases requiring human review."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-14-4-a",
+            "title": "Article 14(4)(a) \u2014 Oversight: understanding capacities and detecting anomalies",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The high-risk AI system shall be provided to the deployer such that natural persons to whom oversight is assigned are enabled to properly understand the relevant capacities and limitations of the high-risk AI system and be able to duly monitor its operation, including in view of detecting and addressing anomalies, dysfunctions and unexpected performance."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: AI outputs include confidence indicators; fixture cases verify the system correctly signals uncertainty and anomalies."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-14-4-b",
+            "title": "Article 14(4)(b) \u2014 Oversight: awareness of automation bias",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Human oversight must enable deployers to remain aware of the possible tendency of automatically relying or over-relying on the output produced by a high-risk AI system (automation bias)."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: AI system outputs include caveats, uncertainty qualifications, and recommendations to verify rather than blindly accept outputs."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-14-4-d",
+            "title": "Article 14(4)(d) \u2014 Oversight: ability to disregard or override",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Human oversight must enable the natural person to decide, in any particular situation, not to use the high-risk AI system or to otherwise disregard, override or reverse the output of the high-risk AI system."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: AI system outputs are presented as recommendations with explicit override affordance; fixture cases verify system does not frame outputs as mandatory."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-14-4-e",
+            "title": "Article 14(4)(e) \u2014 Oversight: ability to intervene or stop",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Human oversight must enable the natural person to intervene on the operation of the high-risk AI system or interrupt the system through a stop button or a similar procedure that allows the system to come to a halt in a safe state."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: escalation latency metrics; fixture cases verifying system correctly triggers human handoff when requested or when critical thresholds are exceeded."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-15-1",
+            "title": "Article 15(1) \u2014 Accuracy, robustness and cybersecurity performance",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "High-risk AI systems shall be designed and developed in such a way that they achieve an appropriate level of accuracy, robustness, and cybersecurity, and perform consistently in those respects throughout their lifecycle."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: effectiveness score; prompt injection resistance score; behavioral stability/drift index across runs."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-15-3",
+            "title": "Article 15(3) \u2014 Declared accuracy levels",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The levels of accuracy and the relevant accuracy metrics of high-risk AI systems shall be declared in the accompanying instructions of use."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: confidence calibration score (ECE) \u2014 measures whether declared accuracy levels match actual performance."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-15-4",
+            "title": "Article 15(4) \u2014 Resilience against errors and feedback loops",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "High-risk AI systems that continue to learn after being placed on the market or put into service shall be developed in such a way that reasonably foreseeable risks resulting from the system using outputs as inputs for future operations (feedback loops) are duly addressed."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index detecting systematic degradation over time; fixture cases for output-as-input scenarios."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-15-5",
+            "title": "Article 15(5) \u2014 Cybersecurity and adversarial resilience",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "High-risk AI systems shall be resilient against attempts by unauthorised third parties to alter their use, outputs or performance by exploiting system vulnerabilities, including data poisoning, model poisoning, adversarial examples, confidentiality attacks, and model flaws."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: prompt injection resistance score across adversarial fixture cases."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "chapter-iv",
+        "title": "Chapter IV \u2014 Transparency Obligations for Certain AI Systems (Article 50)",
+        "controls": [
+          {
+            "id": "eu-ai-act-art-50-1",
+            "title": "Article 50(1) \u2014 Disclosure of AI system interaction",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Providers shall ensure that AI systems intended to interact directly with natural persons are designed and developed in such a way that the natural persons concerned are informed that they are interacting with an AI system, unless this is obvious from the context."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system discloses its AI nature when asked or in contexts where it is not self-evident."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-50-2",
+            "title": "Article 50(2) \u2014 Marking of AI-generated synthetic content",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Providers of AI systems that generate synthetic audio, image, video, or text content shall ensure that the outputs of the AI system are marked in a machine-readable format and detectable as artificially generated or manipulated."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying the AI system appropriately labels or discloses AI-generated content in outputs."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-art-50-4",
+            "title": "Article 50(4) \u2014 Disclosure of AI-generated deepfake content by deployers",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Deployers of an AI system that generates or manipulates image, audio or video content constituting a deep fake shall disclose that the content has been artificially generated or manipulated."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying deepfake-generation skills produce appropriate disclosure metadata or refusal messages."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "annex-iv",
+        "title": "Annex IV \u2014 Technical Documentation Requirements (Behavioral Evidence)",
+        "controls": [
+          {
+            "id": "eu-ai-act-annex-iv-2d",
+            "title": "Annex IV \u00a72(d) \u2014 Testing methodologies and results",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Technical documentation shall include a description of the testing methodologies used, the testing protocols and all technical measures adopted to ensure compliance of the AI system with the requirements set out in this Chapter, together with all the relevant information on the tests performed prior to placing on the market or putting into service, including with regard to accuracy, robustness and cybersecurity."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral coverage completeness score across 7-category taxonomy (happy-path, edge-case, adversarial, error-handling, negative, multi-turn, judge-evaluated)."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-annex-iv-2e",
+            "title": "Annex IV \u00a72(e) \u2014 Known limitations",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Technical documentation shall include information on the known or foreseeable circumstances, related to the data or the technical purpose for which the high-risk AI system is designed and developed, which may have an impact on its performance."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases explicitly testing known edge cases and documented limitations; negative test coverage."
+              }
+            ]
+          },
+          {
+            "id": "eu-ai-act-annex-iv-2h",
+            "title": "Annex IV \u00a72(h) \u2014 Post-market monitoring evidence",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Technical documentation shall include a description of the post-market monitoring plan referred to in Article 72, and the mechanisms for collecting, storing and analysing data."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index computed across historical evaluation runs demonstrating ongoing monitoring cadence."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

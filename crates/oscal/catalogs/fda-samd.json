@@ -1,0 +1,276 @@
+{
+  "catalog": {
+    "uuid": "d4e5f6a7-b8c9-0123-def0-234567890123",
+    "metadata": {
+      "title": "FDA Software as a Medical Device (SaMD) \u2014 AI/ML Behavioral Controls",
+      "version": "2021-2024",
+      "oscal-version": "1.1.2",
+      "last-modified": "2024-01-12T00:00:00Z",
+      "remarks": "Community OSCAL catalog based on: (1) FDA Action Plan for AI/ML-Based Software as a Medical Device (January 2021); (2) IMDRF/SaMD WG/N41FINAL:2017 Software as a Medical Device: Possible Framework for Risk Categorization; (3) IMDRF/SaMD WG/N47:2021 Software as a Medical Device (SaMD): Application of Quality Management System; (4) FDA Guidance on Clinical Decision Support Software (2022); (5) Joint Commission National Patient Safety Goals (NPSG). Covers behavioral controls verifiable through fixture-based evaluation of clinical AI systems."
+    },
+    "groups": [
+      {
+        "id": "samd-performance",
+        "title": "SaMD Analytical and Clinical Performance",
+        "controls": [
+          {
+            "id": "fda-samd-analytical-validation",
+            "title": "Analytical Validation \u2014 System performs as intended on test inputs",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI/ML-based SaMD must demonstrate analytical validation: the system performs as intended on clinically representative inputs, including normal cases, edge cases, and cases at the clinical decision boundary."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: effectiveness score across happy-path, edge-case, and boundary fixture cases; pass rate for clinical-scenario test suite."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-clinical-validation",
+            "title": "Clinical Validity \u2014 Clinical claims substantiated by evidence",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI/ML-based SaMD outputs that constitute clinical claims or recommendations must be supported by valid clinical evidence. Outputs must not contain unsupported clinical assertions or hallucinations."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: hallucination density metric \u2014 judge-evaluated rubric scores on citation, evidence, and clinical-validity dimensions. Fixture cases require AI system to cite clinical basis for recommendations."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-clinical-utility",
+            "title": "Clinical Utility \u2014 AI recommendations improve clinical outcomes",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI/ML-based SaMD must demonstrate clinical utility: that use of the device improves or does not harm patient health outcomes compared to standard of care."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases comparing AI recommendations to clinical gold standards; rubric dimensions for clinical appropriateness of recommendations."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-ml-action-plan-robust",
+            "title": "AI/ML Action Plan \u2014 Robustness and resilience testing",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Per the FDA AI/ML Action Plan (January 2021), AI/ML-based SaMD should be tested for robustness under conditions of distribution shift, adversarial inputs, and edge cases relevant to the intended clinical use. Testing should address performance across patient subgroups."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: adversarial fixture pass rate; edge-case and boundary condition coverage; performance across demographic subgroups in fixture inputs."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-ml-action-plan-bias",
+            "title": "AI/ML Action Plan \u2014 Bias and equity in clinical AI",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI/ML-based SaMD must be evaluated for algorithmic bias across patient demographic groups. Disparate performance that could lead to inequitable clinical care must be identified and mitigated."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases covering diverse patient demographic inputs; rubric dimensions for equitable recommendations across age, sex, race, and socioeconomic factors."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-predetermination-change",
+            "title": "Predetermined Change Control Plan (PCCP) \u2014 Pre-specified performance changes",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "For adaptive AI/ML algorithms, a Predetermined Change Control Plan shall specify the types of anticipated modifications, the methodology for implementing modifications, the performance evaluation methods for validating modifications."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index detecting whether model updates change performance within or outside PCCP boundaries; certification track promotion workflow constitutes change control gate."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "samd-safety",
+        "title": "SaMD Patient Safety Requirements",
+        "controls": [
+          {
+            "id": "fda-samd-npsg.15.01.01",
+            "title": "NPSG.15.01.01 \u2014 Reduce risk of suicide and self-harm: escalation reliability",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Per Joint Commission NPSG.15.01.01: AI/ML systems in behavioral health or any clinical setting must reliably identify patients at risk for suicide or self-harm and escalate with sufficient precision and recall to prevent missed critical safety events."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: escalation precision/recall (TP/FN/FP/TN), F1 score, and confusion matrix across cases tagged with escalation scenarios. False-negative rate on safety escalation is the primary metric."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-npsg.06.01.01",
+            "title": "NPSG.06.01.01 \u2014 Clinical alarm safety",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI systems generating clinical alerts or alarms must be appropriately calibrated to minimize alarm fatigue while maintaining sensitivity for critical events. False-positive alarm rates must be clinically acceptable."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: escalation precision \u2014 measures false alarm rate. Fixture cases include both true-positive and false-positive escalation scenarios to calibrate alarm specificity."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-imdrf-n47-safety",
+            "title": "IMDRF N47 \u2014 Quality management system for SaMD",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Per IMDRF/SaMD WG/N47, SaMD shall implement a quality management system that includes design controls, risk management, verification and validation, and post-market surveillance activities."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture-based evaluation (design controls, V&V); behavioral drift index (post-market surveillance); certification track lifecycle (QMS gate)."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-imdrf-n47-workflow",
+            "title": "IMDRF N47 \u2014 Clinical workflow integration and escalation timing",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "SaMD intended to inform clinical management shall integrate with clinical workflows such that time-critical escalation outputs are delivered within clinically acceptable latency bounds. Excessive latency in AI-generated clinical recommendations may cause patient harm."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: escalation latency p50/p95 milliseconds across escalation-tagged fixture cases. Grading: <1000ms = Excellent, <3000ms = Good, <6000ms = Fair, >6000ms = Poor."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-imdrf-n41-risk-cat",
+            "title": "IMDRF N41 \u2014 SaMD risk categorization",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Per IMDRF N41, SaMD risk is categorized based on the significance of the information provided by the SaMD to the healthcare decision (treat/diagnose/inform) and the state of the healthcare situation (critical/serious/non-serious). Higher risk categories require more rigorous validation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: risk_tier field in fixture metadata maps to IMDRF risk category; higher risk_tier fixtures require higher effectiveness_threshold and broader test coverage."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "clinical-decision-support",
+        "title": "FDA Clinical Decision Support Software Guidance (2022)",
+        "controls": [
+          {
+            "id": "fda-samd-cds-transparency",
+            "title": "CDS Guidance \u2014 Display of basis for recommendation (Non-Device CDS criterion)",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "For clinical decision support software to qualify as non-device CDS, the software must display the basis for each recommendation such that the clinician can independently review the basis and not rely primarily on the software's recommendation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: rubric dimensions for recommendation transparency and citation quality; fixture cases requiring AI to explain the clinical basis for each recommendation; hallucination density metric."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-cds-intended-audience",
+            "title": "CDS Guidance \u2014 Intended for healthcare professionals",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Non-device CDS must be intended for use by a healthcare professional who can independently review the basis for the recommendation, and not primarily intended for patients or lay users unless the recommendation can be self-verified."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI appropriately qualifies clinical recommendations as requiring professional review; refusal to provide autonomous clinical decisions to lay users."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-cds-not-serious",
+            "title": "CDS Guidance \u2014 Serious or critical situations requiring CDS device pathway",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "CDS software intended for serious or critical conditions (where delay or error could result in death or serious injury) is subject to FDA device oversight and must meet SaMD requirements."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases for critical clinical scenarios (sepsis, stroke, cardiac events) with high effectiveness_threshold requirements; escalation reliability metrics."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "post-market",
+        "title": "Post-Market Surveillance and Real-World Performance",
+        "controls": [
+          {
+            "id": "fda-samd-post-market-surveillance",
+            "title": "Post-Market Surveillance \u2014 Ongoing performance monitoring",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI/ML SaMD manufacturers must conduct post-market surveillance to monitor real-world performance and identify performance degradation, distributional shifts, or unexpected failure modes in deployed systems."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index across post-deployment evaluation runs; scheduled re-attestation runs; model-scoped compliance reports showing performance over time."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-real-world-performance",
+            "title": "Real-World Performance \u2014 Monitoring plan for adaptive algorithms",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "For continuously-learning AI/ML algorithms, a real-world performance monitoring plan shall specify how the algorithm's performance will be assessed after deployment, including the criteria for triggering a design change."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: drift index thresholds defining when behavioral change triggers re-evaluation; periodic evaluation runs documented with timestamps and model versions."
+              }
+            ]
+          },
+          {
+            "id": "fda-samd-medical-device-reporting",
+            "title": "Medical Device Reporting \u2014 AI system malfunction reporting",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Manufacturers of SaMD must report to FDA when the device malfunctions and the malfunction would be likely to cause or contribute to a serious injury if it were to recur."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: structured failure records in run JSON with root-cause classification (agc audit); evidence tarballs providing immutable incident documentation for MDR submission."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

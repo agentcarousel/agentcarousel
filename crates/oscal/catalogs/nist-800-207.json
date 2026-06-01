@@ -1,0 +1,290 @@
+{
+  "catalog": {
+    "uuid": "e5f6a7b8-c9d0-1234-ef01-345678901234",
+    "metadata": {
+      "title": "NIST SP 800-207 \u2014 Zero Trust Architecture Behavioral Controls",
+      "version": "2020",
+      "oscal-version": "1.1.2",
+      "last-modified": "2020-08-11T00:00:00Z",
+      "remarks": "Community OSCAL catalog for NIST SP 800-207 Zero Trust Architecture (August 2020). Covers behavioral controls applicable to AI skills operating in zero-trust environments, particularly RBAC validation, privilege analysis, least-privilege enforcement, and policy decision point consistency. Source: NIST SP 800-207 (https://doi.org/10.6028/NIST.SP.800-207)."
+    },
+    "groups": [
+      {
+        "id": "zt-tenets",
+        "title": "Zero Trust Tenets (Section 2)",
+        "controls": [
+          {
+            "id": "nist-800-207-tenet-1-all-resources",
+            "title": "Tenet 1 \u2014 All data sources and computing services are resources",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "All data sources and computing services are considered resources. A network is never implicitly trusted. All communication must be secured regardless of network location."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not infer trust based on network location or resource label alone; correct identification of all resource types as requiring authorization."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-tenet-2-secure-communication",
+            "title": "Tenet 2 \u2014 All communication is secured regardless of network location",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "All communication is secured regardless of network location. Network location alone does not imply trust."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing whether AI system incorrectly grants elevated trust to 'internal' vs. 'external' requestors."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-tenet-3-per-session-access",
+            "title": "Tenet 3 \u2014 Access granted per-session with least privilege",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Access to individual enterprise resources is granted on a per-session basis. Trust in the requester is evaluated before access is granted. Access should be granted with least privileges needed for the task."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI correctly enforces per-session least-privilege access; no residual elevation from prior sessions; least-privilege detection accuracy."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-tenet-4-dynamic-policy",
+            "title": "Tenet 4 \u2014 Access determined by dynamic policy",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Access to resources is determined by dynamic policy \u2014 including the observable state of client identity, application/service, and the requesting asset \u2014 and may include other behavioral and environmental attributes."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing AI system's ability to evaluate dynamic, context-dependent access decisions rather than static role assignments alone."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-tenet-5-asset-integrity",
+            "title": "Tenet 5 \u2014 All owned and associated assets have integrity and security posture monitored",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The enterprise monitors and measures the integrity and security posture of all owned and associated assets. No asset is inherently trusted."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI correctly identifies assets with compromised or unverified security posture as requiring elevated scrutiny."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-tenet-6-dynamic-authentication",
+            "title": "Tenet 6 \u2014 All resource authentication and authorization is dynamic and strictly enforced",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "All resource authentication and authorization is dynamic and strictly enforced before access is allowed. The enterprise uses a continual process of obtaining access, scanning and assessing threats, adapting, and continually reevaluating trust in ongoing communication."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral consistency score \u2014 same request must yield same policy decision; behavioral stability/drift index detecting when AI policy decisions change unexpectedly."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-tenet-7-telemetry",
+            "title": "Tenet 7 \u2014 Collect information to improve security posture",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The enterprise collects as much information as possible about the current state of assets, network infrastructure and communications and uses it to improve its security posture."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: execution trace in CaseResult provides telemetry of AI policy decision steps; audit logs of all AI access decisions."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "pep-pdp",
+        "title": "Policy Enforcement Point / Policy Decision Point Architecture",
+        "controls": [
+          {
+            "id": "nist-800-207-pep-enforcement",
+            "title": "PEP \u2014 Policy Enforcement Point behavioral consistency",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The Policy Enforcement Point (PEP) is responsible for enabling, monitoring, and eventually terminating connections between a subject and enterprise resource. The PEP must behave consistently \u2014 the same access request must yield the same policy decision regardless of input framing or request ordering."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral stability score; fixture cases with identical RBAC inputs run multiple times verifying consistent access decisions; drift index detecting when policy decisions change."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-pdp-policy-engine",
+            "title": "PDP \u2014 Policy Engine decision accuracy",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The Policy Engine is responsible for the ultimate decision to grant access to a resource for a given subject. The PE uses enterprise policy and input from external sources as input to a trust algorithm to grant, deny, or revoke access."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: effectiveness score on access-decision fixture cases; precision/recall on privilege detection; false-negative rate on access grant where access should be denied."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-cdm-system",
+            "title": "CDM System \u2014 Continuous Diagnostics and Mitigation",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The CDM system gathers information about the current state of the enterprise assets and applications and sends that data to the policy engine. AI systems supporting CDM must accurately assess and report device/user posture."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI correctly identifies and reports security posture anomalies and risk indicators."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "access-control",
+        "title": "Zero Trust Access Control Requirements",
+        "controls": [
+          {
+            "id": "nist-800-207-least-privilege",
+            "title": "Least-Privilege Access Enforcement",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Access to resources shall be granted on a least-privilege basis. AI systems evaluating access rights shall correctly identify over-privileged roles and group assignments. The minimum permissions needed to perform a task should be the only permissions granted."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: effectiveness score on least-privilege analysis fixture cases; false-negative rate on over-privilege detection (missed privilege escalation risks are the critical failure mode)."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-privileged-access-detection",
+            "title": "Privileged Access Detection Accuracy",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI systems assisting with privileged access management shall accurately classify roles and permissions as privileged or non-privileged. Privileged accounts shall include those with administrative capabilities, write access to sensitive resources, or ability to modify security controls."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: precision/recall on privileged-role-detection fixture cases; judge-evaluated rubric scores on privilege classification accuracy and reasoning quality."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-rbac-validation",
+            "title": "RBAC Validation \u2014 Role-Based Access Control correctness",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI systems performing role-based access control validation must correctly evaluate whether roles and group assignments comply with defined access control policies, including separation of duties, need-to-know principles, and privilege boundaries."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing RBAC policy compliance analysis; effectiveness score on role-assignment validation; cases covering separation-of-duties violations, toxic combinations, and orphaned high-privilege accounts."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-group-membership-analysis",
+            "title": "Group Membership Least-Privilege Analysis",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "AI systems analyzing group memberships shall determine whether groups are assigned the minimum privileges necessary for their function, and whether individual group members have appropriate access given their roles and responsibilities."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing group-level least-privilege analysis; precision/recall on identifying over-privileged groups; rubric dimensions for quality of privilege justification recommendations."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-continuous-validation",
+            "title": "Continuous Trust Validation",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Trust is never implicitly granted and never assumed to persist. AI systems operating in ZTA must be continuously re-evaluated against current policy, not cached decisions from prior evaluations. Temporal validity of access grants must be enforced."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index detecting when model access-decision behavior changes across evaluation periods, indicating trust re-validation is needed; time-bounded fixture cases."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-implicit-trust-rejection",
+            "title": "Implicit Trust Rejection",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Zero trust explicitly removes implicit trust granted to assets or user accounts based solely on their physical or network location. AI systems must not grant elevated permissions based on network segment, IP address range, or other location-based proxies alone."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: adversarial fixture cases where requests include false 'internal network' context; AI must reject location-based implicit trust claims."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "zt-deployment",
+        "title": "Zero Trust Deployment Scenarios (Section 5)",
+        "controls": [
+          {
+            "id": "nist-800-207-device-agent",
+            "title": "Device Agent/Gateway \u2014 Device trust evaluation",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "In the Device Agent/Gateway deployment model, each device has an installed agent that handles policy enforcement. AI systems must correctly evaluate device compliance posture as part of access decisions."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases for device-based access requests; AI correctly incorporates device compliance status in privilege analysis."
+              }
+            ]
+          },
+          {
+            "id": "nist-800-207-service-mesh",
+            "title": "Microsegmentation \u2014 Service-to-service access control",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "In microsegmented ZTA, AI systems analyzing service-to-service communication must correctly identify lateral movement risk, over-permissive service accounts, and violations of service communication policy."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases for service account privilege analysis; detection of overly permissive service-to-service permissions."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

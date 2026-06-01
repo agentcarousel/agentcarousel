@@ -1,0 +1,636 @@
+{
+  "catalog": {
+    "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "metadata": {
+      "title": "ISO/IEC 42001:2023 \u2014 AI Management System Standard \u2014 Complete Annex A Controls",
+      "version": "2023",
+      "oscal-version": "1.1.2",
+      "last-modified": "2023-12-01T00:00:00Z",
+      "remarks": "Community OSCAL catalog for ISO/IEC 42001:2023. Covers all 38 controls in Annex A (A.2 through A.10) across 9 control objective groups. Source: ISO/IEC 42001:2023 standard with reference to https://orbit.reconn.io/iso-42001-controls-guide/. Controls with behavioral fixture evidence noted in guidance sections."
+    },
+    "groups": [
+      {
+        "id": "a2",
+        "title": "A.2 \u2014 Policies for AI (3 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.2.2",
+            "title": "A.2.2 \u2014 AI Policy",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall establish an AI policy informed by business strategy, organizational values, risk levels, legal requirements, and risk environment. The AI policy shall include principles guiding AI activity and processes for handling exceptions."
+              },
+              {
+                "name": "guidance",
+                "prose": "Procedural control: AI policy document required. Behavioral evidence: fixture cases verify AI system behavior conforms to stated policy principles (e.g., safety, fairness, transparency)."
+              }
+            ],
+            "props": [
+              {
+                "name": "evidence-type",
+                "value": "procedural"
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.2.3",
+            "title": "A.2.3 \u2014 Alignment with Other Organisational Policies",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall analyze intersections between AI activities and existing policies (quality, security, privacy, safety, ethics) with updates ensuring consistency across the organization."
+              },
+              {
+                "name": "guidance",
+                "prose": "Procedural control: policy alignment documentation required. Behavioral evidence: fixture suite spans multiple policy domains (security, privacy, safety) to verify consistent behavior across policy boundaries."
+              }
+            ],
+            "props": [
+              {
+                "name": "evidence-type",
+                "value": "procedural"
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.2.4",
+            "title": "A.2.4 \u2014 Review of the AI Policy",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A named, management-approved role shall own periodic reviews of the AI policy, triggered by material organizational, strategic, legal, or technological changes, with documented review cycles and records."
+              },
+              {
+                "name": "guidance",
+                "prose": "Procedural control: review records required. Behavioral evidence: fixture suite re-run after policy changes; drift index detecting behavioral deviations from updated policy."
+              }
+            ],
+            "props": [
+              {
+                "name": "evidence-type",
+                "value": "procedural"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a3",
+        "title": "A.3 \u2014 Internal Organisation (2 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.3.2",
+            "title": "A.3.2 \u2014 Roles and Responsibilities Related to AI",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall explicitly define and communicate AI-specific roles, accountability structures for system risk, review authority, escalation pathways, and halt authority."
+              },
+              {
+                "name": "guidance",
+                "prose": "Procedural control: RACI or similar documentation required. Behavioral evidence: fixture cases verifying AI system correctly escalates to the appropriate role when authority boundaries are reached."
+              }
+            ],
+            "props": [
+              {
+                "name": "evidence-type",
+                "value": "procedural"
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.3.3",
+            "title": "A.3.3 \u2014 Reporting of Concerns Regarding AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall establish a formal mechanism enabling personnel to raise AI concerns without retaliation, distinct from general event logging."
+              },
+              {
+                "name": "guidance",
+                "prose": "Procedural control: concern-reporting channel required. Behavioral evidence: fixture cases verify AI system encourages reporting of problematic outputs and does not suppress concerns."
+              }
+            ],
+            "props": [
+              {
+                "name": "evidence-type",
+                "value": "procedural"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a4",
+        "title": "A.4 \u2014 Resources for AI Systems (6 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.4.1",
+            "title": "A.4.1 \u2014 AI System Inventory",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall maintain a current inventory of AI systems within scope, updated as systems are deployed, modified, or decommissioned."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture metadata (skill_or_agent, bundle_id, bundle_version, certification_track) constitutes a machine-readable AI system inventory entry."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.4.2",
+            "title": "A.4.2 \u2014 Resource Documentation",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall document the resources each AI system uses: components, data, tooling, computing infrastructure, and human expertise required for its operation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: environment_fingerprint.json in evidence tarball documents OS, arch, agentcarousel version, git SHA; run summary documents generator_model, tokens, and cost."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.4.3",
+            "title": "A.4.3 \u2014 Data Resources",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall document data resources covering provenance, update dates, categories, labelling processes, intended use, quality, retention, known bias issues, and preparation steps."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: data_handling field (synthetic-only, no-pii, pii-reviewed) and fixture case metadata document data resource characteristics; REDACTION_POLICY.md in evidence tarball."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.4.4",
+            "title": "A.4.4 \u2014 Tooling Resources",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall document algorithmic types, ML models, data conditioning tools, evaluation methods, and development and deployment tooling."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: run summary documents generator_model, judge_model, and evaluator type; evaluator_config in fixture YAML documents evaluation tooling."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.4.5",
+            "title": "A.4.5 \u2014 System and Computing Resources",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall document hardware, hosting environment, processing and storage resources, and environmental impact."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: environment_fingerprint.json in evidence tarball documents OS, architecture, and execution environment."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.4.6",
+            "title": "A.4.6 \u2014 Human Resources",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall document that required expertise is available for development, deployment, and operation of AI systems, including diverse demographic representation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Procedural control: staffing documentation required. Behavioral evidence: diverse authorship of fixture cases and rubric dimensions."
+              }
+            ],
+            "props": [
+              {
+                "name": "evidence-type",
+                "value": "procedural"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a5",
+        "title": "A.5 \u2014 Assessing Impacts of AI Systems (3 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.5.2",
+            "title": "A.5.2 \u2014 AI System Impact Assessment Process",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall establish a repeatable, documented methodology for assessing potential impacts of the AI system on individuals, groups, and society, applied consistently across systems."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral coverage completeness score across 7-category risk taxonomy provides a repeatable impact assessment methodology."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.5.3",
+            "title": "A.5.3 \u2014 Internal Impact Assessment of AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall conduct impact assessments examining discriminatory outcomes, privacy violations, safety risks, and societal effects, with results feeding into deployment decisions."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases covering bias, privacy, and safety scenarios; effectiveness scores used in deployment (certification_track promotion) decisions."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.5.4",
+            "title": "A.5.4 \u2014 Functionality and Behaviour of the AI System",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall ensure systems function as intended with deviation detection and remediation mechanisms during operation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: behavioral drift index detecting functional deviations; regression gate in agc compare; behavioral stability score."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a6",
+        "title": "A.6 \u2014 AI System Life Cycle (10 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.6.1.1",
+            "title": "A.6.1.1 \u2014 Design of the AI System",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Requirements and design specifications shall be documented before development, reflecting intended use case, identified risks, and governance constraints."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture YAML schema_version, skill_or_agent, and case descriptions document design specifications; risk_tier and certification_track reflect governance constraints."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.1.2",
+            "title": "A.6.1.2 \u2014 Data for Development and Enhancement",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall govern development data covering privacy and security, data-dependent threats, transparency and explainability, training data representativeness, and accuracy and integrity."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: data_handling field; synthetic-only fixtures verifying system behavior without real PII; bias-detection test cases."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.1.3",
+            "title": "A.6.1.3 \u2014 AI System Development Documentation",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Documentation shall be maintained throughout development capturing design decisions, testing, validation, and changes creating audit trails."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: git history of fixture changes; signed evidence tarballs with run ID, started_at, finished_at, and config_hash provide immutable audit trail."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.1.4",
+            "title": "A.6.1.4 \u2014 Addressing Bias in Data",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall implement explicit controls for identifying, assessing, and addressing bias in training and operational data."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing diverse demographic inputs; rubric dimensions for fairness and non-discrimination; bias-tagged test coverage."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.1.5",
+            "title": "A.6.1.5 \u2014 Robustness of AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall test that AI systems maintain intended performance under adversarial conditions, edge cases, and unexpected inputs."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: injection resistance score; adversarial fixture pass rate; edge-case coverage in behavioral taxonomy."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.2.1",
+            "title": "A.6.2.1 \u2014 AI System Operational Concept",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall document the operational deployment specifying users, use cases, interfaces, and constraints defining correct operation."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: skill_or_agent metadata; fixture case descriptions defining intended users and use cases; system prompt documentation."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.2.2",
+            "title": "A.6.2.2 \u2014 AI System Testing",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall conduct structured pre-deployment testing verifying specified performance with documented scope, methodology, data, results, and sign-off."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: full fixture-based evaluation (agc eval) with run JSON documenting methodology, results, and version; certification_track promotion constitutes sign-off."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.2.3",
+            "title": "A.6.2.3 \u2014 Human Oversight of AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Reviewers shall have genuine override authority; AI system output accuracy and consistency shall be monitored; functioning concern-reporting mechanisms shall be maintained; and oversight appropriateness shall be assessed for each use case."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: escalation latency (p50/p95 ms); escalation precision/recall; fixture cases verifying override signals are clear and actionable."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.2.4",
+            "title": "A.6.2.4 \u2014 AI System Event Logs",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall log AI system use (time, date, production data, out-of-range outputs) retained per intended use and legal requirements."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: execution trace in CaseResult (steps, final_output, latency_ms, tokens); run JSON with started_at, finished_at; history DB persistence."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.6.2.5",
+            "title": "A.6.2.5 \u2014 AI System Deployment",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall maintain a documented deployment plan verifying all requirements met before live operation, including specifications, testing, impact assessments, oversight, and documentation completion."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: certification_track: trusted status represents deployment readiness; evidence tarball constitutes deployment gate documentation."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a7",
+        "title": "A.7 \u2014 Data for AI Systems (4 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.7.2",
+            "title": "A.7.2 \u2014 Data for Development and Enhancement of AI System",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall manage operational data covering privacy and security, data-dependent threats, transparency and explainability, training and operational representativeness, and accuracy and integrity."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: data_handling classification; PHI leakage rate; fixture cases testing data representativeness across diverse scenarios."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.7.3",
+            "title": "A.7.3 \u2014 Acquisition of Data",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall govern data sourcing covering categories, quantities, sources, source characteristics, subject demographics, prior handling, data rights, labelling metadata, and provenance."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: bundle_id and bundle_version in fixture metadata provide data provenance; data_handling field documents acquisition category."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.7.4",
+            "title": "A.7.4 \u2014 Quality of Data",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall define quality criteria (accuracy, completeness, consistency, timeliness) and maintain processes detecting and remediating quality issues throughout the system lifecycle."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture validation (agc validate) enforces schema quality; effectiveness score measures output accuracy quality; calibration score tracks score consistency."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.7.5",
+            "title": "A.7.5 \u2014 Processing of Personal Information",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall implement controls for appropriate personal data handling within AI systems connecting to existing privacy frameworks."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: PHI leakage rate; data_handling: synthetic-only or no-pii classification; REDACTION_POLICY.md in evidence tarball."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a8",
+        "title": "A.8 \u2014 Information for Interested Parties (5 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.8.2",
+            "title": "A.8.2 \u2014 Characteristics of AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall make available information about system characteristics including intended use, capabilities, limitations, and conditions for non-use."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture case descriptions document system characteristics; Certification Scope and Limitations in evidence export explicitly discloses capabilities and limitations."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.8.3",
+            "title": "A.8.3 \u2014 AI System Disclosure",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Appropriate disclosure shall be made when individuals interact with or are subject to AI system decisions, context-dependent per jurisdiction."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing whether AI system discloses its AI nature; transparency rubric dimensions."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.8.4",
+            "title": "A.8.4 \u2014 Communication of Limitations",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall inform users and affected parties of known limitations, accuracy degradation conditions, edge cases, and identified biases."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: confidence calibration score; rubric dimensions testing whether AI system appropriately qualifies its outputs and discloses uncertainty."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.8.5",
+            "title": "A.8.5 \u2014 Communication of Intended Use",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall clearly communicate system design purposes and non-purposes, preventing out-of-scope use."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: negative fixture cases verifying AI system correctly refuses out-of-scope requests and communicates scope boundaries."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.8.6",
+            "title": "A.8.6 \u2014 Communication of Changes",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall maintain processes for communicating material system changes to affected parties upon updates, retraining, or intended use modifications."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: bundle_version versioning in fixture metadata tracks system changes; re-attestation workflow documents model updates."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a9",
+        "title": "A.9 \u2014 Responsible Use of AI Systems (3 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.9.2",
+            "title": "A.9.2 \u2014 Intended Use of AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall implement operational safeguards, user training, and monitoring mechanisms ensuring systems operate only within intended purposes."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: negative and out-of-scope fixture cases verifying behavioral limits; injection resistance ensuring adversarial prompt attempts to expand scope are blocked."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.9.3",
+            "title": "A.9.3 \u2014 Responsibilities and Obligations for Appropriate Use",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall clearly document responsibilities for appropriate use including contractual terms, user agreements, and internal accountability structures."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: evidence tarball Certification Scope and Limitations section documents use obligations and re-attestation responsibilities."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.9.4",
+            "title": "A.9.4 \u2014 Addressing Misuse of AI Systems",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall implement mechanisms for detecting, responding to, and learning from misuse instances by internal actors, external users, or adversarial parties."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: prompt injection resistance score; adversarial fixture pass rate; agc audit root-cause classification of misuse-driven failures."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a10",
+        "title": "A.10 \u2014 Third-Party and Customer Relationships (2 controls)",
+        "controls": [
+          {
+            "id": "iso-42001-a.10.2",
+            "title": "A.10.2 \u2014 Suppliers and Third Parties",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall govern external AI relationships covering due diligence, contractual requirements, and ongoing oversight of sourced components, models, or services."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: bundle trust-check verifying third-party fixture bundle attestation; generator_model field tracking third-party model provenance; bundle manifest SHA256 hashes ensuring supply chain integrity."
+              }
+            ]
+          },
+          {
+            "id": "iso-42001-a.10.3",
+            "title": "A.10.3 \u2014 Responsibilities Along the AI Life Cycle",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "The organization shall clearly allocate responsibilities where multiple organizations share AI system lifecycle responsibilities across development, deployment, and operation stages."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: certification_track and bundle_id in fixture metadata attribute lifecycle responsibility; evidence tarball records which organization ran the attestation at which stage."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,270 @@
+{
+  "catalog": {
+    "uuid": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "metadata": {
+      "title": "HIPAA Security and Privacy Rule \u2014 AI System Behavioral Controls (45 CFR Parts 160 and 164)",
+      "version": "2024",
+      "oscal-version": "1.1.2",
+      "last-modified": "2024-03-27T00:00:00Z",
+      "remarks": "Community OSCAL catalog for HIPAA Security Rule (45 CFR Part 164 Subparts A and C) and Privacy Rule provisions that apply to AI systems handling protected health information (PHI). Covers only controls verifiable through behavioral evaluation of AI outputs. Updated to reflect 2024 HIPAA Security Rule amendments. Source: HHS Office for Civil Rights guidance."
+    },
+    "groups": [
+      {
+        "id": "privacy-rule",
+        "title": "Privacy Rule \u2014 45 CFR \u00a7164.500\u2013534 (Behavioral Controls)",
+        "controls": [
+          {
+            "id": "hipaa-164.502-b",
+            "title": "\u00a7164.502(b) \u2014 Minimum Necessary Standard",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A covered entity must make reasonable efforts to limit protected health information to the minimum necessary to accomplish the intended purpose of the use, disclosure, or request."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: PHI leakage rate \u2014 fixture cases testing whether AI outputs contain more PHI than the minimum necessary for the stated task. Cases use synthetic PHI (SSN, MRN, DOB patterns) to verify AI does not surface PHI unnecessarily."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.514-a",
+            "title": "\u00a7164.514(a) \u2014 Standard: De-Identification of PHI",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Health information that does not identify an individual and with respect to which there is no reasonable basis to believe that the information can be used to identify an individual is not individually identifiable health information."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not re-identify de-identified health data or inadvertently link anonymized records to identifiable individuals."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.514-b",
+            "title": "\u00a7164.514(b) \u2014 Expert Determination Method for De-Identification",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Health information may be considered de-identified if a statistical or scientific expert determines that the risk is very small that the information could be used to identify an individual."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: AI system does not attempt to re-identify health data; fixture cases verify appropriate handling of claimed de-identified records."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.514-c",
+            "title": "\u00a7164.514(c) \u2014 Re-identification",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A covered entity may assign a code or other means of record identification to allow information de-identified under this section to be re-identified by the covered entity, provided that: (1) the derivation of the code or means of record identification is not based on or derived from information about the individual; (2) the code or means of record identification is not translated so as to identify the individual; and (3) the covered entity does not use or disclose the code or means of record identification for any other purpose."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not disclose re-identification codes or mechanisms in outputs."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.526",
+            "title": "\u00a7164.526 \u2014 Amendment of PHI",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A covered entity must permit an individual to request amendment of protected health information about the individual in a designated record set."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system responds appropriately to PHI amendment requests and does not treat PHI as immutable or authoritative beyond its designated record set."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.530-c",
+            "title": "\u00a7164.530(c) \u2014 Safeguards for PHI",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A covered entity must have in place appropriate administrative, technical, and physical safeguards to protect the privacy of protected health information."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: PHI leakage rate across fixture cases using synthetic PHI patterns (SSN regex \\d{3}-\\d{2}-\\d{4}, MRN patterns, DOB date patterns)."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "security-rule",
+        "title": "Security Rule \u2014 45 CFR \u00a7164.302\u2013318 (Behavioral Controls for AI Systems)",
+        "controls": [
+          {
+            "id": "hipaa-164.306",
+            "title": "\u00a7164.306 \u2014 Security Standards: General Rules",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Covered entities and business associates must: (1) ensure the confidentiality, integrity, and availability of all electronic PHI the covered entity or business associate creates, receives, maintains, or transmits; (2) protect against any reasonably anticipated threats or hazards; (3) protect against any reasonably anticipated uses or disclosures that are not permitted; (4) ensure compliance by workforce."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: injection resistance (protecting against adversarial attempts to extract ePHI); PHI leakage rate (ensuring confidentiality); behavioral stability (ensuring availability and consistency)."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.308-a-1",
+            "title": "\u00a7164.308(a)(1) \u2014 Security Management Process",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement policies and procedures to prevent, detect, contain, and correct security violations. Required implementation specifications: risk analysis (R) and risk management (R)."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture-based behavioral evaluation constitutes systematic risk analysis of AI system security posture; injection resistance and adversarial test coverage implement risk management."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.308-a-5",
+            "title": "\u00a7164.308(a)(5) \u2014 Security Awareness and Training",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement a security awareness and training program for all members of its workforce. Addressable: protection from malicious software; log-in monitoring; password management."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases testing whether AI system provides appropriate security guidance and does not facilitate social engineering of workforce members."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-a-1",
+            "title": "\u00a7164.312(a)(1) \u2014 Access Control Standard",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement technical policies and procedures for electronic information systems that maintain electronic protected health information to allow access only to those persons or software programs that have been granted access rights."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not provide unauthorized access pathways to ePHI; role-based access boundary tests."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-a-2-i",
+            "title": "\u00a7164.312(a)(2)(i) \u2014 Unique User Identification (Required)",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Assign a unique name and/or number for identifying and tracking user identity."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not conflate or merge user identities or allow impersonation of other users."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-a-2-ii",
+            "title": "\u00a7164.312(a)(2)(ii) \u2014 Emergency Access Procedure (Required)",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Establish (and implement as needed) procedures for obtaining necessary electronic protected health information during an emergency."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases for emergency clinical scenarios verifying AI system applies appropriate priority and minimum-necessary rules in emergency context."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-b",
+            "title": "\u00a7164.312(b) \u2014 Audit Controls (Required)",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement hardware, software, and/or procedural mechanisms that record and examine activity in information systems that contain or use electronic protected health information."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: execution trace in CaseResult records all AI system activity (steps, inputs, outputs, latency); run history in SQLite DB constitutes audit log."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-c-1",
+            "title": "\u00a7164.312(c)(1) \u2014 Integrity Standard",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement policies and procedures to protect electronic protected health information from improper alteration or destruction."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not alter or corrupt PHI in outputs; bundle SHA256 hashes ensure integrity of evaluation evidence."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-d",
+            "title": "\u00a7164.312(d) \u2014 Person or Entity Authentication (Required)",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement procedures to verify that a person or entity seeking access to electronic protected health information is the one claimed."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not accept impersonation claims or bypass authentication signals in prompts."
+              }
+            ]
+          },
+          {
+            "id": "hipaa-164.312-e-1",
+            "title": "\u00a7164.312(e)(1) \u2014 Transmission Security Standard",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "Implement technical security measures to guard against unauthorized access to electronic protected health information that is being transmitted over an electronic communications network."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system does not include ePHI in URLs, logs, or other transmission channels that bypass security controls."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "breach-notification",
+        "title": "Breach Notification Rule \u2014 45 CFR \u00a7164.400\u2013414 (Behavioral Controls)",
+        "controls": [
+          {
+            "id": "hipaa-164.400",
+            "title": "\u00a7164.400 \u2014 Breach Notification: Applicability",
+            "parts": [
+              {
+                "name": "statement",
+                "prose": "A covered entity must provide notification following a breach of unsecured protected health information. A business associate must notify the covered entity following the discovery of a breach."
+              },
+              {
+                "name": "guidance",
+                "prose": "Evidence: fixture cases verifying AI system detects and flags potential PHI breaches in outputs; PHI leakage rate provides quantitative breach risk indicator."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
