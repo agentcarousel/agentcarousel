@@ -8,6 +8,10 @@ use serde::Serialize;
 use serde_json::json;
 use std::path::PathBuf;
 
+use super::compliance_mappings::{
+    compute_control_scores, ControlCoverageStatus, ControlScore, FrameworkControl,
+};
+
 use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
@@ -47,6 +51,11 @@ pub struct MetricsArgs {
     /// needs escalation, and how often it makes clinical claims without evidence.
     #[arg(long, value_name = "DOMAIN")]
     domain: Option<String>,
+
+    /// Show a per-control compliance attestation table for the named OSCAL framework.
+    /// Example: --framework nist-800-53  --framework hipaa  --framework eu-ai-act
+    #[arg(long, value_name = "FRAMEWORK")]
+    framework: Option<String>,
 }
 
 struct ResolvedContext {
@@ -64,7 +73,8 @@ pub(crate) struct MetricResult {
     pub(crate) finding: String,
     pub(crate) sample_size: Option<usize>,
     pub(crate) detail: serde_json::Value,
-    pub(crate) compliance_hook: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) framework_controls: Vec<FrameworkControl>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -184,15 +194,20 @@ pub(crate) fn render_metrics_to_markdown(
             None => "n/a".to_string(),
         };
         let grade_str = m.grade.as_deref().unwrap_or("n/a");
-        let compliance = if m.compliance_hook.is_empty() {
+        let control_note = if m.framework_controls.is_empty() {
             String::new()
         } else {
-            format!(" *{}*", m.compliance_hook)
+            let ids: Vec<&str> = m
+                .framework_controls
+                .iter()
+                .map(|c| c.control_id.as_str())
+                .collect();
+            format!(" *{}*", ids.join(", "))
         };
         let _ = writeln!(
             md,
             "| {} | {} | {} | {}{} |",
-            m.title, score_str, grade_str, m.finding, compliance
+            m.title, score_str, grade_str, m.finding, control_note
         );
     }
     let _ = writeln!(md);
@@ -242,6 +257,12 @@ pub fn run_metrics(args: MetricsArgs, globals: &GlobalOptions) -> i32 {
         }
     }
 
+    let control_scores: Vec<ControlScore> = args
+        .framework
+        .as_deref()
+        .map(|fw| compute_control_scores(&runs, fw, ctx.effective_skill.as_deref()))
+        .unwrap_or_default();
+
     if globals.json {
         let skill_label = ctx
             .effective_skill
@@ -252,26 +273,17 @@ pub fn run_metrics(args: MetricsArgs, globals: &GlobalOptions) -> i32 {
             "generated_at": chrono::Utc::now().to_rfc3339(),
             "skill": skill_label,
             "analysis_window_runs": runs.len(),
-            "metrics": all_metrics
-                .iter()
-                .map(|m| json!({
-                    "id": m.id,
-                    "title": m.title,
-                    "domain": m.domain,
-                    "score_0_to_100": m.score_0_to_100,
-                    "grade": m.grade,
-                    "finding": m.finding,
-                    "sample_size": m.sample_size,
-                    "detail": m.detail,
-                    "compliance_hook": m.compliance_hook,
-                }))
-                .collect::<Vec<_>>()
+            "metrics": all_metrics,
+            "control_scores": control_scores,
         });
         JsonOutput::ok("metrics", data).print();
         return ExitCode::Ok.as_i32();
     }
 
     print_metrics_report(&all_metrics, ctx.effective_skill.as_deref(), runs.len());
+    if !control_scores.is_empty() {
+        print_control_scores_table(&control_scores, args.framework.as_deref().unwrap_or(""));
+    }
     ExitCode::Ok.as_i32()
 }
 
@@ -461,7 +473,7 @@ fn compute_injection_resistance(runs: &[agentcarousel_core::Run]) -> MetricResul
             finding: "No prompt injection test cases found in run history. Run the prompt-injection-detector fixture suite to generate this metric.".to_string(),
             sample_size: None,
             detail: json!({ "passed": 0, "total": 0 }),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -480,7 +492,7 @@ fn compute_injection_resistance(runs: &[agentcarousel_core::Run]) -> MetricResul
         ),
         sample_size: Some(total),
         detail: json!({ "passed": passed, "total": total }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -515,7 +527,7 @@ fn compute_drift_index(runs: &[agentcarousel_core::Run]) -> MetricResult {
             finding: "Insufficient scored run history to compute drift. At least two evaluated runs with effectiveness scores are needed.".to_string(),
             sample_size: Some(scored.len()),
             detail: json!({ "runs_with_scores": scored.len() }),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -558,7 +570,7 @@ fn compute_drift_index(runs: &[agentcarousel_core::Run]) -> MetricResult {
             "oldest_score": oldest,
             "runs_analyzed": scored.len()
         }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -591,7 +603,7 @@ fn compute_behavioral_coverage(fixtures: &[FixtureFile]) -> MetricResult {
                     .to_string(),
             sample_size: None,
             detail: json!({}),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -682,7 +694,7 @@ fn compute_behavioral_coverage(fixtures: &[FixtureFile]) -> MetricResult {
             "missing": missing,
             "total_cases_analyzed": all_cases.len()
         }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -726,7 +738,7 @@ fn compute_confidence_calibration(runs: &[agentcarousel_core::Run]) -> MetricRes
             finding: "Insufficient judge-scored cases to compute calibration (minimum 5 required). Run evaluation with --judge to generate this metric.".to_string(),
             sample_size: Some(total),
             detail: json!({ "judged_case_count": total }),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -777,7 +789,7 @@ fn compute_confidence_calibration(runs: &[agentcarousel_core::Run]) -> MetricRes
             "label": calibration_label,
             "judged_case_count": total
         }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -895,7 +907,7 @@ fn compute_phi_leakage_rate(runs: &[agentcarousel_core::Run]) -> MetricResult {
             finding: "No PHI test cases found in run history. Run data-privacy-classifier or a HIPAA fixture suite to generate this metric.".to_string(),
             sample_size: None,
             detail: json!({ "phi_cases": 0, "failed_phi_cases": 0 }),
-            compliance_hook: "HIPAA § 164.514 · Minimum Necessary",
+            framework_controls: vec![],
         };
     }
 
@@ -920,7 +932,7 @@ fn compute_phi_leakage_rate(runs: &[agentcarousel_core::Run]) -> MetricResult {
             "failed_phi_cases": failed_phi,
             "leakage_rate": leakage_rate
         }),
-        compliance_hook: "HIPAA § 164.514 · Minimum Necessary",
+        framework_controls: vec![],
     }
 }
 
@@ -966,7 +978,7 @@ fn compute_escalation_latency(runs: &[agentcarousel_core::Run]) -> MetricResult 
             finding: "No escalation test cases found in run history.".to_string(),
             sample_size: None,
             detail: json!({ "sample_size": 0 }),
-            compliance_hook: "FDA SaMD AI/ML Action Plan · Joint Commission",
+            framework_controls: vec![],
         };
     }
 
@@ -988,7 +1000,7 @@ fn compute_escalation_latency(runs: &[agentcarousel_core::Run]) -> MetricResult 
         finding: format!("p50: {p50}ms  p95: {p95}ms across {n} trigger cases"),
         sample_size: Some(n),
         detail: json!({ "p50_ms": p50, "p95_ms": p95, "sample_size": n }),
-        compliance_hook: "FDA SaMD AI/ML Action Plan · Joint Commission",
+        framework_controls: vec![],
     }
 }
 
@@ -1065,7 +1077,7 @@ fn compute_escalation_precision_recall(runs: &[agentcarousel_core::Run]) -> Metr
             finding: "No escalation precision/recall test cases found. Label cases with 'requires-escalation' or 'no-escalation' in the case ID.".to_string(),
             sample_size: None,
             detail: json!({ "tp": 0, "fn": 0, "fp": 0, "tn": 0 }),
-            compliance_hook: "FDA SaMD Patient Safety · Joint Commission NPSG.15",
+            framework_controls: vec![],
         };
     }
 
@@ -1108,7 +1120,7 @@ fn compute_escalation_precision_recall(runs: &[agentcarousel_core::Run]) -> Metr
         finding,
         sample_size: Some(total),
         detail: json!({ "tp": tp, "fn": fn_, "fp": fp, "tn": tn }),
-        compliance_hook: "FDA SaMD Patient Safety · Joint Commission NPSG.15",
+        framework_controls: vec![],
     }
 }
 
@@ -1199,7 +1211,7 @@ fn compute_hallucination_density(runs: &[agentcarousel_core::Run]) -> MetricResu
                     finding: "Insufficient data to compute hallucination density (minimum 3 rubric scores or clinical cases required).".to_string(),
                     sample_size: None,
                     detail: json!({ "rubric_scores_found": rubric_scores.len() }),
-                    compliance_hook: "FDA SaMD Clinical Validity · Joint Commission",
+                    framework_controls: vec![],
                 };
             }
             (broad, "effectiveness-score proxy")
@@ -1231,7 +1243,7 @@ fn compute_hallucination_density(runs: &[agentcarousel_core::Run]) -> MetricResu
             "sample_size": n,
             "method": method
         }),
-        compliance_hook: "FDA SaMD Clinical Validity · Joint Commission",
+        framework_controls: vec![],
     }
 }
 
@@ -1248,6 +1260,47 @@ fn hallucination_density_grade(score: f64) -> Grade {
 }
 
 // ── Terminal Rendering ─────────────────────────────────────────────────────────
+
+fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
+    println!();
+    println!(
+        "  {}",
+        style(format!("Framework Controls — {framework}")).bold()
+    );
+    println!("  {}", "─".repeat(80));
+    println!(
+        "  {:<30} {:<20} {:<8} {:<8} {}",
+        style("CONTROL").dim().bold(),
+        style("MODEL").dim().bold(),
+        style("SCORE").dim().bold(),
+        style("CASES").dim().bold(),
+        style("STATUS").dim().bold(),
+    );
+    println!("  {}", "─".repeat(80));
+
+    for s in scores {
+        let score_str = match s.status {
+            ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => "n/a".to_string(),
+            _ => format!("{:.0}%", s.effectiveness_mean * 100.0),
+        };
+        let status_str = match s.status {
+            ControlCoverageStatus::Satisfied => style("Satisfied").green().to_string(),
+            ControlCoverageStatus::PartialEvidence => style("Partial").yellow().to_string(),
+            ControlCoverageStatus::Gap => style("Gap").red().to_string(),
+            ControlCoverageStatus::Procedural => style("Procedural").dim().to_string(),
+        };
+        println!(
+            "  {:<30} {:<20} {:<8} {:<8} {}",
+            &s.control.control_id[..s.control.control_id.len().min(29)],
+            &s.model_version[..s.model_version.len().min(19)],
+            score_str,
+            s.case_count,
+            status_str,
+        );
+    }
+    println!("  {}", "─".repeat(80));
+    println!();
+}
 
 fn print_metrics_report(
     metrics: &[MetricResult],
@@ -1322,8 +1375,13 @@ fn print_metrics_report(
             grade_str,
             style(&m.finding).dim()
         );
-        if !m.compliance_hook.is_empty() {
-            println!("  {} {}", style("↳").dim(), style(m.compliance_hook).dim());
+        if !m.framework_controls.is_empty() {
+            let ids: Vec<&str> = m
+                .framework_controls
+                .iter()
+                .map(|c| c.control_id.as_str())
+                .collect();
+            println!("  {} {}", style("↳").dim(), style(ids.join(", ")).dim());
         }
     }
 

@@ -276,7 +276,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
                 "finding": m.finding,
                 "sample_size": m.sample_size,
                 "detail": m.detail,
-                "compliance_hook": m.compliance_hook,
+                "framework_controls": m.framework_controls,
             }))
             .collect::<Vec<_>>()
     });

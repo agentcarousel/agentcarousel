@@ -1,3 +1,4 @@
+use agentcarousel_core::{CaseStatus, Run};
 use oscal::catalog::{load_catalog, CatalogSource};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -67,6 +68,107 @@ pub fn controls_for_framework<'a>(
     name: &str,
 ) -> &'a [FrameworkControl] {
     registry.get(name).map(|v| v.as_slice()).unwrap_or(&[])
+}
+
+/// Aggregate `CaseResult.tags` from `runs` into per-control effectiveness scores
+/// for the named `framework`, optionally scoped to a single `skill`.
+///
+/// Groups results by `generator_model` so each `ControlScore` is model-scoped.
+pub fn compute_control_scores(
+    runs: &[Run],
+    framework: &str,
+    skill: Option<&str>,
+) -> Vec<ControlScore> {
+    let registry = load_framework_registry();
+    let controls = controls_for_framework(&registry, framework);
+    if controls.is_empty() {
+        return vec![];
+    }
+
+    // Collect cases and run metadata keyed by model version.
+    let mut model_cases: HashMap<String, Vec<&agentcarousel_core::CaseResult>> = HashMap::new();
+    let mut model_run_counts: HashMap<String, u32> = HashMap::new();
+    let mut model_last_date: HashMap<String, String> = HashMap::new();
+
+    for run in runs {
+        if let Some(sk) = skill {
+            if run.skill_or_agent.as_deref() != Some(sk) {
+                continue;
+            }
+        }
+        let model = run
+            .summary
+            .generator_model
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+
+        *model_run_counts.entry(model.clone()).or_insert(0) += 1;
+        model_last_date
+            .entry(model.clone())
+            .or_insert_with(|| run.started_at.to_rfc3339());
+        model_cases
+            .entry(model)
+            .or_default()
+            .extend(run.cases.iter());
+    }
+
+    let mut scores = Vec::new();
+    for control in controls {
+        for (model, cases) in &model_cases {
+            let matching: Vec<_> = cases
+                .iter()
+                .filter(|c| c.tags.contains(&control.tag))
+                .collect();
+            let case_count = matching.len() as u32;
+
+            let (effectiveness_mean, pass_rate, status) = if !control.behavioral {
+                (0.0_f32, 0.0_f32, ControlCoverageStatus::Procedural)
+            } else if case_count == 0 {
+                (0.0, 0.0, ControlCoverageStatus::Gap)
+            } else {
+                let passed = matching
+                    .iter()
+                    .filter(|c| c.status == CaseStatus::Passed)
+                    .count();
+                let pr = passed as f32 / case_count as f32;
+
+                let judge_scores: Vec<f32> = matching
+                    .iter()
+                    .filter_map(|c| {
+                        c.eval_scores
+                            .as_ref()
+                            .filter(|es| es.evaluator != "rules")
+                            .map(|es| es.effectiveness_score)
+                    })
+                    .collect();
+
+                let em = if !judge_scores.is_empty() {
+                    judge_scores.iter().sum::<f32>() / judge_scores.len() as f32
+                } else {
+                    pr
+                };
+
+                let st = if em >= 0.80 {
+                    ControlCoverageStatus::Satisfied
+                } else {
+                    ControlCoverageStatus::PartialEvidence
+                };
+                (em, pr, st)
+            };
+
+            scores.push(ControlScore {
+                control: control.clone(),
+                model_version: model.clone(),
+                effectiveness_mean,
+                pass_rate,
+                case_count,
+                run_count: model_run_counts.get(model).copied().unwrap_or(0),
+                last_run_date: model_last_date.get(model).cloned(),
+                status,
+            });
+        }
+    }
+    scores
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
