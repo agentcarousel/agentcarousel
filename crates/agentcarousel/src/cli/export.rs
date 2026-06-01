@@ -1,6 +1,6 @@
 use crate::core::hex_util::hex_lower;
 use agentcarousel_core::{CaseStatus, Role, Run};
-use agentcarousel_reporters::{fetch_run, list_runs};
+use agentcarousel_reporters::{fetch_run, list_full_runs, list_full_runs_by_skill, list_runs};
 use chrono::Utc;
 use clap::Parser;
 use flate2::write::GzEncoder;
@@ -249,6 +249,12 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
             env_payload.insert("github_run_id".to_string(), json!(t));
         }
     }
+    // 90-day re-attestation deadline per NIST AI RMF MANAGE 4.1 / MEASURE 2.4.
+    let next_attestation_due = (Utc::now() + chrono::Duration::days(90)).to_rfc3339();
+    env_payload.insert(
+        "next_attestation_due".to_string(),
+        json!(next_attestation_due),
+    );
     write_json(&env_path, &serde_json::Value::Object(env_payload))?;
 
     let redaction_path = root.join("REDACTION_POLICY.md");
@@ -292,6 +298,38 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     let report_md = render_markdown_report(&run, &metrics_section);
     let mut file = fs::File::create(&report_md_path).map_err(|err| err.to_string())?;
     file.write_all(report_md.as_bytes())
+        .map_err(|err| err.to_string())?;
+
+    // Compliance artifacts: per-framework Markdown reports + OSCAL Assessment Results.
+    // Load run history for scoring (same window as metrics).
+    let compliance_runs = match skill {
+        Some(s) => list_full_runs_by_skill(s, 20).unwrap_or_default(),
+        None => list_full_runs(20).unwrap_or_default(),
+    };
+    const COMPLIANCE_FRAMEWORKS: &[&str] = &["nist-ai-rmf", "eu-ai-act", "iso-42001"];
+    for fw in COMPLIANCE_FRAMEWORKS {
+        let scores =
+            super::compliance_mappings::compute_control_scores(&compliance_runs, fw, skill);
+        let md = super::metrics::render_framework_compliance_report(&scores, fw, skill);
+        let md_path = root.join(format!("compliance_{fw}.md"));
+        let mut f = fs::File::create(&md_path).map_err(|err| err.to_string())?;
+        f.write_all(md.as_bytes()).map_err(|err| err.to_string())?;
+    }
+    // OSCAL Assessment Results — use the first framework's scores as the primary artifact.
+    let oscal_scores = super::compliance_mappings::compute_control_scores(
+        &compliance_runs,
+        COMPLIANCE_FRAMEWORKS[0],
+        skill,
+    );
+    let oscal_json = super::metrics::serialize_assessment_results(
+        &oscal_scores,
+        COMPLIANCE_FRAMEWORKS[0],
+        skill,
+        run_id,
+    );
+    let oscal_path = root.join("assessment-results.oscal.json");
+    let mut f = fs::File::create(&oscal_path).map_err(|err| err.to_string())?;
+    f.write_all(oscal_json.as_bytes())
         .map_err(|err| err.to_string())?;
 
     let manifest_path = root.join("MANIFEST.json");
@@ -605,6 +643,10 @@ fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
         "REDACTION_POLICY.md",
         "metrics.json",
         "report.md",
+        "compliance_nist-ai-rmf.md",
+        "compliance_eu-ai-act.md",
+        "compliance_iso-42001.md",
+        "assessment-results.oscal.json",
     ];
     let mut files = Vec::new();
     for name in tracked {
