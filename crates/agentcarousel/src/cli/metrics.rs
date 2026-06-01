@@ -1288,6 +1288,10 @@ pub(crate) fn render_framework_compliance_report(
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
         .count();
+    let failed = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Failed)
+        .count();
     let gap = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Gap)
@@ -1298,13 +1302,17 @@ pub(crate) fn render_framework_compliance_report(
         .count();
     let total = collapsed.len();
 
+    use super::compliance_mappings::{MIN_CASES, SATISFACTION_THRESHOLD_DEFAULT};
+
     let _ = writeln!(md, "## Framework Compliance — {framework}");
     let _ = writeln!(md);
     let _ = writeln!(
         md,
         "**Skill:** {skill_label}  \
          **Controls:** {total} total · ✅ {satisfied} satisfied · ⚠ {partial} partial · \
-         ❌ {gap} gap · 📋 {procedural} procedural"
+         ❌ {failed} failed · ❌ {gap} gap · 📋 {procedural} procedural  \
+         **Threshold:** {:.0}% · **Min cases:** {MIN_CASES}",
+        SATISFACTION_THRESHOLD_DEFAULT * 100.0,
     );
     let _ = writeln!(md);
 
@@ -1313,7 +1321,9 @@ pub(crate) fn render_framework_compliance_report(
         .filter(|s| {
             matches!(
                 s.status,
-                ControlCoverageStatus::Satisfied | ControlCoverageStatus::PartialEvidence
+                ControlCoverageStatus::Satisfied
+                    | ControlCoverageStatus::PartialEvidence
+                    | ControlCoverageStatus::Failed
             )
         })
         .collect();
@@ -1331,26 +1341,28 @@ pub(crate) fn render_framework_compliance_report(
         );
         let _ = writeln!(md);
     } else {
-        let _ = writeln!(md, "| Control | Score | Cases | Status |");
-        let _ = writeln!(md, "|---------|-------|-------|--------|");
+        let _ = writeln!(md, "| Control | Score | Cases | Status | Requirement |");
+        let _ = writeln!(md, "|---------|-------|-------|--------|-------------|");
         for s in &covered {
             let score_str = format!("{:.0}%", s.effectiveness_mean * 100.0);
-            let status_cell = if s.status == ControlCoverageStatus::Satisfied {
-                "✅ Satisfied"
-            } else {
-                "⚠ Partial"
+            let status_cell = match s.status {
+                ControlCoverageStatus::Satisfied => "✅ Satisfied",
+                ControlCoverageStatus::Failed => "❌ Failed",
+                _ => "⚠ Partial",
             };
+            let req = s.control.requirement.replace('\n', " ").replace('|', "\\|");
             let _ = writeln!(
                 md,
-                "| {} | {} | {} | {} |",
-                s.control.control_id, score_str, s.case_count, status_cell
+                "| {} | {} | {} | {} | {} |",
+                s.control.control_id, score_str, s.case_count, status_cell, req
             );
         }
         for s in &procedural_list {
+            let req = s.control.requirement.replace('\n', " ").replace('|', "\\|");
             let _ = writeln!(
                 md,
-                "| {} | n/a | — | 📋 Procedural |",
-                s.control.control_id
+                "| {} | n/a | — | 📋 Procedural | {} |",
+                s.control.control_id, req
             );
         }
         let _ = writeln!(md);
@@ -1390,12 +1402,17 @@ pub(crate) fn render_framework_compliance_report(
 /// Each scored control becomes an Observation + Finding pair.
 /// Gap controls additionally produce an explicit `risks[]` entry so auditors
 /// see a documented risk record rather than a silent absence.
+///
+/// `runs` is used to compute the actual assessment window (start = earliest
+/// run start, end = latest run finish). Pass an empty slice when runs are
+/// unavailable; the timestamps will fall back to the current time.
 #[allow(dead_code)]
 pub(crate) fn serialize_assessment_results(
     scores: &[ControlScore],
     framework: &str,
     skill: Option<&str>,
     run_id: &str,
+    runs: &[agentcarousel_core::Run],
 ) -> String {
     use oscal::assessment_results::{
         AssessmentResult, AssessmentResults, AssessmentResultsDocument, AssessmentRisk, Finding,
@@ -1406,11 +1423,33 @@ pub(crate) fn serialize_assessment_results(
     let now = chrono::Utc::now().to_rfc3339();
     let skill_label = skill.unwrap_or("all skills");
 
+    // Collapse multi-model scores to one entry per control before serializing.
+    let scores = super::compliance_mappings::collapse_scores(scores);
+
+    // Compute actual assessment window from the runs that informed the scores.
+    let (window_start, window_end) = if runs.is_empty() {
+        (now.clone(), now.clone())
+    } else {
+        let start = runs
+            .iter()
+            .map(|r| r.started_at)
+            .min()
+            .unwrap()
+            .to_rfc3339();
+        let end = runs
+            .iter()
+            .map(|r| r.finished_at.unwrap_or(r.started_at))
+            .max()
+            .unwrap()
+            .to_rfc3339();
+        (start, end)
+    };
+
     let mut observations: Vec<Observation> = Vec::new();
     let mut findings: Vec<Finding> = Vec::new();
     let mut risks: Vec<AssessmentRisk> = Vec::new();
 
-    for score in scores {
+    for score in &scores {
         let obs_uuid = uuid_from_str(&format!(
             "{}-{}-{}-obs",
             run_id, score.control.control_id, score.model_version
@@ -1451,6 +1490,21 @@ pub(crate) fn serialize_assessment_results(
                     value: score.run_count.to_string(),
                     remarks: None,
                 },
+                Property {
+                    name: "satisfaction-threshold".to_string(),
+                    ns: None,
+                    value: format!(
+                        "{:.2}",
+                        super::compliance_mappings::SATISFACTION_THRESHOLD_DEFAULT
+                    ),
+                    remarks: None,
+                },
+                Property {
+                    name: "min-cases".to_string(),
+                    ns: None,
+                    value: super::compliance_mappings::MIN_CASES.to_string(),
+                    remarks: None,
+                },
             ],
             links: vec![],
             relevant_evidence: vec![RelevantEvidence {
@@ -1465,10 +1519,12 @@ pub(crate) fn serialize_assessment_results(
         };
         observations.push(obs);
 
-        let state = match score.status {
-            ControlCoverageStatus::Satisfied => "satisfied",
-            ControlCoverageStatus::PartialEvidence => "not-satisfied",
-            ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => "other",
+        let (state, reason) = match score.status {
+            ControlCoverageStatus::Satisfied => ("satisfied", None),
+            ControlCoverageStatus::Failed => ("not-satisfied", None),
+            ControlCoverageStatus::PartialEvidence => ("other", Some("partial-evidence")),
+            ControlCoverageStatus::Gap => ("other", Some("no-coverage")),
+            ControlCoverageStatus::Procedural => ("other", Some("procedural")),
         };
 
         let finding = Finding {
@@ -1483,7 +1539,7 @@ pub(crate) fn serialize_assessment_results(
                 target_id: score.control.control_id.clone(),
                 status: FindingStatus {
                     state: state.to_string(),
-                    reason: None,
+                    reason: reason.map(|r| r.to_string()),
                 },
             },
             related_observations: vec![RelatedObservation {
@@ -1520,26 +1576,12 @@ pub(crate) fn serialize_assessment_results(
                     score.control.control_id, score.control.tag
                 ),
                 risk_status: "open".to_string(),
-                props: vec![
-                    Property {
-                        name: "reason".to_string(),
-                        ns: None,
-                        value: "no fixture coverage".to_string(),
-                        remarks: None,
-                    },
-                    Property {
-                        name: "compensating-control".to_string(),
-                        ns: None,
-                        value: "null".to_string(),
-                        remarks: None,
-                    },
-                    Property {
-                        name: "owner".to_string(),
-                        ns: None,
-                        value: "unassigned".to_string(),
-                        remarks: None,
-                    },
-                ],
+                props: vec![Property {
+                    name: "reason".to_string(),
+                    ns: None,
+                    value: "no-fixture-coverage".to_string(),
+                    remarks: None,
+                }],
                 related_observation: None,
                 remediations: vec![],
                 deadline: None,
@@ -1572,8 +1614,8 @@ pub(crate) fn serialize_assessment_results(
                     "Automated behavioral attestation for skill '{skill_label}' \
                      against framework '{framework}'."
                 )),
-                start: now.clone(),
-                end: Some(now),
+                start: window_start,
+                end: Some(window_end),
                 props: vec![
                     Property {
                         name: "skill".to_string(),
@@ -1635,6 +1677,10 @@ fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
         .count();
+    let failed = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Failed)
+        .count();
     let gap = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Gap)
@@ -1646,9 +1692,10 @@ fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
         style(format!("Framework Controls — {framework}")).bold()
     );
     println!(
-        "  {} satisfied  {} partial  {} gap",
+        "  {} satisfied  {} partial  {} failed  {} gap",
         style(satisfied.to_string()).green(),
         style(partial.to_string()).yellow(),
+        style(failed.to_string()).red(),
         style(gap.to_string()).red(),
     );
     println!("  {}", "─".repeat(64));
@@ -1660,6 +1707,7 @@ fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
                 s.status,
                 ControlCoverageStatus::Satisfied
                     | ControlCoverageStatus::PartialEvidence
+                    | ControlCoverageStatus::Failed
                     | ControlCoverageStatus::Procedural
             )
         })
@@ -1688,6 +1736,7 @@ fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
             let status_str = match s.status {
                 ControlCoverageStatus::Satisfied => style("Satisfied").green().to_string(),
                 ControlCoverageStatus::PartialEvidence => style("Partial").yellow().to_string(),
+                ControlCoverageStatus::Failed => style("Failed").red().to_string(),
                 ControlCoverageStatus::Gap => style("Gap").red().to_string(),
                 ControlCoverageStatus::Procedural => style("Procedural").dim().to_string(),
             };

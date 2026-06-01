@@ -3,7 +3,10 @@ use clap::{Parser, Subcommand};
 use console::style;
 use std::path::PathBuf;
 
-use super::compliance_mappings::{collapse_scores, compute_control_scores, ControlCoverageStatus};
+use super::compliance_mappings::{
+    collapse_scores, compute_control_scores, compute_control_scores_with_registry,
+    load_framework_registry, ControlCoverageStatus,
+};
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
 use super::metrics::{render_framework_compliance_report, serialize_assessment_results};
@@ -69,6 +72,11 @@ struct ReportArgs {
     /// Run ID to use as the evidence anchor in OSCAL output (default: "latest").
     #[arg(long, default_value = "latest")]
     run_id: String,
+
+    /// Skip per-model filtering and include all models in history.
+    /// Useful for historical audit reviews when you want the full multi-model picture.
+    #[arg(long)]
+    all_models: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -84,13 +92,35 @@ struct GapsArgs {
     /// Number of historical runs to analyze (default: 20).
     #[arg(long, default_value_t = 20)]
     limit: usize,
+
+    /// Skip per-model filtering and include all models in history.
+    #[arg(long)]
+    all_models: bool,
 }
 
-pub fn run_compliance(args: ComplianceArgs, globals: &GlobalOptions, config: &ResolvedConfig) -> i32 {
-    let model_filter = Some(config.generator.model.as_str());
+pub fn run_compliance(
+    args: ComplianceArgs,
+    globals: &GlobalOptions,
+    config: &ResolvedConfig,
+) -> i32 {
+    let configured_model = config.generator.model.as_str();
     match args.command {
-        ComplianceCommand::Report(a) => run_report(a, globals, model_filter),
-        ComplianceCommand::Gaps(a) => run_gaps(a, globals, model_filter),
+        ComplianceCommand::Report(a) => {
+            let model_filter = if a.all_models {
+                None
+            } else {
+                Some(configured_model)
+            };
+            run_report(a, globals, model_filter)
+        }
+        ComplianceCommand::Gaps(a) => {
+            let model_filter = if a.all_models {
+                None
+            } else {
+                Some(configured_model)
+            };
+            run_gaps(a, globals, model_filter)
+        }
     }
 }
 
@@ -154,37 +184,37 @@ fn check_model_coverage(
     present.sort();
 
     if globals.json {
-        let mut val = serde_json::json!({
+        let hint = if runs.is_empty() {
+            format!("Run `agc eval --model {model}` to generate run data.")
+        } else {
+            format!(
+                "Run `agc eval --model {model}` or use one of the models already in history: {}",
+                present.join(", ")
+            )
+        };
+        let data = serde_json::json!({
             "model": model,
             "models_in_history": present,
+            "hint": hint,
         });
-        if runs.is_empty() {
-            val["hint"] = serde_json::json!(
-                format!("Run `agc eval --model {model}` to generate run data.")
-            );
-        } else {
-            val["hint"] = serde_json::json!(
-                format!(
-                    "Run `agc eval --model {model}` or use one of the models already in history: {}",
-                    present.join(", ")
-                )
-            );
+        JsonOutput {
+            ok: false,
+            command: "compliance",
+            data: Some(data),
+            error: Some(JsonError::new(
+                "no_runs_for_model",
+                format!("no runs found for model '{model}'"),
+            )),
         }
-        JsonOutput::err("compliance", JsonError::new("no_runs_for_model", val.to_string()))
-            .print();
+        .print();
     } else if runs.is_empty() {
-        eprintln!(
-            "error: no run history found. Run `agc eval --model {model}` to generate data."
-        );
+        eprintln!("error: no run history found. Run `agc eval --model {model}` to generate data.");
     } else {
         eprintln!("error: no runs found for model '{model}'.");
         if present.is_empty() {
             eprintln!("       Run `agc eval --model {model}` to generate data for this model.");
         } else {
-            eprintln!(
-                "       Models in history: {}",
-                present.join(", ")
-            );
+            eprintln!("       Models in history: {}", present.join(", "));
             eprintln!(
                 "       Run `agc eval --model {model}` or set a matching model in your config."
             );
@@ -207,6 +237,25 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
         return ExitCode::RuntimeError.as_i32();
     }
 
+    if args.framework == "all" && args.out.is_none() && !globals.json {
+        if globals.json {
+            JsonOutput::err(
+                "compliance",
+                JsonError::new(
+                    "missing_out",
+                    "--framework all writes one file per framework; pass --out <dir> to specify the output directory",
+                ),
+            )
+            .print();
+        } else {
+            eprintln!(
+                "error: --framework all writes one file per framework. \
+                 Pass --out <dir> to specify the output directory."
+            );
+        }
+        return ExitCode::RuntimeError.as_i32();
+    }
+
     let runs = match load_runs(args.skill.as_deref(), args.limit, globals) {
         Ok(r) => r,
         Err(code) => return code,
@@ -215,6 +264,15 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
         return code;
     }
 
+    // Resolve the effective run_id: replace placeholder "latest" with the actual most-recent run.
+    let resolved_run_id: String = if args.run_id == "latest" {
+        runs.first()
+            .map(|r| r.id.0.clone())
+            .unwrap_or_else(|| "latest".to_string())
+    } else {
+        args.run_id.clone()
+    };
+
     let frameworks: Vec<&str> = if args.framework == "all" {
         ALL_FRAMEWORKS.to_vec()
     } else {
@@ -222,10 +280,16 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
     };
 
     if globals.json {
+        let registry = load_framework_registry();
         let mut results = Vec::new();
         for fw in &frameworks {
-            let scores =
-                compute_control_scores(&runs, fw, args.skill.as_deref(), model_filter);
+            let scores = compute_control_scores_with_registry(
+                &registry,
+                &runs,
+                fw,
+                args.skill.as_deref(),
+                model_filter,
+            );
             results.push(serde_json::json!({
                 "framework": fw,
                 "skill": args.skill,
@@ -238,14 +302,20 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
     }
 
     if args.framework == "all" {
-        let out_dir = args.out.clone().unwrap_or_else(|| PathBuf::from("."));
+        let out_dir = args.out.clone().unwrap();
         if let Err(e) = std::fs::create_dir_all(&out_dir) {
             eprintln!("error creating output directory: {e}");
             return ExitCode::RuntimeError.as_i32();
         }
+        let registry = load_framework_registry();
         for fw in &frameworks {
-            let scores =
-                compute_control_scores(&runs, fw, args.skill.as_deref(), model_filter);
+            let scores = compute_control_scores_with_registry(
+                &registry,
+                &runs,
+                fw,
+                args.skill.as_deref(),
+                model_filter,
+            );
             let md = render_framework_compliance_report(&scores, fw, args.skill.as_deref());
             let path = out_dir.join(format!("compliance_{fw}.md"));
             if let Err(e) = std::fs::write(&path, &md) {
@@ -261,8 +331,13 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
     let scores = compute_control_scores(&runs, fw, args.skill.as_deref(), model_filter);
 
     if args.oscal {
-        let content =
-            serialize_assessment_results(&scores, fw, args.skill.as_deref(), &args.run_id);
+        let content = serialize_assessment_results(
+            &scores,
+            fw,
+            args.skill.as_deref(),
+            &resolved_run_id,
+            &runs,
+        );
         return match args.out {
             Some(path) => write_output(&path, &content),
             None => {
@@ -311,6 +386,10 @@ fn print_compliance_terminal(
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
         .count();
+    let failed = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Failed)
+        .count();
     let gap = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Gap)
@@ -333,9 +412,10 @@ fn print_compliance_terminal(
         total
     );
     println!(
-        "  {}  {}  {}  {}",
+        "  {}  {}  {}  {}  {}",
         style(format!("✅ {satisfied} satisfied")).green(),
         style(format!("⚠  {partial} partial")).yellow(),
+        style(format!("❌ {failed} failed")).red(),
         style(format!("❌ {gap} gap")).red(),
         style(format!("📋 {procedural} procedural")).dim(),
     );
@@ -346,7 +426,9 @@ fn print_compliance_terminal(
         .filter(|s| {
             matches!(
                 s.status,
-                ControlCoverageStatus::Satisfied | ControlCoverageStatus::PartialEvidence
+                ControlCoverageStatus::Satisfied
+                    | ControlCoverageStatus::PartialEvidence
+                    | ControlCoverageStatus::Failed
             )
         })
         .collect();
@@ -357,10 +439,7 @@ fn print_compliance_terminal(
         .collect();
 
     if covered.is_empty() && procedural_list.is_empty() {
-        println!(
-            "  {}",
-            style("No behavioral evidence yet.").yellow().bold()
-        );
+        println!("  {}", style("No behavioral evidence yet.").yellow().bold());
         println!(
             "  Tag fixture cases with  {}  to link test results to controls.",
             style(format!("{framework}:<control-id>")).cyan()
@@ -381,10 +460,10 @@ fn print_compliance_terminal(
 
         for s in &covered {
             let score_str = format!("{:.0}%", s.effectiveness_mean * 100.0);
-            let status_str = if s.status == ControlCoverageStatus::Satisfied {
-                style("✅ Satisfied").green().to_string()
-            } else {
-                style("⚠  Partial").yellow().to_string()
+            let status_str = match s.status {
+                ControlCoverageStatus::Satisfied => style("✅ Satisfied").green().to_string(),
+                ControlCoverageStatus::Failed => style("❌ Failed").red().to_string(),
+                _ => style("⚠  Partial").yellow().to_string(),
             };
             println!(
                 "  {:<32} {:<8} {:<6} {}",
@@ -501,22 +580,28 @@ fn run_gaps(args: GapsArgs, globals: &GlobalOptions, model_filter: Option<&str>)
 }
 
 /// Wrap `text` to lines of at most `width` chars, breaking at word boundaries.
+/// Paragraph breaks (`\n\n`) are preserved as blank lines in the output.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        if current.is_empty() {
-            current.push_str(word);
-        } else if current.len() + 1 + word.len() <= width {
-            current.push(' ');
-            current.push_str(word);
-        } else {
-            lines.push(current.clone());
-            current = word.to_string();
+    for (i, para) in text.split("\n\n").enumerate() {
+        if i > 0 {
+            lines.push(String::new());
         }
-    }
-    if !current.is_empty() {
-        lines.push(current);
+        let mut current = String::new();
+        for word in para.split_whitespace() {
+            if current.is_empty() {
+                current.push_str(word);
+            } else if current.len() + 1 + word.len() <= width {
+                current.push(' ');
+                current.push_str(word);
+            } else {
+                lines.push(current.clone());
+                current = word.to_string();
+            }
+        }
+        if !current.is_empty() {
+            lines.push(current);
+        }
     }
     lines
 }

@@ -307,16 +307,24 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
         None => list_full_runs(20).unwrap_or_default(),
     };
     const COMPLIANCE_FRAMEWORKS: &[&str] = &["nist-ai-rmf", "eu-ai-act", "iso-42001"];
+    // Load registry once for all framework scoring in this loop.
+    let registry = super::compliance_mappings::load_framework_registry();
     for fw in COMPLIANCE_FRAMEWORKS {
-        let scores =
-            super::compliance_mappings::compute_control_scores(&compliance_runs, fw, skill, None);
+        let scores = super::compliance_mappings::compute_control_scores_with_registry(
+            &registry,
+            &compliance_runs,
+            fw,
+            skill,
+            None,
+        );
         let md = super::metrics::render_framework_compliance_report(&scores, fw, skill);
         let md_path = root.join(format!("compliance_{fw}.md"));
         let mut f = fs::File::create(&md_path).map_err(|err| err.to_string())?;
         f.write_all(md.as_bytes()).map_err(|err| err.to_string())?;
     }
     // OSCAL Assessment Results — use the first framework's scores as the primary artifact.
-    let oscal_scores = super::compliance_mappings::compute_control_scores(
+    let oscal_scores = super::compliance_mappings::compute_control_scores_with_registry(
+        &registry,
         &compliance_runs,
         COMPLIANCE_FRAMEWORKS[0],
         skill,
@@ -327,6 +335,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
         COMPLIANCE_FRAMEWORKS[0],
         skill,
         run_id,
+        &compliance_runs,
     );
     let oscal_path = root.join("assessment-results.oscal.json");
     let mut f = fs::File::create(&oscal_path).map_err(|err| err.to_string())?;

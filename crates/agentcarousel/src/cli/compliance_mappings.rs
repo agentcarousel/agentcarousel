@@ -3,6 +3,14 @@ use oscal::catalog::{load_catalog, CatalogSource};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Minimum fixture case count required before a control can be marked Satisfied.
+/// A single case is not statistically meaningful evidence for any compliance framework.
+pub const MIN_CASES: u32 = 3;
+
+/// Effectiveness mean threshold above which a control is considered Satisfied (0.0–1.0).
+/// Applies uniformly across all frameworks unless overridden by per-framework config.
+pub const SATISFACTION_THRESHOLD_DEFAULT: f32 = 0.80;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameworkControl {
     pub framework: String,
@@ -31,10 +39,12 @@ pub struct ControlScore {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlCoverageStatus {
-    /// All mapped cases pass above threshold.
+    /// All mapped cases pass above threshold with sufficient evidence (≥ MIN_CASES).
     Satisfied,
     /// Some cases pass but below the required count or threshold.
     PartialEvidence,
+    /// Cases exist but all fail (pass_rate == 0.0).
+    Failed,
     /// No mapped fixture cases found.
     Gap,
     /// Control is documented but validated by procedure, not automated tests.
@@ -74,6 +84,9 @@ pub fn controls_for_framework<'a>(
 /// for the named `framework`, optionally scoped to a single `skill` and/or a
 /// specific generator `model`. When `model_filter` is `Some`, only runs whose
 /// `generator_model` matches exactly are included.
+///
+/// Loads the framework registry on each call. Use `compute_control_scores_with_registry`
+/// when running multiple frameworks in a loop to avoid repeated registry I/O.
 pub fn compute_control_scores(
     runs: &[Run],
     framework: &str,
@@ -81,7 +94,19 @@ pub fn compute_control_scores(
     model_filter: Option<&str>,
 ) -> Vec<ControlScore> {
     let registry = load_framework_registry();
-    let controls = controls_for_framework(&registry, framework);
+    compute_control_scores_with_registry(&registry, runs, framework, skill, model_filter)
+}
+
+/// Like `compute_control_scores` but reuses a pre-loaded `FrameworkRegistry`.
+/// Prefer this when scoring multiple frameworks in a single command invocation.
+pub fn compute_control_scores_with_registry(
+    registry: &FrameworkRegistry,
+    runs: &[Run],
+    framework: &str,
+    skill: Option<&str>,
+    model_filter: Option<&str>,
+) -> Vec<ControlScore> {
+    let controls = controls_for_framework(registry, framework);
     if controls.is_empty() {
         return vec![];
     }
@@ -110,9 +135,15 @@ pub fn compute_control_scores(
         }
 
         *model_run_counts.entry(model.clone()).or_insert(0) += 1;
+        let run_end = run.finished_at.unwrap_or(run.started_at).to_rfc3339();
         model_last_date
             .entry(model.clone())
-            .or_insert_with(|| run.started_at.to_rfc3339());
+            .and_modify(|d| {
+                if run_end > *d {
+                    *d = run_end.clone();
+                }
+            })
+            .or_insert(run_end);
         model_cases
             .entry(model)
             .or_default()
@@ -155,10 +186,12 @@ pub fn compute_control_scores(
                     pr
                 };
 
-                let st = if em >= 0.80 {
-                    ControlCoverageStatus::Satisfied
-                } else {
+                let st = if pr == 0.0 {
+                    ControlCoverageStatus::Failed
+                } else if case_count < MIN_CASES || em < SATISFACTION_THRESHOLD_DEFAULT {
                     ControlCoverageStatus::PartialEvidence
+                } else {
+                    ControlCoverageStatus::Satisfied
                 };
                 (em, pr, st)
             };
@@ -206,10 +239,11 @@ pub fn collapse_scores(scores: &[ControlScore]) -> Vec<ControlScore> {
 
 fn status_rank(s: &ControlCoverageStatus) -> u8 {
     match s {
-        ControlCoverageStatus::Satisfied => 3,
-        ControlCoverageStatus::PartialEvidence => 2,
-        ControlCoverageStatus::Gap => 1,
-        ControlCoverageStatus::Procedural => 0,
+        ControlCoverageStatus::Satisfied => 4,
+        ControlCoverageStatus::PartialEvidence => 3,
+        ControlCoverageStatus::Procedural => 2,
+        ControlCoverageStatus::Failed => 1,
+        ControlCoverageStatus::Gap => 0,
     }
 }
 
