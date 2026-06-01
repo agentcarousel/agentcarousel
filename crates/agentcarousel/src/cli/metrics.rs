@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 use super::compliance_mappings::{
-    compute_control_scores, ControlCoverageStatus, ControlScore, FrameworkControl,
+    collapse_scores, compute_control_scores, ControlCoverageStatus, ControlScore, FrameworkControl,
 };
 
 use super::exit_codes::ExitCode;
@@ -261,7 +261,7 @@ pub fn run_metrics(args: MetricsArgs, globals: &GlobalOptions) -> i32 {
     let control_scores: Vec<ControlScore> = args
         .framework
         .as_deref()
-        .map(|fw| compute_control_scores(&runs, fw, ctx.effective_skill.as_deref()))
+        .map(|fw| compute_control_scores(&runs, fw, ctx.effective_skill.as_deref(), None))
         .unwrap_or_default();
 
     if globals.json {
@@ -1264,8 +1264,10 @@ fn hallucination_density_grade(score: f64) -> Grade {
 
 /// Render a Markdown framework compliance report from scored controls.
 ///
-/// Gap controls emit an explicit risk entry rather than being silently absent,
-/// as required by SOC 2 and ISO 27001 auditors.
+/// Models are collapsed to one row per control (best status wins) so the table
+/// stays readable even when multiple generator models appear in run history.
+/// Gap controls are listed compactly at the end with a remediation hint;
+/// they are not repeated with placeholder "null" columns.
 #[allow(dead_code)]
 pub(crate) fn render_framework_compliance_report(
     scores: &[ControlScore],
@@ -1275,89 +1277,106 @@ pub(crate) fn render_framework_compliance_report(
     use std::fmt::Write as _;
     let mut md = String::new();
 
+    let collapsed = collapse_scores(scores);
     let skill_label = skill.unwrap_or("all skills");
-    let satisfied = scores
+
+    let satisfied = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Satisfied)
         .count();
-    let partial = scores
+    let partial = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
         .count();
-    let gap = scores
+    let gap = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Gap)
         .count();
-    let procedural = scores
+    let procedural = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Procedural)
         .count();
+    let total = collapsed.len();
 
     let _ = writeln!(md, "## Framework Compliance — {framework}");
     let _ = writeln!(md);
     let _ = writeln!(
         md,
-        "Skill: **{skill_label}** · {satisfied} satisfied · {partial} partial · {gap} gap · {procedural} procedural"
+        "**Skill:** {skill_label}  \
+         **Controls:** {total} total · ✅ {satisfied} satisfied · ⚠ {partial} partial · \
+         ❌ {gap} gap · 📋 {procedural} procedural"
     );
     let _ = writeln!(md);
-    let _ = writeln!(md, "| Control | Model | Score | Cases | Status |");
-    let _ = writeln!(md, "|---------|-------|-------|-------|--------|");
 
-    for s in scores {
-        let score_str = match s.status {
-            ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => "n/a".to_string(),
-            _ => format!("{:.0}%", s.effectiveness_mean * 100.0),
-        };
-        let status_cell = match s.status {
-            ControlCoverageStatus::Satisfied => "✅ Satisfied",
-            ControlCoverageStatus::PartialEvidence => "⚠ Partial Evidence",
-            ControlCoverageStatus::Gap => "❌ Gap",
-            ControlCoverageStatus::Procedural => "📋 Procedural",
-        };
+    let covered: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.status,
+                ControlCoverageStatus::Satisfied | ControlCoverageStatus::PartialEvidence
+            )
+        })
+        .collect();
+
+    let procedural_list: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Procedural)
+        .collect();
+
+    if covered.is_empty() && procedural_list.is_empty() {
         let _ = writeln!(
             md,
-            "| {} | {} | {} | {} | {} |",
-            s.control.control_id, s.model_version, score_str, s.case_count, status_cell
+            "> **No behavioral evidence yet.** Tag fixture cases with `{framework}:<control-id>` \
+             to link test results to controls, then re-run `agc compliance report`."
         );
+        let _ = writeln!(md);
+    } else {
+        let _ = writeln!(md, "| Control | Score | Cases | Status |");
+        let _ = writeln!(md, "|---------|-------|-------|--------|");
+        for s in &covered {
+            let score_str = format!("{:.0}%", s.effectiveness_mean * 100.0);
+            let status_cell = if s.status == ControlCoverageStatus::Satisfied {
+                "✅ Satisfied"
+            } else {
+                "⚠ Partial"
+            };
+            let _ = writeln!(
+                md,
+                "| {} | {} | {} | {} |",
+                s.control.control_id, score_str, s.case_count, status_cell
+            );
+        }
+        for s in &procedural_list {
+            let _ = writeln!(
+                md,
+                "| {} | n/a | — | 📋 Procedural |",
+                s.control.control_id
+            );
+        }
+        let _ = writeln!(md);
     }
-    let _ = writeln!(md);
 
-    let gaps: Vec<&ControlScore> = scores
+    let gaps: Vec<&ControlScore> = collapsed
         .iter()
         .filter(|s| s.status == ControlCoverageStatus::Gap)
         .collect();
 
     if !gaps.is_empty() {
-        let _ = writeln!(md, "### Gap Controls — Risk Entries");
+        let _ = writeln!(md, "### Missing Coverage ({gap} controls)");
         let _ = writeln!(md);
         let _ = writeln!(
             md,
-            "No fixture coverage was found for the following controls. \
-             Explicit risk records are required by auditors (SOC 2 CC3.2, ISO 27001 A.5)."
+            "No fixture cases are tagged for these controls. \
+             Add cases or run `agc compliance scaffold --tag <tag>` to generate them."
         );
         let _ = writeln!(md);
-        let _ = writeln!(
-            md,
-            "| Control | Risk Status | Reason | Compensating Control | Owner | Expiry |"
-        );
-        let _ = writeln!(
-            md,
-            "|---------|-------------|--------|-----------------------|-------|--------|"
-        );
         for s in &gaps {
             let _ = writeln!(
                 md,
-                "| {} | open | no fixture coverage | null | unassigned | null |",
-                s.control.control_id
+                "- **`{}`** — {}",
+                s.control.control_id, s.control.requirement
             );
         }
-        let _ = writeln!(md);
-        let _ = writeln!(
-            md,
-            "*Gap controls must be remediated by adding fixture cases tagged `{}:<control-id>` \
-             or formally accepted with a signed risk record.*",
-            framework
-        );
         let _ = writeln!(md);
     }
 
@@ -1606,43 +1625,91 @@ fn uuid_from_str(seed: &str) -> String {
 // ── Terminal Rendering ─────────────────────────────────────────────────────────
 
 fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
+    let collapsed = collapse_scores(scores);
+
+    let satisfied = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Satisfied)
+        .count();
+    let partial = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
+        .count();
+    let gap = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Gap)
+        .count();
+
     println!();
     println!(
         "  {}",
         style(format!("Framework Controls — {framework}")).bold()
     );
-    println!("  {}", "─".repeat(80));
     println!(
-        "  {:<30} {:<20} {:<8} {:<8} {}",
-        style("CONTROL").dim().bold(),
-        style("MODEL").dim().bold(),
-        style("SCORE").dim().bold(),
-        style("CASES").dim().bold(),
-        style("STATUS").dim().bold(),
+        "  {} satisfied  {} partial  {} gap",
+        style(satisfied.to_string()).green(),
+        style(partial.to_string()).yellow(),
+        style(gap.to_string()).red(),
     );
-    println!("  {}", "─".repeat(80));
+    println!("  {}", "─".repeat(64));
 
-    for s in scores {
-        let score_str = match s.status {
-            ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => "n/a".to_string(),
-            _ => format!("{:.0}%", s.effectiveness_mean * 100.0),
-        };
-        let status_str = match s.status {
-            ControlCoverageStatus::Satisfied => style("Satisfied").green().to_string(),
-            ControlCoverageStatus::PartialEvidence => style("Partial").yellow().to_string(),
-            ControlCoverageStatus::Gap => style("Gap").red().to_string(),
-            ControlCoverageStatus::Procedural => style("Procedural").dim().to_string(),
-        };
+    let covered: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.status,
+                ControlCoverageStatus::Satisfied
+                    | ControlCoverageStatus::PartialEvidence
+                    | ControlCoverageStatus::Procedural
+            )
+        })
+        .collect();
+
+    if covered.is_empty() {
         println!(
-            "  {:<30} {:<20} {:<8} {:<8} {}",
-            &s.control.control_id[..s.control.control_id.len().min(29)],
-            &s.model_version[..s.model_version.len().min(19)],
-            score_str,
-            s.case_count,
-            status_str,
+            "  {}  Tag fixture cases with {}:<control-id> to populate this table.",
+            style("No coverage yet.").dim(),
+            framework,
+        );
+    } else {
+        println!(
+            "  {:<32} {:<8} {:<8} {}",
+            style("CONTROL").dim().bold(),
+            style("SCORE").dim().bold(),
+            style("CASES").dim().bold(),
+            style("STATUS").dim().bold(),
+        );
+        println!("  {}", "─".repeat(64));
+        for s in &covered {
+            let score_str = match s.status {
+                ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => "n/a".to_string(),
+                _ => format!("{:.0}%", s.effectiveness_mean * 100.0),
+            };
+            let status_str = match s.status {
+                ControlCoverageStatus::Satisfied => style("Satisfied").green().to_string(),
+                ControlCoverageStatus::PartialEvidence => style("Partial").yellow().to_string(),
+                ControlCoverageStatus::Gap => style("Gap").red().to_string(),
+                ControlCoverageStatus::Procedural => style("Procedural").dim().to_string(),
+            };
+            println!(
+                "  {:<32} {:<8} {:<8} {}",
+                &s.control.control_id[..s.control.control_id.len().min(31)],
+                score_str,
+                s.case_count,
+                status_str,
+            );
+        }
+    }
+
+    if gap > 0 {
+        println!("  {}", "─".repeat(64));
+        println!(
+            "  {}  Run {} to see all {} controls without coverage.",
+            style(format!("{gap} gaps")).red(),
+            style(format!("agc compliance gaps --framework {framework}")).dim(),
+            gap,
         );
     }
-    println!("  {}", "─".repeat(80));
     println!();
 }
 

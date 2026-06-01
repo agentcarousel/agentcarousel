@@ -71,13 +71,14 @@ pub fn controls_for_framework<'a>(
 }
 
 /// Aggregate `CaseResult.tags` from `runs` into per-control effectiveness scores
-/// for the named `framework`, optionally scoped to a single `skill`.
-///
-/// Groups results by `generator_model` so each `ControlScore` is model-scoped.
+/// for the named `framework`, optionally scoped to a single `skill` and/or a
+/// specific generator `model`. When `model_filter` is `Some`, only runs whose
+/// `generator_model` matches exactly are included.
 pub fn compute_control_scores(
     runs: &[Run],
     framework: &str,
     skill: Option<&str>,
+    model_filter: Option<&str>,
 ) -> Vec<ControlScore> {
     let registry = load_framework_registry();
     let controls = controls_for_framework(&registry, framework);
@@ -101,6 +102,12 @@ pub fn compute_control_scores(
             .generator_model
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
+
+        if let Some(mf) = model_filter {
+            if model != mf {
+                continue;
+            }
+        }
 
         *model_run_counts.entry(model.clone()).or_insert(0) += 1;
         model_last_date
@@ -169,6 +176,41 @@ pub fn compute_control_scores(
         }
     }
     scores
+}
+
+/// Collapse a `Vec<ControlScore>` (which may have one entry per model) into one
+/// entry per control, keeping the entry with the highest-priority status.
+///
+/// Priority: Satisfied > PartialEvidence > Gap > Procedural.
+/// Tie-breaks on effectiveness_mean (higher wins).
+pub fn collapse_scores(scores: &[ControlScore]) -> Vec<ControlScore> {
+    let mut best: HashMap<String, &ControlScore> = HashMap::new();
+    for s in scores {
+        let key = s.control.control_id.clone();
+        let winner = best.entry(key).or_insert(s);
+        if status_rank(&s.status) > status_rank(&winner.status)
+            || (status_rank(&s.status) == status_rank(&winner.status)
+                && s.effectiveness_mean > winner.effectiveness_mean)
+        {
+            *winner = s;
+        }
+    }
+    // Preserve original order by iterating controls in insertion order.
+    let mut seen = std::collections::HashSet::new();
+    scores
+        .iter()
+        .filter(|s| seen.insert(s.control.control_id.clone()))
+        .map(|s| best[&s.control.control_id].clone())
+        .collect()
+}
+
+fn status_rank(s: &ControlCoverageStatus) -> u8 {
+    match s {
+        ControlCoverageStatus::Satisfied => 3,
+        ControlCoverageStatus::PartialEvidence => 2,
+        ControlCoverageStatus::Gap => 1,
+        ControlCoverageStatus::Procedural => 0,
+    }
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────

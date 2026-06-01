@@ -309,7 +309,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     const COMPLIANCE_FRAMEWORKS: &[&str] = &["nist-ai-rmf", "eu-ai-act", "iso-42001"];
     for fw in COMPLIANCE_FRAMEWORKS {
         let scores =
-            super::compliance_mappings::compute_control_scores(&compliance_runs, fw, skill);
+            super::compliance_mappings::compute_control_scores(&compliance_runs, fw, skill, None);
         let md = super::metrics::render_framework_compliance_report(&scores, fw, skill);
         let md_path = root.join(format!("compliance_{fw}.md"));
         let mut f = fs::File::create(&md_path).map_err(|err| err.to_string())?;
@@ -320,6 +320,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
         &compliance_runs,
         COMPLIANCE_FRAMEWORKS[0],
         skill,
+        None,
     );
     let oscal_json = super::metrics::serialize_assessment_results(
         &oscal_scores,

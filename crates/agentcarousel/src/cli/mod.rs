@@ -350,7 +350,7 @@ pub fn run() -> i32 {
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Metrics(args) => metrics::run_metrics(args, &globals),
-        Command::Compliance(args) => compliance::run_compliance(args, &globals),
+        Command::Compliance(args) => compliance::run_compliance(args, &globals, &config),
         Command::Compare(args) => compare::run_compare(args, &globals),
         #[cfg(feature = "watch")]
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
