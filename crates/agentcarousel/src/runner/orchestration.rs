@@ -328,7 +328,7 @@ fn map_batch_results(
                 input: case.input.messages,
                 discrimination_score: None,
                 discrimination_label: None,
-                tags: Vec::new(),
+                tags: case.tags.clone(),
             })
             .collect(),
     }
@@ -368,7 +368,7 @@ pub(super) async fn run_batch(
                         input: case.input.messages,
                         discrimination_score: None,
                         discrimination_label: None,
-                        tags: Vec::new(),
+                        tags: case.tags.clone(),
                     })
                     .collect();
             }
@@ -392,7 +392,7 @@ pub(super) async fn run_batch(
                         input: case.input.messages,
                         discrimination_score: None,
                         discrimination_label: None,
-                        tags: Vec::new(),
+                        tags: case.tags.clone(),
                     })
                     .collect();
             }
@@ -419,7 +419,7 @@ pub(super) async fn run_batch(
                         input: case.input.messages,
                         discrimination_score: None,
                         discrimination_label: None,
-                        tags: Vec::new(),
+                        tags: case.tags.clone(),
                     })
                     .collect();
             }
@@ -454,7 +454,7 @@ pub(super) async fn run_batch(
                 input: case.input.messages,
                 discrimination_score: None,
                 discrimination_label: None,
-                tags: Vec::new(),
+                tags: case.tags.clone(),
             })
             .collect();
     }
@@ -478,7 +478,7 @@ pub(super) async fn run_batch(
                     input: case.input.messages,
                     discrimination_score: None,
                     discrimination_label: None,
-                    tags: Vec::new(),
+                    tags: case.tags.clone(),
                 })
                 .collect();
         }
@@ -527,7 +527,7 @@ pub(super) async fn run_batch(
                         input: case.input.messages,
                         discrimination_score: None,
                         discrimination_label: None,
-                        tags: Vec::new(),
+                        tags: case.tags.clone(),
                     })
                     .collect()
             }
@@ -551,7 +551,7 @@ pub(super) async fn run_batch(
                         input: case.input.messages,
                         discrimination_score: None,
                         discrimination_label: None,
-                        tags: Vec::new(),
+                        tags: case.tags.clone(),
                     })
                     .collect()
             }
@@ -609,7 +609,7 @@ pub(super) async fn run_eval_cases(
                     input: case.input.messages.clone(),
                     discrimination_score: None,
                     discrimination_label: None,
-                    tags: Vec::new(),
+                    tags: case.tags.clone(),
                 });
 
             if result.status == CaseStatus::Passed {
@@ -704,7 +704,7 @@ pub(super) async fn run_eval_cases(
                     input: Vec::new(),
                     discrimination_score: None,
                     discrimination_label: None,
-                    tags: Vec::new(),
+                    tags: case.tags.clone(),
                 }
             }));
             continue;

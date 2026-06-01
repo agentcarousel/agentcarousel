@@ -7,6 +7,7 @@ mod candidates;
 mod carousel;
 mod compare;
 mod completions;
+pub mod compliance_mappings;
 mod config;
 #[cfg(feature = "dashboard")]
 mod dashboard;
