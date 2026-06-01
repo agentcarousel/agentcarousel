@@ -265,6 +265,8 @@ pub struct CaseResult {
     pub discrimination_score: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discrimination_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

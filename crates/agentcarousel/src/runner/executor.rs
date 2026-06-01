@@ -215,6 +215,7 @@ async fn run_case_inner(
         input,
         discrimination_score: None,
         discrimination_label: None,
+        tags: Vec::new(),
     }
 }
 
@@ -236,6 +237,7 @@ pub fn timeout_result(
         input,
         discrimination_score: None,
         discrimination_label: None,
+        tags: Vec::new(),
     }
 }
 

@@ -48,6 +48,7 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
         input: vec![],
         discrimination_score: None,
         discrimination_label: None,
+        tags: Vec::new(),
     };
     let started_at = Utc::now();
     Run {
