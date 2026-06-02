@@ -150,20 +150,12 @@ pub fn run_compliance(
     let configured_model = config.generator.model.as_str();
     match args.command {
         ComplianceCommand::Report(a) => {
-            let model_filter = if a.all_models {
-                None
-            } else {
-                Some(configured_model)
-            };
-            run_report(a, globals, model_filter)
+            let mf = (!a.all_models).then_some(configured_model);
+            run_report(a, globals, mf)
         }
         ComplianceCommand::Gaps(a) => {
-            let model_filter = if a.all_models {
-                None
-            } else {
-                Some(configured_model)
-            };
-            run_gaps(a, globals, model_filter)
+            let mf = (!a.all_models).then_some(configured_model);
+            run_gaps(a, globals, mf)
         }
         ComplianceCommand::Generate(a) => run_compliance_generate(a, globals, config),
     }
@@ -297,23 +289,15 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
         return code;
     }
 
-    // Resolve the effective run_id: replace placeholder "latest" with the actual most-recent run.
-    let resolved_run_id: String = if args.run_id == "latest" {
-        runs.first()
-            .map(|r| r.id.0.clone())
-            .unwrap_or_else(|| "latest".to_string())
-    } else {
-        args.run_id.clone()
-    };
-
     let frameworks: Vec<&str> = if args.framework == "all" {
         ALL_FRAMEWORKS.to_vec()
     } else {
         vec![args.framework.as_str()]
     };
 
+    let registry = load_framework_registry();
+
     if globals.json {
-        let registry = load_framework_registry();
         let mut results = Vec::new();
         for fw in &frameworks {
             let scores = compute_control_scores_with_registry(
@@ -340,7 +324,6 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
             eprintln!("error creating output directory: {e}");
             return ExitCode::RuntimeError.as_i32();
         }
-        let registry = load_framework_registry();
         for fw in &frameworks {
             let scores = compute_control_scores_with_registry(
                 &registry,
@@ -361,9 +344,22 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
     }
 
     let fw = args.framework.as_str();
-    let scores = compute_control_scores(&runs, fw, args.skill.as_deref(), model_filter);
+    let scores = compute_control_scores_with_registry(
+        &registry,
+        &runs,
+        fw,
+        args.skill.as_deref(),
+        model_filter,
+    );
 
     if args.oscal {
+        let resolved_run_id: String = if args.run_id == "latest" {
+            runs.first()
+                .map(|r| r.id.0.clone())
+                .unwrap_or_else(|| "latest".to_string())
+        } else {
+            args.run_id.clone()
+        };
         let content = serialize_assessment_results(
             &scores,
             fw,
@@ -411,26 +407,20 @@ fn print_compliance_terminal(
     let collapsed = collapse_scores(scores);
     let skill_label = filter_label(model_filter, skill);
 
-    let satisfied = collapsed
-        .iter()
-        .filter(|s| s.status == ControlCoverageStatus::Satisfied)
-        .count();
-    let partial = collapsed
-        .iter()
-        .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
-        .count();
-    let failed = collapsed
-        .iter()
-        .filter(|s| s.status == ControlCoverageStatus::Failed)
-        .count();
-    let gap = collapsed
-        .iter()
-        .filter(|s| s.status == ControlCoverageStatus::Gap)
-        .count();
-    let procedural = collapsed
-        .iter()
-        .filter(|s| s.status == ControlCoverageStatus::Procedural)
-        .count();
+    let mut satisfied = 0usize;
+    let mut partial = 0usize;
+    let mut failed = 0usize;
+    let mut gap = 0usize;
+    let mut procedural = 0usize;
+    for s in &collapsed {
+        match s.status {
+            ControlCoverageStatus::Satisfied => satisfied += 1,
+            ControlCoverageStatus::PartialEvidence => partial += 1,
+            ControlCoverageStatus::Failed => failed += 1,
+            ControlCoverageStatus::Gap => gap += 1,
+            ControlCoverageStatus::Procedural => procedural += 1,
+        }
+    }
     let total = collapsed.len();
 
     println!();
@@ -675,8 +665,6 @@ fn run_compliance_generate_inner(
 ) -> Result<i32, (i32, String)> {
     let registry = load_framework_registry();
 
-    let tags = args.tag;
-
     let skill = &args.skill;
     let output_path = args
         .out
@@ -716,7 +704,7 @@ fn run_compliance_generate_inner(
         .build()
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
 
-    let total_cases = tags.len() * args.count as usize;
+    let total_cases = args.tag.len() * args.count as usize;
     let show_progress = !globals.quiet && !globals.json && std::io::stderr().is_terminal();
     let pb: Option<ProgressBar> = if show_progress {
         let bar = ProgressBar::new(total_cases as u64);
@@ -735,9 +723,9 @@ fn run_compliance_generate_inner(
 
     let mut all_cases: Vec<serde_json::Value> = Vec::new();
     let mut tag_slot = 0usize;
-    let total_tags = tags.len();
+    let total_tags = args.tag.len();
 
-    for tag in &tags {
+    for tag in &args.tag {
         tag_slot += 1;
 
         // Resolve tag to a FrameworkControl across all frameworks in the registry.

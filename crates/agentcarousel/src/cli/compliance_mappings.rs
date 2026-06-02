@@ -150,13 +150,29 @@ pub fn compute_control_scores_with_registry(
             .extend(run.cases.iter());
     }
 
+    // Build a per-model tag → cases index to avoid O(controls × cases) filtering.
+    let mut model_tag_index: HashMap<
+        String,
+        HashMap<String, Vec<&agentcarousel_core::CaseResult>>,
+    > = HashMap::new();
+    for (model, cases) in &model_cases {
+        let index = model_tag_index.entry(model.clone()).or_default();
+        for case in cases.iter().copied() {
+            for tag in &case.tags {
+                index.entry(tag.clone()).or_default().push(case);
+            }
+        }
+    }
+
     let mut scores = Vec::new();
     for control in controls {
-        for (model, cases) in &model_cases {
-            let matching: Vec<_> = cases
-                .iter()
-                .filter(|c| c.tags.contains(&control.tag))
-                .collect();
+        for model in model_cases.keys() {
+            let empty: Vec<&agentcarousel_core::CaseResult> = vec![];
+            let matching: &[&agentcarousel_core::CaseResult] = model_tag_index
+                .get(model)
+                .and_then(|idx| idx.get(&control.tag))
+                .map(Vec::as_slice)
+                .unwrap_or(&empty);
             let case_count = matching.len() as u32;
 
             let (effectiveness_mean, pass_rate, status) = if !control.behavioral {
