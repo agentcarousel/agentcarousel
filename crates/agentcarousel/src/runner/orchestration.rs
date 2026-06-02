@@ -130,6 +130,7 @@ pub(super) async fn run_sequential(
     for case in cases {
         let case_id = case.id.clone();
         let case_input = case.input.messages.clone();
+        let case_tags = case.tags.clone();
         let timeout = tokio::time::timeout(
             std::time::Duration::from_secs(case.timeout_secs.unwrap_or(config.timeout_secs)),
             super::executor::run_case(case, mock_engine, config),
@@ -137,7 +138,7 @@ pub(super) async fn run_sequential(
         .await;
         let result = match timeout {
             Ok(result) => result,
-            Err(_) => super::executor::timeout_result(case_id, case_input),
+            Err(_) => super::executor::timeout_result(case_id, case_input, case_tags),
         };
         let should_stop = result.status != CaseStatus::Passed;
         results.push(result);
@@ -146,6 +147,30 @@ pub(super) async fn run_sequential(
         }
     }
     results
+}
+
+fn make_error_result(
+    case_id: agentcarousel_core::CaseId,
+    input: Vec<agentcarousel_core::Message>,
+    tags: Vec<String>,
+    error: String,
+) -> CaseResult {
+    CaseResult {
+        case_id,
+        status: CaseStatus::Error,
+        error: Some(error),
+        trace: agentcarousel_core::ExecutionTrace {
+            steps: Vec::new(),
+            final_output: None,
+            redacted: false,
+        },
+        metrics: agentcarousel_core::Metrics::default(),
+        eval_scores: None,
+        input,
+        discrimination_score: None,
+        discrimination_label: None,
+        tags,
+    }
 }
 
 pub(super) async fn run_parallel(
@@ -164,6 +189,7 @@ pub(super) async fn run_parallel(
         let case_id = case.id.clone();
         let case_id_for_tuple = case_id.clone();
         let case_input = case.input.messages.clone();
+        let case_tags = case.tags.clone();
         let handle = tokio::spawn(async move {
             let _permit = permit;
             let timeout = tokio::time::timeout(
@@ -173,7 +199,7 @@ pub(super) async fn run_parallel(
             .await;
             match timeout {
                 Ok(result) => result,
-                Err(_) => super::executor::timeout_result(case_id, case_input),
+                Err(_) => super::executor::timeout_result(case_id, case_input, case_tags),
             }
         });
         handles.push((case_id_for_tuple, handle));
@@ -275,14 +301,14 @@ pub async fn submit_batch_only(
 fn map_batch_results(
     dispatch_result: Result<Vec<super::batch::BatchCaseResult>, super::batch::BatchError>,
     cases: Vec<agentcarousel_core::Case>,
-    case_map: std::collections::HashMap<String, Vec<agentcarousel_core::Message>>,
+    case_map: std::collections::HashMap<String, (Vec<agentcarousel_core::Message>, Vec<String>)>,
 ) -> Vec<agentcarousel_core::CaseResult> {
     use agentcarousel_core::{CaseResult, CaseStatus, ExecutionTrace, Metrics};
     match dispatch_result {
         Ok(batch_results) => batch_results
             .into_iter()
             .map(|br| {
-                let input = case_map.get(&br.case_id.0).cloned().unwrap_or_default();
+                let (input, tags) = case_map.get(&br.case_id.0).cloned().unwrap_or_default();
                 let (status, error) = if br.error.is_some() {
                     (CaseStatus::Error, br.error)
                 } else {
@@ -308,28 +334,13 @@ fn map_batch_results(
                     input,
                     discrimination_score: None,
                     discrimination_label: None,
-                    tags: Vec::new(),
+                    tags,
                 }
             })
             .collect(),
         Err(e) => cases
             .into_iter()
-            .map(|case| CaseResult {
-                case_id: case.id,
-                status: CaseStatus::Error,
-                error: Some(e.to_string()),
-                trace: ExecutionTrace {
-                    steps: Vec::new(),
-                    final_output: None,
-                    redacted: false,
-                },
-                metrics: Metrics::default(),
-                eval_scores: None,
-                input: case.input.messages,
-                discrimination_score: None,
-                discrimination_label: None,
-                tags: case.tags.clone(),
-            })
+            .map(|case| make_error_result(case.id, case.input.messages, case.tags, e.to_string()))
             .collect(),
     }
 }
@@ -344,7 +355,6 @@ pub(super) async fn run_batch(
     use super::generator::{
         build_user_prompt, resolve_generator_key, resolve_system_prompt, GeneratorProvider,
     };
-    use agentcarousel_core::{CaseResult, CaseStatus, ExecutionTrace, Metrics};
 
     // ── Collect-only path: results from an already-submitted batch ───────────────
     if let Some(ref collect_id) = config.batch_collect_id {
@@ -354,21 +364,13 @@ pub(super) async fn run_batch(
             Err(e) => {
                 return cases
                     .into_iter()
-                    .map(|case| CaseResult {
-                        case_id: case.id,
-                        status: CaseStatus::Error,
-                        error: Some(format!("batch state load failed: {e}")),
-                        trace: ExecutionTrace {
-                            steps: Vec::new(),
-                            final_output: None,
-                            redacted: false,
-                        },
-                        metrics: Metrics::default(),
-                        eval_scores: None,
-                        input: case.input.messages,
-                        discrimination_score: None,
-                        discrimination_label: None,
-                        tags: case.tags.clone(),
+                    .map(|case| {
+                        make_error_result(
+                            case.id,
+                            case.input.messages,
+                            case.tags,
+                            format!("batch state load failed: {e}"),
+                        )
                     })
                     .collect();
             }
@@ -378,21 +380,8 @@ pub(super) async fn run_batch(
             Err(e) => {
                 return cases
                     .into_iter()
-                    .map(|case| CaseResult {
-                        case_id: case.id,
-                        status: CaseStatus::Error,
-                        error: Some(e.to_string()),
-                        trace: ExecutionTrace {
-                            steps: Vec::new(),
-                            final_output: None,
-                            redacted: false,
-                        },
-                        metrics: Metrics::default(),
-                        eval_scores: None,
-                        input: case.input.messages,
-                        discrimination_score: None,
-                        discrimination_label: None,
-                        tags: case.tags.clone(),
+                    .map(|case| {
+                        make_error_result(case.id, case.input.messages, case.tags, e.to_string())
                     })
                     .collect();
             }
@@ -405,28 +394,20 @@ pub(super) async fn run_batch(
             Err(e) => {
                 return cases
                     .into_iter()
-                    .map(|case| CaseResult {
-                        case_id: case.id,
-                        status: CaseStatus::Error,
-                        error: Some(format!("reqwest build failed: {e}")),
-                        trace: ExecutionTrace {
-                            steps: Vec::new(),
-                            final_output: None,
-                            redacted: false,
-                        },
-                        metrics: Metrics::default(),
-                        eval_scores: None,
-                        input: case.input.messages,
-                        discrimination_score: None,
-                        discrimination_label: None,
-                        tags: case.tags.clone(),
+                    .map(|case| {
+                        make_error_result(
+                            case.id,
+                            case.input.messages,
+                            case.tags,
+                            format!("reqwest build failed: {e}"),
+                        )
                     })
                     .collect();
             }
         };
         let case_map: std::collections::HashMap<_, _> = cases
             .iter()
-            .map(|c| (c.id.0.clone(), c.input.messages.clone()))
+            .map(|c| (c.id.0.clone(), (c.input.messages.clone(), c.tags.clone())))
             .collect();
         let dispatcher = AnthropicBatch::new(api_key);
         let total = state.case_ids.len();
@@ -440,21 +421,13 @@ pub(super) async fn run_batch(
         // batch mode is all-or-nothing; fail-fast is incompatible
         return cases
             .into_iter()
-            .map(|case| CaseResult {
-                case_id: case.id,
-                status: CaseStatus::Error,
-                error: Some("--fail-fast is not supported with --execution-mode batch".to_string()),
-                trace: ExecutionTrace {
-                    steps: Vec::new(),
-                    final_output: None,
-                    redacted: false,
-                },
-                metrics: Metrics::default(),
-                eval_scores: None,
-                input: case.input.messages,
-                discrimination_score: None,
-                discrimination_label: None,
-                tags: case.tags.clone(),
+            .map(|case| {
+                make_error_result(
+                    case.id,
+                    case.input.messages,
+                    case.tags,
+                    "--fail-fast is not supported with --execution-mode batch".to_string(),
+                )
             })
             .collect();
     }
@@ -464,21 +437,13 @@ pub(super) async fn run_batch(
         None => {
             return cases
                 .into_iter()
-                .map(|case| CaseResult {
-                    case_id: case.id,
-                    status: CaseStatus::Error,
-                    error: Some("generator model is not configured for batch mode".to_string()),
-                    trace: ExecutionTrace {
-                        steps: Vec::new(),
-                        final_output: None,
-                        redacted: false,
-                    },
-                    metrics: Metrics::default(),
-                    eval_scores: None,
-                    input: case.input.messages,
-                    discrimination_score: None,
-                    discrimination_label: None,
-                    tags: case.tags.clone(),
+                .map(|case| {
+                    make_error_result(
+                        case.id,
+                        case.input.messages,
+                        case.tags,
+                        "generator model is not configured for batch mode".to_string(),
+                    )
                 })
                 .collect();
         }
@@ -487,10 +452,10 @@ pub(super) async fn run_batch(
     let provider = GeneratorProvider::from_model(&model);
     let max_tokens = config.generator_max_tokens.unwrap_or(2048);
 
-    // Build a lookup map so we can reconstruct CaseResult.input after dispatch
+    // Build a lookup map so we can reconstruct CaseResult.input and tags after dispatch.
     let case_map: std::collections::HashMap<_, _> = cases
         .iter()
-        .map(|c| (c.id.0.clone(), c.input.messages.clone()))
+        .map(|c| (c.id.0.clone(), (c.input.messages.clone(), c.tags.clone())))
         .collect();
 
     // Map Case → CaseBatchItem
@@ -513,21 +478,8 @@ pub(super) async fn run_batch(
             Err(e) => {
                 return cases
                     .into_iter()
-                    .map(|case| CaseResult {
-                        case_id: case.id,
-                        status: CaseStatus::Error,
-                        error: Some(e.to_string()),
-                        trace: ExecutionTrace {
-                            steps: Vec::new(),
-                            final_output: None,
-                            redacted: false,
-                        },
-                        metrics: Metrics::default(),
-                        eval_scores: None,
-                        input: case.input.messages,
-                        discrimination_score: None,
-                        discrimination_label: None,
-                        tags: case.tags.clone(),
+                    .map(|case| {
+                        make_error_result(case.id, case.input.messages, case.tags, e.to_string())
                     })
                     .collect()
             }
@@ -537,21 +489,8 @@ pub(super) async fn run_batch(
             Err(e) => {
                 return cases
                     .into_iter()
-                    .map(|case| CaseResult {
-                        case_id: case.id,
-                        status: CaseStatus::Error,
-                        error: Some(e.to_string()),
-                        trace: ExecutionTrace {
-                            steps: Vec::new(),
-                            final_output: None,
-                            redacted: false,
-                        },
-                        metrics: Metrics::default(),
-                        eval_scores: None,
-                        input: case.input.messages,
-                        discrimination_score: None,
-                        discrimination_label: None,
-                        tags: case.tags.clone(),
+                    .map(|case| {
+                        make_error_result(case.id, case.input.messages, case.tags, e.to_string())
                     })
                     .collect()
             }
@@ -668,10 +607,14 @@ pub(super) async fn run_eval_cases(
     let semaphore = Arc::new(Semaphore::new(concurrency));
     let judge_unavailable = Arc::new(AtomicBool::new(false));
     let generator_unavailable = Arc::new(AtomicBool::new(false));
-    let mut handles = Vec::new();
+    let mut handles: Vec<(agentcarousel_core::CaseId, _)> = Vec::new();
 
     for case in cases {
-        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("semaphore unexpectedly closed");
 
         // After acquiring a slot, check whether a completed task found the judge or generator
         // permanently broken. Skip remaining cases to avoid wasting tokens.
@@ -680,36 +623,41 @@ pub(super) async fn run_eval_cases(
         if judge_gone || gen_gone {
             drop(permit);
             let case_id = case.id.clone();
+            let case_id_for_vec = case_id.clone();
             let pb = progress_bar.clone();
             let err_msg = if gen_gone {
                 "generator unavailable — case skipped to avoid wasting tokens"
             } else {
                 "judge unavailable — generator skipped to avoid wasting tokens"
             };
-            handles.push(tokio::spawn(async move {
-                if let Some(pb) = pb {
-                    pb.inc(1);
-                }
-                CaseResult {
-                    case_id,
-                    status: CaseStatus::Error,
-                    error: Some(err_msg.to_string()),
-                    trace: agentcarousel_core::ExecutionTrace {
-                        steps: Vec::new(),
-                        final_output: None,
-                        redacted: false,
-                    },
-                    metrics: agentcarousel_core::Metrics::default(),
-                    eval_scores: None,
-                    input: Vec::new(),
-                    discrimination_score: None,
-                    discrimination_label: None,
-                    tags: case.tags.clone(),
-                }
-            }));
+            handles.push((
+                case_id_for_vec,
+                tokio::spawn(async move {
+                    if let Some(pb) = pb {
+                        pb.inc(1);
+                    }
+                    CaseResult {
+                        case_id,
+                        status: CaseStatus::Error,
+                        error: Some(err_msg.to_string()),
+                        trace: agentcarousel_core::ExecutionTrace {
+                            steps: Vec::new(),
+                            final_output: None,
+                            redacted: false,
+                        },
+                        metrics: agentcarousel_core::Metrics::default(),
+                        eval_scores: None,
+                        input: Vec::new(),
+                        discrimination_score: None,
+                        discrimination_label: None,
+                        tags: case.tags.clone(),
+                    }
+                }),
+            ));
             continue;
         }
 
+        let case_id = case.id.clone();
         let mock_engine = mock_engine.clone();
         let config = config.clone();
         let run_id = run_id.clone();
@@ -717,29 +665,48 @@ pub(super) async fn run_eval_cases(
         let judge_unavailable = judge_unavailable.clone();
         let generator_unavailable = generator_unavailable.clone();
         let pb = progress_bar.clone();
-        handles.push(tokio::spawn(async move {
-            let _permit = permit;
-            let result = run_case_eval(
-                case,
-                &mock_engine,
-                &config,
-                &run_id,
-                judge_cache,
-                judge_unavailable,
-                generator_unavailable,
-            )
-            .await;
-            if let Some(pb) = pb {
-                pb.inc(1);
-            }
-            result
-        }));
+        handles.push((
+            case_id,
+            tokio::spawn(async move {
+                let _permit = permit;
+                let result = run_case_eval(
+                    case,
+                    &mock_engine,
+                    &config,
+                    &run_id,
+                    judge_cache,
+                    judge_unavailable,
+                    generator_unavailable,
+                )
+                .await;
+                if let Some(pb) = pb {
+                    pb.inc(1);
+                }
+                result
+            }),
+        ));
     }
 
     let mut results = Vec::new();
-    for handle in handles {
-        if let Ok(result) = handle.await {
-            results.push(result);
+    for (case_id, handle) in handles {
+        match handle.await {
+            Ok(result) => results.push(result),
+            Err(err) => results.push(CaseResult {
+                case_id,
+                status: CaseStatus::Error,
+                error: Some(format!("task panicked: {err}")),
+                trace: agentcarousel_core::ExecutionTrace {
+                    steps: Vec::new(),
+                    final_output: None,
+                    redacted: false,
+                },
+                metrics: agentcarousel_core::Metrics::default(),
+                eval_scores: None,
+                input: Vec::new(),
+                discrimination_score: None,
+                discrimination_label: None,
+                tags: Vec::new(),
+            }),
         }
     }
     if let Some(pb) = progress_bar {

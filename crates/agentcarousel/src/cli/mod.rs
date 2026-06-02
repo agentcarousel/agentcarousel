@@ -18,6 +18,7 @@ mod exit_codes;
 mod export;
 mod fixture_utils;
 mod generate;
+mod llm_output;
 mod local_config;
 mod metrics;
 mod optimize;

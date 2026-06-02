@@ -1,7 +1,13 @@
 use agentcarousel_reporters::{list_full_runs, list_full_runs_by_skill};
 use clap::{Parser, Subcommand};
 use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
+use std::io::IsTerminal;
 use std::path::PathBuf;
+use std::time::Duration;
+
+use crate::fixtures::{validate_fixture_value, SchemaLocation};
+use crate::runner::call_llm;
 
 use super::compliance_mappings::{
     collapse_scores, compute_control_scores, compute_control_scores_with_registry,
@@ -9,9 +15,15 @@ use super::compliance_mappings::{
 };
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
+use super::llm_output::{normalize_expected_block, prepare_llm_yaml};
 use super::metrics::{render_framework_compliance_report, serialize_assessment_results};
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
+
+const COMPLIANCE_GENERATE_PROMPT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/compliance-generate-prompt.md"
+));
 
 const ALL_FRAMEWORKS: &[&str] = &[
     "nist-ai-rmf",
@@ -41,6 +53,39 @@ enum ComplianceCommand {
     Report(ReportArgs),
     /// List controls with no fixture coverage and print remediation advisories.
     Gaps(GapsArgs),
+    /// Generate fixture cases for a skill that provide behavioral evidence for a compliance control.
+    Generate(GenerateComplianceArgs),
+}
+
+#[derive(Debug, Parser)]
+struct GenerateComplianceArgs {
+    /// Skill name. Cases are written to fixtures/<skill>/cases.yaml.
+    #[arg(long)]
+    skill: String,
+
+    /// Compliance tag(s) to generate cases for (e.g. nist-800-53:AC-1, hipaa:164.308.a.1). Repeatable.
+    #[arg(long, required = true)]
+    tag: Vec<String>,
+
+    /// Cases to generate per tag.
+    #[arg(long, default_value_t = 3)]
+    count: u32,
+
+    /// LLM model to use for generation (default: configured generator model).
+    #[arg(long)]
+    model: Option<String>,
+
+    /// Base URL for a custom/Ollama generator endpoint.
+    #[arg(long, value_name = "URL")]
+    generator_endpoint: Option<String>,
+
+    /// Write output to this path instead of fixtures/<skill>/cases.yaml.
+    #[arg(long)]
+    out: Option<PathBuf>,
+
+    /// Print YAML to stdout instead of writing to disk.
+    #[arg(long)]
+    dry_run: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -121,6 +166,7 @@ pub fn run_compliance(
             };
             run_gaps(a, globals, model_filter)
         }
+        ComplianceCommand::Generate(a) => run_compliance_generate(a, globals, config),
     }
 }
 
@@ -174,14 +220,13 @@ fn check_model_coverage(
         return Ok(());
     }
 
-    // Collect what models ARE present so we can suggest them.
-    let mut present: Vec<String> = runs
+    // Collect what models ARE present so we can suggest them (sorted, deduplicated).
+    let present: Vec<String> = runs
         .iter()
         .filter_map(|r| r.summary.generator_model.clone())
-        .collect::<std::collections::HashSet<_>>()
+        .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
-    present.sort();
 
     if globals.json {
         let hint = if runs.is_empty() {
@@ -238,21 +283,10 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
     }
 
     if args.framework == "all" && args.out.is_none() && !globals.json {
-        if globals.json {
-            JsonOutput::err(
-                "compliance",
-                JsonError::new(
-                    "missing_out",
-                    "--framework all writes one file per framework; pass --out <dir> to specify the output directory",
-                ),
-            )
-            .print();
-        } else {
-            eprintln!(
-                "error: --framework all writes one file per framework. \
-                 Pass --out <dir> to specify the output directory."
-            );
-        }
+        eprintln!(
+            "error: --framework all writes one file per framework. \
+             Pass --out <dir> to specify the output directory."
+        );
         return ExitCode::RuntimeError.as_i32();
     }
 
@@ -445,8 +479,8 @@ fn print_compliance_terminal(
             style(format!("{framework}:<control-id>")).cyan()
         );
         println!(
-            "  Then run  {}  to scaffold cases for specific controls.",
-            style("agc compliance scaffold --tag <tag>").dim()
+            "  Then run  {}  to generate cases for specific controls.",
+            style("agc compliance generate --skill <skill> --tag <tag>").dim()
         );
     } else {
         println!(
@@ -467,7 +501,7 @@ fn print_compliance_terminal(
             };
             println!(
                 "  {:<32} {:<8} {:<6} {}",
-                &s.control.control_id[..s.control.control_id.len().min(31)],
+                truncate_chars(&s.control.control_id, 31),
                 score_str,
                 s.case_count,
                 status_str,
@@ -480,7 +514,7 @@ fn print_compliance_terminal(
         for s in &procedural_list {
             println!(
                 "  {:<32} {:<8} {:<6} {}",
-                &s.control.control_id[..s.control.control_id.len().min(31)],
+                truncate_chars(&s.control.control_id, 31),
                 "n/a",
                 "—",
                 style("📋 Procedural").dim(),
@@ -536,11 +570,11 @@ fn run_gaps(args: GapsArgs, globals: &GlobalOptions, model_filter: Option<&str>)
         return ExitCode::Ok.as_i32();
     }
 
-    let filter_label = filter_label(model_filter, args.skill.as_deref());
+    let label = filter_label(model_filter, args.skill.as_deref());
     println!();
     println!(
         "  {}",
-        style(format!("Compliance Gaps — {fw} · {filter_label}")).bold()
+        style(format!("Compliance Gaps — {fw} · {label}")).bold()
     );
     println!("  {}", "─".repeat(70));
 
@@ -571,12 +605,21 @@ fn run_gaps(args: GapsArgs, globals: &GlobalOptions, model_filter: Option<&str>)
         }
         println!(
             "     {}",
-            style(format!("agc compliance scaffold --tag {}", s.control.tag)).dim()
+            style(format!(
+                "agc compliance generate --skill <skill> --tag {}",
+                s.control.tag
+            ))
+            .dim()
         );
         println!();
     }
 
     ExitCode::Ok.as_i32()
+}
+
+/// Truncate `s` to at most `max` Unicode scalar values, staying on char boundaries.
+fn truncate_chars(s: &str, max: usize) -> &str {
+    s.char_indices().nth(max).map_or(s, |(i, _)| &s[..i])
 }
 
 /// Wrap `text` to lines of at most `width` chars, breaking at word boundaries.
@@ -604,4 +647,431 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
         }
     }
     lines
+}
+
+// ── agc compliance generate ───────────────────────────────────────────────────
+
+fn run_compliance_generate(
+    args: GenerateComplianceArgs,
+    globals: &GlobalOptions,
+    config: &ResolvedConfig,
+) -> i32 {
+    match run_compliance_generate_inner(args, globals, config) {
+        Ok(code) => code,
+        Err((code, msg)) => {
+            if globals.json {
+                JsonOutput::err("compliance", JsonError::new("runtime_error", msg)).print();
+            } else {
+                eprintln!("error: {msg}");
+            }
+            code
+        }
+    }
+}
+
+fn run_compliance_generate_inner(
+    args: GenerateComplianceArgs,
+    globals: &GlobalOptions,
+    config: &ResolvedConfig,
+) -> Result<i32, (i32, String)> {
+    let registry = load_framework_registry();
+
+    let tags = args.tag;
+
+    let skill = &args.skill;
+    let output_path = args
+        .out
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("fixtures").join(skill).join("cases.yaml"));
+    let model = args
+        .model
+        .as_deref()
+        .unwrap_or(config.generator.model.as_str());
+    let endpoint = args.generator_endpoint.as_deref();
+
+    // Load the compliance-specific generation prompt (embedded fallback).
+    let prompt_template = {
+        let disk = std::path::Path::new("templates/compliance-generate-prompt.md");
+        if disk.exists() {
+            std::fs::read_to_string(disk).unwrap_or_else(|_| COMPLIANCE_GENERATE_PROMPT.to_string())
+        } else {
+            COMPLIANCE_GENERATE_PROMPT.to_string()
+        }
+    };
+
+    // Load skill description from fixtures/<skill>/prompt.md if present.
+    let skill_description = {
+        let prompt_md = PathBuf::from("fixtures").join(skill).join("prompt.md");
+        if prompt_md.exists() {
+            std::fs::read_to_string(&prompt_md).unwrap_or_else(|_| skill.clone())
+        } else {
+            skill.clone()
+        }
+    };
+
+    let mut existing_ids = cg_read_existing_ids(&output_path);
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e.to_string()))?;
+
+    let total_cases = tags.len() * args.count as usize;
+    let show_progress = !globals.quiet && !globals.json && std::io::stderr().is_terminal();
+    let pb: Option<ProgressBar> = if show_progress {
+        let bar = ProgressBar::new(total_cases as u64);
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} cases {msg}",
+            )
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+        );
+        bar.enable_steady_tick(Duration::from_millis(120));
+        Some(bar)
+    } else {
+        None
+    };
+
+    let mut all_cases: Vec<serde_json::Value> = Vec::new();
+    let mut tag_slot = 0usize;
+    let total_tags = tags.len();
+
+    for tag in &tags {
+        tag_slot += 1;
+
+        // Resolve tag to a FrameworkControl across all frameworks in the registry.
+        let control = registry
+            .values()
+            .flat_map(|controls| controls.iter())
+            .find(|c| c.tag == *tag)
+            .ok_or_else(|| {
+                (
+                    ExitCode::NotFound.as_i32(),
+                    format!(
+                        "unknown compliance tag '{tag}'. \
+                         Run `agc compliance gaps` to see controls without coverage."
+                    ),
+                )
+            })?;
+
+        if !globals.quiet && !globals.json {
+            if let Some(ref bar) = pb {
+                bar.suspend(|| {
+                    eprintln!(
+                        "  {} {} — {}",
+                        style("→").cyan(),
+                        style(tag).bold(),
+                        &control.requirement[..control.requirement.len().min(72)]
+                    );
+                });
+            } else {
+                eprintln!(
+                    "  {} {} — {}",
+                    style("→").cyan(),
+                    style(tag).bold(),
+                    &control.requirement[..control.requirement.len().min(72)]
+                );
+            }
+        }
+
+        if let Some(ref bar) = pb {
+            bar.set_message(format!(
+                "generating {args_count} case(s) for {tag} ({tag_slot}/{total_tags})...",
+                args_count = args.count,
+            ));
+        }
+
+        let prompt = cg_build_prompt(
+            &prompt_template,
+            skill,
+            &skill_description,
+            &control.framework,
+            &control.control_id,
+            &control.requirement,
+            tag,
+            args.count,
+            &existing_ids,
+        );
+
+        let raw = runtime
+            .block_on(call_llm(model, &prompt, Some(8192), endpoint))
+            .map_err(|e| {
+                if let Some(ref bar) = pb {
+                    bar.finish_and_clear();
+                }
+                (
+                    ExitCode::RuntimeError.as_i32(),
+                    format!("tag {tag_slot}/{total_tags} ({tag}) — LLM call failed: {e}"),
+                )
+            })?
+            .output;
+
+        let verbose = globals.verbose;
+        // Sanitize once here so the retry prompt can echo back exactly what the model
+        // produced (post-cleanup) — giving it concrete context to fix rather than just
+        // an abstract error message.
+        let sanitized = prepare_llm_yaml(&raw);
+
+        // Validate; retry once with error feedback on failure.
+        let case_value = cg_parse_validate(&sanitized, skill, verbose).or_else(|errors| {
+            if !globals.quiet && !globals.json {
+                let msg = format!(
+                    "tag {tag_slot}/{total_tags} ({tag}): validation failed, retrying...\n{errors}"
+                );
+                if let Some(ref bar) = pb {
+                    bar.suspend(|| eprintln!("{msg}"));
+                } else {
+                    eprintln!("{msg}");
+                }
+            }
+            // Echo the sanitized YAML so the model can fix specific lines, not guess.
+            let retry_prompt = format!(
+                "{prompt}\n\n\
+                 Your previous output (after automatic whitespace and quoting cleanup):\n\
+                 ```yaml\n{sanitized}\n```\n\n\
+                 Validation errors:\n{errors}\n\n\
+                 Fix all errors and return only the corrected `cases:` YAML block."
+            );
+            let raw2 = runtime
+                .block_on(call_llm(model, &retry_prompt, Some(8192), endpoint))
+                .map_err(|e| format!("retry LLM call failed: {e}"))?
+                .output;
+            let sanitized2 = prepare_llm_yaml(&raw2);
+            cg_parse_validate(&sanitized2, skill, verbose)
+        });
+
+        let case_value = case_value.map_err(|e| {
+            if let Some(ref bar) = pb {
+                bar.finish_and_clear();
+            }
+            (
+                ExitCode::ValidationFailed.as_i32(),
+                format!("tag {tag_slot}/{total_tags} ({tag}) failed validation after retry:\n{e}"),
+            )
+        })?;
+
+        let mut new_cases = case_value
+            .get("cases")
+            .and_then(|c| c.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        // Ensure the compliance tag is present in every generated case's tags array,
+        // and register every new ID so subsequent tag calls cannot reuse them.
+        for case in new_cases.iter_mut() {
+            cg_inject_tag(case, tag);
+            if let Some(id) = case.get("id").and_then(|v| v.as_str()) {
+                existing_ids.push(id.to_string());
+            }
+        }
+
+        let generated = new_cases.len();
+        if let Some(ref bar) = pb {
+            bar.inc(generated as u64);
+            bar.suspend(|| {
+                for case in &new_cases {
+                    let id = case
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("(unknown)");
+                    println!("  ✓ {tag} — {id}");
+                }
+            });
+        } else if !globals.quiet && !globals.json {
+            for case in &new_cases {
+                let id = case
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("(unknown)");
+                println!("  ✓ {tag} — {id}");
+            }
+        }
+
+        all_cases.extend(new_cases);
+    }
+
+    if let Some(bar) = pb {
+        bar.finish_and_clear();
+    }
+
+    let case_count = all_cases.len();
+    let cases_yaml = serde_yaml::to_string(&all_cases).unwrap_or_default();
+
+    if args.dry_run {
+        println!("{cases_yaml}");
+        if globals.json {
+            JsonOutput::ok(
+                "compliance",
+                serde_json::json!({ "cases_generated": case_count, "dry_run": true }),
+            )
+            .print();
+        }
+        return Ok(ExitCode::Ok.as_i32());
+    }
+
+    cg_append_to_file(&output_path, &cases_yaml, skill)
+        .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
+
+    if globals.json {
+        JsonOutput::ok(
+            "compliance",
+            serde_json::json!({
+                "cases_generated": case_count,
+                "output_path": output_path.display().to_string(),
+                "dry_run": false,
+            }),
+        )
+        .print();
+    } else {
+        println!("wrote {} case(s) to {}", case_count, output_path.display());
+    }
+
+    Ok(ExitCode::Ok.as_i32())
+}
+
+// ── compliance generate helpers ───────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+fn cg_build_prompt(
+    template: &str,
+    skill_name: &str,
+    skill_description: &str,
+    framework: &str,
+    control_id: &str,
+    control_requirement: &str,
+    compliance_tag: &str,
+    count: u32,
+    existing_ids: &[String],
+) -> String {
+    let existing = if existing_ids.is_empty() {
+        "(none)".to_string()
+    } else {
+        existing_ids.join("\n")
+    };
+
+    let mut coverage = format!(
+        "Generate exactly {count} case(s).\n\n\
+         1. **Nominal** — the agent is given a realistic, in-scope input and demonstrates \
+         compliant behavior. The expected output confirms the control is satisfied under \
+         normal conditions."
+    );
+    if count >= 2 {
+        coverage.push_str(
+            "\n\n2. **Boundary** — an edge-case input relevant to this control: limit values, \
+             unusual but valid requests, inputs that stress the boundary of the control's scope.",
+        );
+    }
+    if count >= 3 {
+        coverage.push_str(
+            "\n\n3. **Adversarial** — an input specifically designed to cause a control violation \
+             (e.g. prompt injection attempting to bypass the control, a social-engineering request, \
+             an ambiguous instruction that could be misread). The expected output confirms the agent \
+             **resists** and maintains compliance.",
+        );
+    }
+
+    template
+        .replace("{{COUNT}}", &count.to_string())
+        .replace("{{SKILL_NAME}}", skill_name)
+        .replace("{{SKILL_DESCRIPTION}}", skill_description)
+        .replace("{{FRAMEWORK}}", framework)
+        .replace("{{CONTROL_ID}}", control_id)
+        .replace("{{CONTROL_REQUIREMENT}}", control_requirement)
+        .replace("{{COMPLIANCE_TAG}}", compliance_tag)
+        .replace("{{EXISTING_IDS}}", &existing)
+        .replace("{{COVERAGE_REQUIREMENTS}}", &coverage)
+}
+
+/// Parse and schema-validate already-sanitized YAML from an LLM response.
+/// Caller must pass output from [`prepare_llm_yaml`].
+fn cg_parse_validate(
+    sanitized_yaml: &str,
+    skill_name: &str,
+    verbose: u8,
+) -> Result<serde_json::Value, String> {
+    let mut value: serde_json::Value = serde_yaml::from_str(sanitized_yaml).map_err(|e| {
+        if verbose >= 1 {
+            eprintln!(
+                "\n── sanitized YAML that failed to parse ──\n{sanitized_yaml}\n────────────────────────────────────────"
+            );
+        }
+        format!("YAML parse error: {e}")
+    })?;
+
+    if value.get("cases").and_then(|c| c.as_array()).is_none() {
+        return Err("LLM output missing top-level 'cases:' key".to_string());
+    }
+
+    normalize_expected_block(&mut value);
+
+    let cases_array = value
+        .get("cases")
+        .and_then(|c| c.as_array())
+        .expect("verified above");
+
+    let mut errors: Vec<String> = Vec::new();
+    for (i, case) in cases_array.iter().enumerate() {
+        let doc = serde_json::json!({
+            "schema_version": 1,
+            "skill_or_agent": skill_name,
+            "cases": [case]
+        });
+        match validate_fixture_value(&doc, SchemaLocation::Default) {
+            Ok(issues) if !issues.is_empty() => {
+                for issue in issues {
+                    errors.push(format!("case[{i}]: {issue}"));
+                }
+            }
+            Err(e) => errors.push(format!("case[{i}]: schema error: {e}")),
+            _ => {}
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+
+    Ok(value)
+}
+
+fn cg_inject_tag(case: &mut serde_json::Value, tag: &str) {
+    let Some(obj) = case.as_object_mut() else {
+        return;
+    };
+    let tags = obj.entry("tags").or_insert_with(|| serde_json::json!([]));
+    let Some(arr) = tags.as_array_mut() else {
+        return;
+    };
+    if !arr.iter().any(|t| t.as_str() == Some(tag)) {
+        arr.insert(0, serde_json::json!(tag));
+    }
+}
+
+fn cg_read_existing_ids(path: &std::path::Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return vec![];
+    };
+    let Ok(value) = serde_yaml::from_str::<serde_json::Value>(&text) else {
+        return vec![];
+    };
+    value
+        .get("cases")
+        .and_then(|c| c.as_array())
+        .map(|cases| {
+            cases
+                .iter()
+                .filter_map(|c| c.get("id").and_then(|id| id.as_str()).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn cg_append_to_file(
+    path: &std::path::Path,
+    cases_yaml: &str,
+    skill_name: &str,
+) -> Result<(), String> {
+    super::fixture_utils::append_cases_to_fixture(path, cases_yaml, skill_name)
 }

@@ -79,6 +79,38 @@ pub fn is_kebab_case(value: &str) -> bool {
         && !value.contains("--")
 }
 
+/// Append a serialized YAML cases block to an existing fixture file, or create it with the
+/// standard header if it does not yet exist.
+///
+/// `cases_yaml` must already be a serialized YAML sequence (from `serde_yaml::to_string`).
+pub fn append_cases_to_fixture(
+    path: &Path,
+    cases_yaml: &str,
+    skill_name: &str,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    if path.exists() {
+        let text = cases_yaml.trim();
+        let to_append = format!("\n{text}\n");
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .map_err(|e| format!("failed to open {}: {e}", path.display()))?;
+        use std::io::Write;
+        file.write_all(to_append.as_bytes())
+            .map_err(|e| format!("failed to write to {}: {e}", path.display()))?;
+    } else {
+        let header =
+            format!("schema_version: 1\nskill_or_agent: {skill_name}\n\ncases:\n{cases_yaml}");
+        std::fs::write(path, header)
+            .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
 fn is_fixture_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|ext| ext.to_str()),
