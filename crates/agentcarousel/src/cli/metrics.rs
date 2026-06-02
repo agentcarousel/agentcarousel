@@ -54,7 +54,7 @@ pub struct MetricsArgs {
     domain: Option<String>,
 
     /// Show a per-control compliance attestation table for the named OSCAL framework.
-    /// Example: --framework nist-800-53  --framework hipaa  --framework eu-ai-act
+    /// Example: --framework nist-ai-rmf  --framework hipaa  --framework eu-ai-act
     #[arg(long, value_name = "FRAMEWORK")]
     framework: Option<String>,
 }

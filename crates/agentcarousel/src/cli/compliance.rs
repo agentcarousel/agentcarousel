@@ -31,7 +31,6 @@ const ALL_FRAMEWORKS: &[&str] = &[
     "iso-42001",
     "hipaa",
     "fda-samd",
-    "nist-800-53",
     "nist-800-171",
     "nist-800-172",
     "nist-800-207",
@@ -63,7 +62,7 @@ struct GenerateComplianceArgs {
     #[arg(long)]
     skill: String,
 
-    /// Compliance tag(s) to generate cases for (e.g. nist-800-53:AC-1, hipaa:164.308.a.1). Repeatable.
+    /// Compliance tag(s) to generate cases for (e.g. nist-800-171:3.1.1, hipaa:164.308.a.1). Repeatable.
     #[arg(long, required = true)]
     tag: Vec<String>,
 
@@ -92,7 +91,7 @@ struct GenerateComplianceArgs {
 struct ReportArgs {
     /// Framework to report on. Use "all" to run all embedded frameworks.
     /// Available: nist-ai-rmf, eu-ai-act, iso-42001, hipaa, fda-samd,
-    ///            nist-800-53, nist-800-171, nist-800-172, nist-800-207
+    ///            nist-800-171, nist-800-172, nist-800-207
     #[arg(long, default_value = "nist-ai-rmf")]
     framework: String,
 

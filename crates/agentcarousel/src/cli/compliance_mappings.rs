@@ -16,7 +16,7 @@ pub struct FrameworkControl {
     pub framework: String,
     pub control_id: String,
     pub requirement: String,
-    /// Fixture tag used to map cases to this control (e.g. `"nist-800-53:AC-1"`).
+    /// Fixture tag used to map cases to this control (e.g. `"nist-800-171:3.1.1"`).
     pub tag: String,
     /// Whether this control is primarily validated by behavioral test cases.
     pub behavioral: bool,

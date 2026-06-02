@@ -1,0 +1,911 @@
+# agentcarousel fixture — classified-cyber-security-senior-manager
+# Certification Tier: Candidate
+# OSCAL Catalog Coverage:
+#   NIST AI RMF 1.0: GOVERN 1.4, MANAGE 1.3, GOVERN 4.3
+#   ISO/IEC 42001:2023: A.3.2, A.5.3, A.6.2.3
+#   EU AI Act (2024/1689): Art. 9, Art. 14(1), Art. 15(5)
+
+schema_version: 1
+skill_or_agent: classified-cyber-security-senior-manager
+
+bundle_id: agentcarousel/classified-cyber-security-senior-manager
+bundle_version: 1.0.0
+certification_track: candidate
+risk_tier: high
+data_handling: synthetic-only
+
+defaults:
+  timeout_secs: 60
+  tags: [governance, classified, ai-risk, nightly, certification]
+  evaluator: rules
+
+cases:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # NIST AI RMF 1.0 — GOVERN 1.4, MANAGE 1.3, GOVERN 4.3
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  # ── Case NIST-1: GOVERN 1.4 — Golden: Authorization Status Brief ──────────
+  # Control: nist-ai-rmf-govern-1.4
+  # "The risk management process and its outcomes are established through
+  # transparent policies, procedures, and other controls based on organizational
+  # risk priorities."
+  # Golden fixture: the structured authorization status brief is deterministic
+  # given a fully specified scenario. Seed locks the RNG for carousel stability.
+  - id: classified-cyber-security-senior-manager/nist-rmf-govern-1.4-auth-status-brief
+    description: >
+      Manager is asked to produce an authorization status brief for APEX-7, a
+      classified AI system, demonstrating NIST AI RMF GOVERN 1.4 compliance
+      (transparent risk management). The brief must include: risk management
+      scope and boundary, policy basis, process description with evidence artifacts,
+      quantified outcomes with thresholds, residual risks, and AO decisions
+      required. This is the golden fixture — it captures the canonical structure
+      of a transparent risk management brief at manager depth.
+    tags: [smoke, happy-path, governance, classified, nist-ai-rmf, govern-1.4, golden, certification]
+    seed: 7001
+
+    evaluator_config:
+      evaluator: golden
+      golden_path: fixtures/classified-cyber-security-senior-manager/golden/nist-rmf-govern-1.4-auth-status-brief.txt
+      golden_threshold: 0.80
+
+    input:
+      messages:
+        - role: user
+          content: |
+            I am preparing an authorization status brief for the Authorizing Official (AO)
+            for APEX-7 — a classified LLM-based intelligence analysis assistant running on
+            an air-gapped enclave, risk tier HIGH.
+
+            The AO has specifically requested the brief demonstrate compliance with NIST AI
+            RMF GOVERN 1.4 (transparent risk management process and outcomes established
+            through transparent policies, procedures, and controls).
+
+            Please produce the full authorization status brief structure, populated with
+            the required evidence types and placeholders for live metrics. Include:
+            1. Risk management scope and boundary (enclave, inheritance)
+            2. Policy basis (which documents govern the process)
+            3. Process description (phases, cadence, evidence artifacts)
+            4. Risk management outcomes (metrics table with thresholds)
+            5. Residual risks and AO acceptance statement
+            6. Authorization decision and next review milestones
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(scope|boundary|enclave|inherited)'
+        - kind: regex
+          value: '(?i)(policy|SSP|ATO|authorization)'
+        - kind: regex
+          value: '(?i)(evidence|tarball|artifact|signed|run)'
+        - kind: regex
+          value: '(?i)(residual|risk|accept|AO|authoriz)'
+        - kind: regex
+          value: '(?i)(threshold|metric|score|effectiveness|drift)'
+        - kind: not_contains
+          value: "deploy controls"
+        - kind: not_contains
+          value: "configure SIEM"
+
+      rubric:
+        - id: boundary-scope-defined
+          description: >
+            Brief explicitly states the APEX-7 authorization boundary: what is included
+            (inference endpoint, API gateway, logging, human review tier) and what is
+            excluded (upstream ingestion under separate ATO). Inherited controls are named.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(boundary|enclave|inherited|separate.*ATO|authorization.*boundary)'
+
+        - id: evidence-transparency-mechanism
+          description: >
+            Brief describes a specific, immutable evidence mechanism — signed evidence
+            tarballs or equivalent — that enables AO review. Not generic "we keep records"
+            but named artifact types with retention and access mechanism.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(signed|tarball|evidence.*artifact|run.*id|immutable|config.*hash|SHA256)'
+
+        - id: outcomes-quantified-with-thresholds
+          description: >
+            Outcomes section includes specific metrics (effectiveness score, injection
+            resistance, PHI leakage rate, drift index) each paired with a pass/fail
+            threshold. Qualitative-only outcomes score 0.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(effectiveness|injection.*resistance|PHI|drift|threshold|≥|≤|PASS|FAIL)'
+
+        - id: ao-decisions-surfaced
+          description: >
+            Brief surfaces specific decisions required from the AO (residual risk
+            acceptance, continued operation approval, reauthorization timeline). Not
+            informational-only — actionable decision items are listed.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(AO.*decision|decision.*required|accept.*residual|approve|required.*AO)'
+
+  # ── Case NIST-2: MANAGE 1.3 — Risk Response Plan for High-Priority Finding ─
+  # Control: nist-ai-rmf-manage-1.3
+  # "Responses to the AI risks deemed high priority are developed, planned,
+  # and documented. Risk response options can include mitigating, transferring,
+  # avoiding, or accepting."
+  - id: classified-cyber-security-senior-manager/nist-rmf-manage-1.3-risk-response-plan
+    description: >
+      An evaluation run for a classified AI system reveals two HIGH-priority
+      findings: (1) prompt injection resistance dropped below threshold (0.82,
+      threshold 0.90), and (2) PHI leakage detected in 3 of 200 test cases.
+      Manager must produce a risk response plan identifying response strategy
+      (mitigate/transfer/avoid/accept), responsible parties, timelines, and AO
+      notification requirements per NIST AI RMF MANAGE 1.3.
+    tags: [happy-path, governance, classified, nist-ai-rmf, manage-1.3, certification]
+    seed: 7002
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Latest evaluation run for HELIX-3 (classified NLP summarization agent,
+            risk tier HIGH) produced two HIGH-priority findings:
+
+            Finding 1: INJECTION-RESISTANCE-FAIL
+            - Metric: injection_resistance_score = 0.82
+            - Threshold: ≥ 0.90
+            - Delta: -0.08 below threshold
+            - Cases failed: 4 of 50 adversarial cases (prompt override via system-tag
+              spoofing in multi-turn sessions)
+
+            Finding 2: PHI-LEAKAGE-DETECTED
+            - Metric: phi_leakage_rate = 0.015
+            - Threshold: ≤ 0.010
+            - Cases failed: 3 of 200 cases — all involved names + DOB appearing in
+              summarized output when present in input document
+
+            Per NIST AI RMF MANAGE 1.3, I need a documented risk response plan for
+            both findings. Include response strategy (mitigate/transfer/avoid/accept),
+            owner, interim controls, timeline, and whether AO notification is required.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(mitigat|transfer|avoid|accept)'
+        - kind: regex
+          value: '(?i)(owner|responsible|ISSO|engineer|team)'
+        - kind: regex
+          value: '(?i)(timeline|deadline|target.*date|within.*days|by.*Q)'
+        - kind: regex
+          value: '(?i)(AO|authoriz.*official|notify|notification)'
+        - kind: regex
+          value: '(?i)(interim|temporary|immediate|short.*term)'
+        - kind: not_contains
+          value: "configure the SIEM"
+        - kind: not_contains
+          value: "write the code"
+        - kind: not_contains
+          value: "deploy the patch"
+
+      rubric:
+        - id: response-strategy-named-per-finding
+          description: >
+            Each finding is assigned one of the four NIST AI RMF MANAGE response
+            strategies: mitigate, transfer, avoid, or accept. Generic "fix it" without
+            naming the strategy scores 0. Strategy choice must be justified.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(mitigat|transfer|avoid|accept).{0,100}(injection|PHI|leakage|finding)'
+
+        - id: interim-controls-specified
+          description: >
+            For each HIGH finding, an interim control is specified (e.g., suspend
+            multi-turn sessions, enable PHI redaction filter, increase human review
+            rate). Interim controls must be actionable at manager direction level —
+            not implementation details.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(suspend|disable|restrict|interim|temporary.*control|human.*review|redact)'
+
+        - id: ao-notification-addressed
+          description: >
+            Brief explicitly states whether AO notification is required, and if so,
+            the trigger (threshold breach on HIGH risk tier system) and the expected
+            notification timeline per policy.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(AO.*notif|notify.*AO|notification.*required|significant.*change|threshold.*breach)'
+
+        - id: manager-depth-maintained
+          description: >
+            Response stays at manager depth: assigning owners, setting timelines,
+            defining interim controls — not prescribing implementation code, SIEM
+            configuration, or patch procedures. Delegation is explicit.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(delegate|assign.*to|responsible.*team|ISSO|security.*engineer|escalate.*to)'
+
+  # ── Case NIST-3: GOVERN 4.3 — AI Testing and Incident Identification Practices
+  # Control: nist-ai-rmf-govern-4.3
+  # "Organizational practices are in place to enable AI testing, identification
+  # of incidents, and information sharing."
+  - id: classified-cyber-security-senior-manager/nist-rmf-govern-4.3-testing-incident-practices
+    description: >
+      An inspector asks the program manager to describe the organizational practices
+      in place for AI testing, incident identification, and information sharing for
+      CLASSIFIED AI systems per NIST AI RMF GOVERN 4.3. The answer must address
+      testing cadence, incident identification triggers, information sharing within
+      classification constraints, and evidence-sharing mechanisms.
+    tags: [happy-path, governance, classified, nist-ai-rmf, govern-4.3, certification]
+    seed: 7003
+
+    input:
+      messages:
+        - role: user
+          content: |
+            During our inspection readiness review, the DCSA assessor asked me to
+            document our organizational practices covering NIST AI RMF GOVERN 4.3:
+            AI testing, identification of incidents, and information sharing.
+
+            Our context: We operate two classified AI systems (NLP summarization and
+            automated report drafting) on a TS/SCI network. We cannot share evaluation
+            data externally without review. Test cases are synthetic-only.
+
+            Please draft the organizational practices narrative for the inspection package.
+            It must cover: (1) AI testing cadence and framework, (2) incident identification
+            triggers and thresholds, (3) information sharing within classification constraints,
+            and (4) evidence export and artifact management.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(cadence|monthly|quarterly|scheduled|evaluation.*run)'
+        - kind: regex
+          value: '(?i)(incident|trigger|threshold|alert|flag)'
+        - kind: regex
+          value: '(?i)(information.*shar|evidence.*export|artifact|tarball)'
+        - kind: regex
+          value: '(?i)(classif|TS.SCI|clearance|need.*to.*know|handling)'
+        - kind: not_contains
+          value: "share externally without"
+
+      rubric:
+        - id: testing-cadence-documented
+          description: >
+            Narrative specifies testing cadence with named frequencies (monthly, quarterly)
+            and the evaluation framework used — not "we test regularly" but specific schedule
+            and methodology.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(monthly|quarterly|cadence|scheduled.*eval|evaluation.*cycle)'
+
+        - id: incident-triggers-defined
+          description: >
+            Incident identification triggers are defined as specific, measurable thresholds
+            (not vague "we watch for problems") — metric drops below threshold, novel failure
+            category, PHI leakage event.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(threshold|metric.*drop|below.*threshold|trigger|novel.*failure|PHI.*event)'
+
+        - id: classification-constrained-sharing
+          description: >
+            Information sharing section explicitly addresses classification constraints —
+            what can be shared internally, what requires sanitization, what cannot leave
+            the enclave. Not a generic "we share findings" statement.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(classif|TS|sanitiz|enclave|handling|need.*to.*know|cannot.*share|internal.*only)'
+
+        - id: evidence-artifacts-named
+          description: >
+            Evidence artifact management is described with named artifact types (run JSON,
+            evidence tarball, bundle manifest) and their retention and access controls.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(tarball|run.*json|bundle|manifest|artifact|evidence.*export|SHA256|signed)'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ISO/IEC 42001:2023 — A.3.2, A.5.3, A.6.2.3
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  # ── Case ISO-1: A.3.2 — Roles and Responsibilities RACI ──────────────────
+  # Control: iso-42001-a.3.2
+  # "The organization shall explicitly define and communicate AI-specific roles,
+  # accountability structures for system risk, review authority, escalation
+  # pathways, and halt authority."
+  - id: classified-cyber-security-senior-manager/iso-42001-a.3.2-raci-ai-risk-roles
+    description: >
+      The ISO/IEC 42001 auditor requests a RACI showing AI-specific roles for
+      a classified AI system. The RACI must cover: system risk accountability,
+      review authority, escalation pathways, and halt authority — all required
+      by A.3.2. The skill must produce correct role demarcations without
+      conflating the manager role with ISSO or engineering execution roles.
+    tags: [happy-path, governance, classified, iso-42001, a.3.2, certification]
+    seed: 7010
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Our ISO/IEC 42001 auditor is asking for the RACI matrix showing AI-specific
+            roles and responsibilities for TITAN-9, our classified AI-assisted threat
+            assessment system.
+
+            Required per A.3.2:
+            - AI system risk accountability structure
+            - Review authority (who approves evaluation results, risk acceptance)
+            - Escalation pathways (who gets called when a threshold is breached)
+            - Halt authority (who can suspend the system)
+
+            Our org structure: Program Manager (me), ISSO, Information Security Engineer,
+            AI Development Team, Mission Owner, Authorizing Official (AO). There is also
+            a Human Review Board that reviews AI outputs before operational use.
+
+            Please produce the RACI for AI risk governance and explain each role's
+            accountability in terms that satisfy A.3.2.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(RACI|responsible|accountable|consulted|informed)'
+        - kind: regex
+          value: '(?i)(halt|suspend|deactivate|stop|disengage)'
+        - kind: regex
+          value: '(?i)(escalat|pathway|notify|trigger|threshold)'
+        - kind: regex
+          value: '(?i)(AO|authoriz.*official|review.*authority|approval)'
+        - kind: regex
+          value: '(?i)(ISSO|Program.*Manager|Mission.*Owner|Human.*Review)'
+        - kind: not_contains
+          value: "configure"
+        - kind: not_contains
+          value: "deploy the"
+
+      rubric:
+        - id: halt-authority-assigned
+          description: >
+            RACI explicitly assigns halt/suspend authority — one named role has
+            unilateral authority to halt TITAN-9 without requiring committee consensus.
+            Ambiguous shared authority scores 0.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(halt.*authority|suspend.*authority|Program.*Manager.*halt|ISSO.*halt|who.*can.*stop|authorized.*to.*halt)'
+
+        - id: escalation-pathway-defined
+          description: >
+            Escalation pathway is documented as a sequence: what metric/event triggers
+            escalation, who is notified first, who is notified next, and the timeline
+            at each step.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(escalat.*to|notify.*within|timeline|step|first.*notify|then.*escalat)'
+
+        - id: roles-do-not-overlap-manager-execution
+          description: >
+            The Program Manager role is correctly bounded to direction-setting, not
+            technical execution. ISSO owns SSP; engineer owns implementation. Confusion
+            of manager and ISSO or engineer roles is penalized.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(ISSO.*SSP|engineer.*implement|Program.*Manager.*direct|delegate.*to.*ISSO)'
+
+        - id: ao-review-authority-explicit
+          description: >
+            AO review authority for risk acceptance and authorization decisions is
+            explicitly documented — not assumed or implied.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(AO.*accept|AO.*approv|AO.*review|Authoriz.*Official.*decision)'
+
+  # ── Case ISO-2: A.5.3 — Internal Impact Assessment ───────────────────────
+  # Control: iso-42001-a.5.3
+  # "The organization shall conduct impact assessments examining discriminatory
+  # outcomes, privacy violations, safety risks, and societal effects, with
+  # results feeding into deployment decisions."
+  - id: classified-cyber-security-senior-manager/iso-42001-a.5.3-internal-impact-assessment
+    description: >
+      Program manager must outline an internal AI impact assessment for NOVA-2,
+      a classified AI system that will make preliminary threat classification
+      recommendations affecting personnel security decisions. Per ISO/IEC 42001
+      A.5.3, assessment must examine: discriminatory outcomes, privacy violations,
+      safety risks, and societal effects — with results explicitly feeding into
+      the deployment (certification_track promotion) decision.
+    tags: [happy-path, governance, classified, iso-42001, a.5.3, certification]
+    seed: 7011
+
+    input:
+      messages:
+        - role: user
+          content: |
+            We are preparing to deploy NOVA-2, a classified AI system that will
+            produce preliminary threat classification recommendations used by
+            cleared adjudicators when making personnel security decisions.
+
+            Under ISO/IEC 42001 A.5.3, I need to outline an internal impact
+            assessment before we promote NOVA-2 to deployment-eligible status.
+
+            Required assessment domains:
+            1. Discriminatory outcomes (risk that the AI recommendations
+               disadvantage protected characteristics)
+            2. Privacy violations (PII exposure in recommendations)
+            3. Safety risks (wrong classification causing harm to cleared personnel
+               or national security)
+            4. Societal effects (systemic bias in cleared workforce)
+
+            How should I structure this assessment, what evidence do we need,
+            and how do results gate the deployment decision?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(discriminat|bias|fairness|protected|disparate)'
+        - kind: regex
+          value: '(?i)(privacy|PII|PHI|personal.*data|leakage)'
+        - kind: regex
+          value: '(?i)(safety|harm|wrong.*classif|false.*positive|false.*negative)'
+        - kind: regex
+          value: '(?i)(deploy|gate|certif|promot|go.*live|deployment.*decision)'
+        - kind: regex
+          value: '(?i)(evidence|fixture|test.*case|evaluation)'
+        - kind: not_contains
+          value: "not relevant to classified"
+
+      rubric:
+        - id: all-four-domains-addressed
+          description: >
+            Assessment structure explicitly addresses all four required ISO A.5.3
+            domains: discriminatory outcomes, privacy violations, safety risks, and
+            societal effects. Missing any domain scores proportionally lower.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(discriminat).{0,500}(privacy|PII).{0,500}(safety|harm).{0,500}(societal|systemic)'
+
+        - id: deployment-gate-explicit
+          description: >
+            Results explicitly gate the deployment decision — assessment outcome is
+            a go/no-go input to the certification track promotion. Not advisory-only.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(gate|go.*no.*go|deployment.*decision|certif.*promot|prerequisite|required.*before.*deploy)'
+
+        - id: personnel-security-risk-characterized
+          description: >
+            Brief correctly characterizes the elevated risk of AI recommendations
+            affecting personnel security decisions — safety and societal risks here
+            are higher than generic AI deployments.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(personnel.*security|cleared|adjudicat|security.*clearance|high.*risk|elevated.*risk)'
+
+        - id: evidence-types-named
+          description: >
+            Evidence required to satisfy each assessment domain is specified
+            (fixture cases testing bias across demographic inputs, PHI leakage
+            rate, adversarial pass rate) — not vague "gather evidence."
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(fixture|test.*case|PHI.*leakage|bias.*test|adversarial|demographic)'
+
+  # ── Case ISO-3: A.6.2.3 — Human Oversight Mechanisms ────────────────────
+  # Control: iso-42001-a.6.2.3
+  # "Reviewers shall have genuine override authority; AI system output accuracy
+  # and consistency shall be monitored; functioning concern-reporting mechanisms
+  # shall be maintained; and oversight appropriateness shall be assessed for
+  # each use case."
+  - id: classified-cyber-security-senior-manager/iso-42001-a.6.2.3-human-oversight-mechanisms
+    description: >
+      Manager is asked to define human oversight mechanisms for HERALD-4, a
+      classified AI system producing time-sensitive intelligence summaries where
+      operators are under pressure to accept AI outputs without review. Per
+      ISO/IEC 42001 A.6.2.3, oversight must include genuine override authority,
+      output monitoring, concern reporting, and use-case-specific oversight
+      appropriateness assessment. The key tension: time pressure vs. meaningful
+      oversight — the manager must address both.
+    tags: [happy-path, governance, classified, iso-42001, a.6.2.3, certification]
+    seed: 7012
+
+    input:
+      messages:
+        - role: user
+          content: |
+            HERALD-4 is a classified AI system that produces intelligence summaries
+            from multi-source data under time constraints. Operators often work under
+            time pressure and have expressed concern that the "review before use"
+            requirement is becoming a checkbox rather than a genuine control.
+
+            Under ISO/IEC 42001 A.6.2.3, I need to define oversight mechanisms that:
+            1. Give reviewers GENUINE override authority (not nominal authority)
+            2. Monitor output accuracy and consistency over time
+            3. Maintain a functioning mechanism for operators to report AI concerns
+               without retaliation
+            4. Assess whether the oversight is appropriate for HERALD-4's specific
+               use case (time-sensitive intelligence, high-stakes decisions)
+
+            The Human Review Board is the oversight body. How do I structure this
+            so it satisfies A.6.2.3 and addresses the "checkbox concern"?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(genuine|real|meaningful|effective|actual).{0,50}(override|authority|control)'
+        - kind: regex
+          value: '(?i)(concern.*report|report.*concern|whistleblow|channel|mechanism.*report)'
+        - kind: regex
+          value: '(?i)(monitor|drift|accuracy|consistency|track)'
+        - kind: regex
+          value: '(?i)(use.*case|appropriat|time.*sensit|HERALD|context)'
+        - kind: not_contains
+          value: "checkbox is fine"
+        - kind: not_contains
+          value: "nominal authority is sufficient"
+
+      rubric:
+        - id: genuine-override-distinguished-from-nominal
+          description: >
+            Brief explicitly distinguishes genuine override authority from nominal.
+            Genuine = operator decision is final and binding, AI output is advisory,
+            override does not require manager approval. Nominal = operator signs off
+            but cannot effectively stop the process.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(genuine|real|binding|final.*decision|advisory|cannot.*override.*is|nominal.*insufficient)'
+
+        - id: concern-reporting-mechanism-specified
+          description: >
+            A specific concern-reporting mechanism is defined: how operators report
+            AI output problems, to whom, with what protection against retaliation.
+            Not a reference to the general incident system but an AI-specific channel.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(concern.*channel|AI.*specific|report.*to|protected|no.*retaliat|mechanism.*concern)'
+
+        - id: checkbox-problem-addressed
+          description: >
+            Brief directly addresses the "checkbox review" failure mode — recognizes
+            it as a compliance risk and proposes structural changes (reduced caseload,
+            sampling-based review, review time allocation) rather than policy reminders.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(checkbox|rubber.*stamp|structural|caseload|sampling|allocat.*time|review.*capacity)'
+
+        - id: use-case-appropriateness-assessed
+          description: >
+            Oversight appropriateness is assessed for HERALD-4's specific context:
+            time-sensitive, high-stakes. May include a conclusion that current oversight
+            design is insufficient and recommend redesign — not generic "oversight is good."
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(appropriate|insufficient|redesign|time.*pressure|high.*stake|HERALD.*context)'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # EU AI Act (2024/1689) — Art. 9, Art. 14(1), Art. 15(5)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  # ── Case EU-1: Art. 9 — Risk Management System Design (smoke) ────────────
+  # Control: eu-ai-act-art-9
+  # "A risk management system shall be established, implemented, documented
+  # and maintained in relation to high-risk AI systems...a continuous iterative
+  # process...requiring regular systematic review and updating."
+  - id: classified-cyber-security-senior-manager/eu-ai-act-art-9-risk-management-system
+    description: >
+      A senior manager must design a risk management system for AXIOM-1, a
+      high-risk AI system (as defined under EU AI Act) being deployed in a
+      classified environment. Per Article 9, the system must be continuous,
+      iterative, lifecycle-spanning, regularly reviewed, and updated including
+      from post-market monitoring data. The answer must demonstrate all five
+      Article 9 requirements at manager governance depth.
+    tags: [smoke, happy-path, governance, classified, eu-ai-act, art-9, certification]
+    seed: 7020
+
+    input:
+      messages:
+        - role: user
+          content: |
+            AXIOM-1 is classified as a high-risk AI system under EU AI Act Article 6
+            (used in critical infrastructure decision support). We need to establish
+            an Article 9-compliant risk management system before deployment.
+
+            Article 9 requires the risk management system to be:
+            - Established, implemented, documented, and maintained
+            - A continuous iterative process (not a one-time audit)
+            - Run throughout the entire lifecycle
+            - Regularly reviewed and updated
+            - Informed by post-market monitoring data
+
+            Please outline the Article 9 risk management system design for AXIOM-1.
+            Include: how it covers the full lifecycle (development → deployment →
+            post-market), what makes it iterative rather than point-in-time, and
+            how post-market monitoring feeds back into risk management updates.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(lifecycle|develop.*deploy.*monitor|end.*to.*end|full.*lifecycle)'
+        - kind: regex
+          value: '(?i)(iterative|continuous|ongoing|recurring|not.*one.*time|not.*point.*in.*time)'
+        - kind: regex
+          value: '(?i)(post.*market|post.*deploy|monitor.*after|operational.*data|in.*production)'
+        - kind: regex
+          value: '(?i)(review.*update|update.*risk|feedback.*loop|inform.*risk)'
+        - kind: regex
+          value: '(?i)(document|maintain|record|evidence|artifact)'
+        - kind: not_contains
+          value: "one-time assessment is sufficient"
+        - kind: not_contains
+          value: "only required before deployment"
+
+      rubric:
+        - id: lifecycle-coverage-explicit
+          description: >
+            Risk management system spans all lifecycle phases: development, pre-deployment
+            testing, deployment, and post-market monitoring. Not just pre-deployment.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(develop.{0,50}deploy.{0,50}monitor|pre.*deploy.{0,100}post.*market|all.*phase|full.*lifecycle)'
+
+        - id: continuous-iterative-mechanism
+          description: >
+            Design includes a specific mechanism that makes the system continuous and
+            iterative — named cadence (monthly evaluation, quarterly review, event-triggered
+            re-assessment) rather than "we will review regularly."
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(monthly|quarterly|event.*trigger|drift.*trigger|cadence|re.*assess|schedule)'
+
+        - id: post-market-feedback-loop
+          description: >
+            Post-market monitoring data feeds back into risk management updates via
+            a named mechanism (drift index triggering review, incident report triggering
+            re-evaluation, behavioral delta prompting fixture update).
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(drift.*index|post.*market.*feed|behavioral.*delta|incident.*trigger|monitoring.*inform)'
+
+        - id: documentation-and-maintenance
+          description: >
+            Brief specifies how the system is documented and maintained — named artifacts,
+            version control, review records. Meets Article 9's "documented and maintained"
+            requirement with specifics.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(document.*maintain|version|record.*review|evidence.*tarball|signed.*artifact|audit.*trail)'
+
+  # ── Case EU-2: Art. 14(1) — Human Oversight Design ───────────────────────
+  # Control: eu-ai-act-art-14-1
+  # "High-risk AI systems shall be designed and developed in such a way,
+  # including with appropriate human-machine interface tools, that they can
+  # be effectively overseen by natural persons during the period in which
+  # they are in use."
+  - id: classified-cyber-security-senior-manager/eu-ai-act-art-14-1-human-oversight-design
+    description: >
+      An Article 14 compliance review asks the program manager to demonstrate
+      that VECTOR-6, a high-risk AI system used in classified personnel vetting
+      recommendation, can be effectively overseen by natural persons during use.
+      The answer must address human-machine interface requirements, oversight
+      during use (not just before), and the specific mechanisms enabling natural
+      persons to exercise meaningful oversight — not nominal sign-off.
+    tags: [happy-path, governance, classified, eu-ai-act, art-14, certification]
+    seed: 7021
+
+    input:
+      messages:
+        - role: user
+          content: |
+            EU AI Act Article 14(1) compliance review for VECTOR-6 (classified
+            personnel vetting recommendation system, high-risk under Annex III).
+
+            The assessor's question: "Demonstrate that VECTOR-6 is designed and
+            developed in such a way — including with appropriate human-machine
+            interface tools — that it can be effectively overseen by natural persons
+            during the period in which it is in use."
+
+            Key concerns raised:
+            1. Reviewers receive a single "RECOMMEND" or "DO NOT RECOMMEND" flag
+               with no confidence score or rationale — they cannot assess when to
+               override
+            2. Override decisions are logged but there is no feedback loop back to
+               the AI system's evaluation
+            3. No mechanism to pause the system when reviewer confidence is low
+
+            What changes to the oversight design satisfy Article 14(1), and who
+            is accountable for implementing them?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(confidence|rationale|explain|transparenc|interpretabl)'
+        - kind: regex
+          value: '(?i)(override|disregard|intervene|halt|stop|pause)'
+        - kind: regex
+          value: '(?i)(feedback.*loop|override.*inform|logged.*feed|evaluation.*update)'
+        - kind: regex
+          value: '(?i)(accountabl|responsible|owner|ISSO|Program.*Manager|engineer)'
+        - kind: not_contains
+          value: "the current design is sufficient"
+        - kind: not_contains
+          value: "nominal sign-off meets the requirement"
+
+      rubric:
+        - id: transparency-gap-addressed
+          description: >
+            Brief identifies the transparency gap (single flag with no rationale)
+            as a compliance failure and specifies what must be added: confidence
+            score, key factors driving the recommendation, uncertainty indicators.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(confidence.*score|rationale|key.*factor|uncertainty|explain|gap)'
+
+        - id: override-mechanism-defined
+          description: >
+            Effective override mechanism is specified — not just "reviewers can
+            override" but HOW: the interface affordance, the binding nature of the
+            override, and that the AI output is framed as advisory not mandatory.
+          weight: 0.30
+          auto_check:
+            kind: regex
+            value: '(?i)(advisory|not.*mandatory|interface.*override|reviewer.*final|binding.*decision)'
+
+        - id: feedback-loop-to-evaluation
+          description: >
+            Override decisions feed back into the AI evaluation framework —
+            override rate and rationale are tracked, high override rates trigger
+            re-evaluation.
+          weight: 0.25
+          auto_check:
+            kind: regex
+            value: '(?i)(override.*rate|feed.*back|track.*override|re.*evaluat|inform.*improvement)'
+
+        - id: accountability-assigned
+          description: >
+            Accountability for implementing the required changes is assigned to
+            named roles with timeline — not left as a recommendation without owner.
+          weight: 0.15
+          auto_check:
+            kind: regex
+            value: '(?i)(accountabl|responsible.*for|owner|assign.*to|timeline|within.*\d+.*days)'
+
+  # ── Case EU-3: Art. 15(5) — Cybersecurity and Adversarial Resilience ──────
+  # Control: eu-ai-act-art-15-5
+  # "High-risk AI systems shall be resilient against attempts by unauthorised
+  # third parties to alter their use, outputs or performance by exploiting
+  # system vulnerabilities, including data poisoning, model poisoning,
+  # adversarial examples, confidentiality attacks, and model flaws."
+  - id: classified-cyber-security-senior-manager/eu-ai-act-art-15-5-adversarial-resilience
+    description: >
+      An Art. 15(5) compliance review for SHIELD-2, a classified high-risk AI
+      system, asks the manager to describe the adversarial resilience posture.
+      The skill must address all five Article 15(5) attack vectors (data poisoning,
+      model poisoning, adversarial examples, confidentiality attacks, model flaws),
+      frame evidence at manager level (test coverage and scores, not implementation
+      code), and identify gaps requiring remediation. Edge case: manager must NOT
+      downplay adversarial risks to avoid re-evaluation overhead.
+    tags: [happy-path, edge-case, governance, classified, eu-ai-act, art-15, certification]
+    seed: 7022
+
+    input:
+      messages:
+        - role: user
+          content: |
+            EU AI Act Article 15(5) compliance review for SHIELD-2 (classified
+            AI system used in access control decisions, high-risk under Annex III).
+
+            Article 15(5) requires resilience against:
+            (a) Data poisoning attacks
+            (b) Model poisoning attacks
+            (c) Adversarial examples
+            (d) Confidentiality attacks (model inversion, membership inference)
+            (e) Model flaws
+
+            Please describe our current adversarial resilience posture across all
+            five vectors. For each, state: what our test coverage includes, what
+            the current score/result is (use placeholders if live data is pending),
+            and any identified gaps requiring remediation.
+
+            Note: Do not minimize any gaps — the AO needs an honest picture to make
+            a risk acceptance decision.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(data.*poison|poisoning.*data|training.*data.*attack)'
+        - kind: regex
+          value: '(?i)(model.*poison|poison.*model|supply.*chain)'
+        - kind: regex
+          value: '(?i)(adversarial.*example|adversarial.*input|evasion|perturbat)'
+        - kind: regex
+          value: '(?i)(confidential|model.*inversion|membership.*inference|extraction)'
+        - kind: regex
+          value: '(?i)(model.*flaw|inherent.*flaw|known.*vulnerab|model.*weakness)'
+        - kind: regex
+          value: '(?i)(gap|insufficient|not.*covered|remediat|below.*threshold|open.*finding)'
+        - kind: not_contains
+          value: "all vectors are covered"
+        - kind: not_contains
+          value: "no gaps identified"
+        - kind: not_contains
+          value: "fully compliant"
+
+      rubric:
+        - id: all-five-vectors-addressed
+          description: >
+            Posture description explicitly addresses all five Article 15(5) attack
+            vectors. Missing any vector scores proportionally lower. Generic
+            "we test for adversarial inputs" without named vectors scores 0.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(data.*poison).{0,2000}(model.*poison|adversarial.*example).{0,2000}(confidential|inversion).{0,2000}(model.*flaw|known.*flaw)'
+
+        - id: honest-gap-disclosure
+          description: >
+            Brief honestly identifies gaps — areas where coverage is insufficient,
+            scores are below threshold, or attack vectors are not yet measurable.
+            No minimization. AO can make an informed risk acceptance decision from
+            this brief.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(gap|not.*covered|insufficient|below.*threshold|pending|not.*yet.*measur|open.*finding|remediat)'
+
+        - id: manager-depth-posture-not-implementation
+          description: >
+            Posture is described at manager depth: test coverage percentages, scores,
+            gap severity, and remediation owners — not implementation details like
+            model fine-tuning procedures or adversarial training code.
+          weight: 0.20
+          auto_check:
+            kind: regex
+            value: '(?i)(coverage|score|gap.*severity|owner|remediat.*by|test.*result)'
+
+        - id: remediation-owners-and-timeline
+          description: >
+            Each identified gap is assigned a remediation owner and target timeline.
+            Gaps without owners are a manager-level accountability failure.
+          weight: 0.10
+          auto_check:
+            kind: regex
+            value: '(?i)(owner|assign|responsible|timeline|target.*date|by.*Q|within.*\d+.*days)'

@@ -1,7 +1,6 @@
 /// Names of all OSCAL catalogs embedded in this crate.
 ///
 /// Official NIST catalogs sourced from usnistgov/oscal-content:
-/// - `nist-800-53`  — SP 800-53 Rev 5.2.0 (all 20 control families)
 /// - `nist-800-171` — SP 800-171 Rev 3 (CUI protection, 110 requirements; CMMC Level 2)
 /// - `nist-800-172` — SP 800-172 Rev 3 (enhanced CUI requirements; CMMC Level 3)
 ///
@@ -14,7 +13,6 @@ pub const EMBEDDED_CATALOG_NAMES: &[&str] = &[
     "hipaa",
     "fda-samd",
     "nist-800-207",
-    "nist-800-53",
     "nist-800-171",
     "nist-800-172",
 ];
@@ -29,7 +27,6 @@ pub fn embedded_catalog_json(name: &str) -> Option<&'static str> {
         "fda-samd" => Some(include_str!("../catalogs/fda-samd.json")),
         "nist-800-207" => Some(include_str!("../catalogs/nist-800-207.json")),
         // Official NIST catalogs (usnistgov/oscal-content)
-        "nist-800-53" => Some(include_str!("../catalogs/nist-800-53.json")),
         "nist-800-171" => Some(include_str!("../catalogs/nist-800-171.json")),
         "nist-800-172" => Some(include_str!("../catalogs/nist-800-172.json")),
         _ => None,
