@@ -183,7 +183,11 @@ pub(super) async fn run_parallel(
     let mut handles: Vec<(agentcarousel_core::CaseId, _)> = Vec::new();
 
     for case in cases {
-        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("semaphore unexpectedly closed");
         let mock_engine = mock_engine.clone();
         let config = config.clone();
         let case_id = case.id.clone();
@@ -209,22 +213,12 @@ pub(super) async fn run_parallel(
     for (case_id, handle) in handles {
         match handle.await {
             Ok(result) => results.push(result),
-            Err(err) => results.push(CaseResult {
+            Err(err) => results.push(make_error_result(
                 case_id,
-                status: CaseStatus::Error,
-                error: Some(format!("task panicked: {err}")),
-                trace: agentcarousel_core::ExecutionTrace {
-                    steps: Vec::new(),
-                    final_output: None,
-                    redacted: false,
-                },
-                metrics: agentcarousel_core::Metrics::default(),
-                eval_scores: None,
-                input: Vec::new(),
-                discrimination_score: None,
-                discrimination_label: None,
-                tags: Vec::new(),
-            }),
+                Vec::new(),
+                Vec::new(),
+                format!("task panicked: {err}"),
+            )),
         }
     }
     results
@@ -624,6 +618,7 @@ pub(super) async fn run_eval_cases(
             drop(permit);
             let case_id = case.id.clone();
             let case_id_for_vec = case_id.clone();
+            let case_tags = case.tags.clone();
             let pb = progress_bar.clone();
             let err_msg = if gen_gone {
                 "generator unavailable — case skipped to avoid wasting tokens"
@@ -636,22 +631,7 @@ pub(super) async fn run_eval_cases(
                     if let Some(pb) = pb {
                         pb.inc(1);
                     }
-                    CaseResult {
-                        case_id,
-                        status: CaseStatus::Error,
-                        error: Some(err_msg.to_string()),
-                        trace: agentcarousel_core::ExecutionTrace {
-                            steps: Vec::new(),
-                            final_output: None,
-                            redacted: false,
-                        },
-                        metrics: agentcarousel_core::Metrics::default(),
-                        eval_scores: None,
-                        input: Vec::new(),
-                        discrimination_score: None,
-                        discrimination_label: None,
-                        tags: case.tags.clone(),
-                    }
+                    make_error_result(case_id, Vec::new(), case_tags, err_msg.to_string())
                 }),
             ));
             continue;
@@ -691,22 +671,12 @@ pub(super) async fn run_eval_cases(
     for (case_id, handle) in handles {
         match handle.await {
             Ok(result) => results.push(result),
-            Err(err) => results.push(CaseResult {
+            Err(err) => results.push(make_error_result(
                 case_id,
-                status: CaseStatus::Error,
-                error: Some(format!("task panicked: {err}")),
-                trace: agentcarousel_core::ExecutionTrace {
-                    steps: Vec::new(),
-                    final_output: None,
-                    redacted: false,
-                },
-                metrics: agentcarousel_core::Metrics::default(),
-                eval_scores: None,
-                input: Vec::new(),
-                discrimination_score: None,
-                discrimination_label: None,
-                tags: Vec::new(),
-            }),
+                Vec::new(),
+                Vec::new(),
+                format!("task panicked: {err}"),
+            )),
         }
     }
     if let Some(pb) = progress_bar {

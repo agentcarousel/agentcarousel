@@ -382,7 +382,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         )
     })?;
 
-    append_cases_to_file(&out_path, &cases_yaml, &skill_name)
+    super::fixture_utils::append_cases_to_fixture(&out_path, &cases_yaml, &skill_name)
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
 
     let result = GenerateResult {
@@ -695,10 +695,6 @@ fn count_cases(value: &serde_json::Value) -> usize {
         .and_then(|c| c.as_array())
         .map(|a| a.len())
         .unwrap_or(0)
-}
-
-fn append_cases_to_file(path: &Path, cases_yaml: &str, skill_name: &str) -> Result<(), String> {
-    super::fixture_utils::append_cases_to_fixture(path, cases_yaml, skill_name)
 }
 
 /// Assign coverage categories to N generation slots.
@@ -1234,7 +1230,7 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
         )
     })?;
 
-    append_cases_to_file(out_path, &cases_yaml, skill_name)
+    super::fixture_utils::append_cases_to_fixture(out_path, &cases_yaml, skill_name)
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
 
     let result = GenerateResult {

@@ -911,7 +911,7 @@ fn run_compliance_generate_inner(
         return Ok(ExitCode::Ok.as_i32());
     }
 
-    cg_append_to_file(&output_path, &cases_yaml, skill)
+    super::fixture_utils::append_cases_to_fixture(&output_path, &cases_yaml, skill)
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
 
     if globals.json {
@@ -1066,12 +1066,4 @@ fn cg_read_existing_ids(path: &std::path::Path) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn cg_append_to_file(
-    path: &std::path::Path,
-    cases_yaml: &str,
-    skill_name: &str,
-) -> Result<(), String> {
-    super::fixture_utils::append_cases_to_fixture(path, cases_yaml, skill_name)
 }
