@@ -1,5 +1,5 @@
 use agentcarousel_core::{CaseStatus, Run};
-use oscal::catalog::{load_catalog, CatalogSource};
+use oscal::load_catalog;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -230,7 +230,10 @@ pub fn compute_control_scores_with_registry(
 /// Collapse a `Vec<ControlScore>` (which may have one entry per model) into one
 /// entry per control, keeping the entry with the highest-priority status.
 ///
-/// Priority: Satisfied > PartialEvidence > Gap > Procedural.
+/// Priority: Satisfied > PartialEvidence > Procedural > Failed > Gap.
+/// Note: Gap and Procedural are mutually exclusive per control (non-behavioral
+/// controls always produce Procedural, never Gap), so their relative rank only
+/// affects edge-case comparisons across heterogeneous score sets.
 /// Tie-breaks on effectiveness_mean (higher wins).
 pub fn collapse_scores(scores: &[ControlScore]) -> Vec<ControlScore> {
     let mut best: HashMap<String, &ControlScore> = HashMap::new();
@@ -267,7 +270,7 @@ fn status_rank(s: &ControlCoverageStatus) -> u8 {
 
 fn load_embedded_catalogs(registry: &mut FrameworkRegistry) {
     for name in oscal::catalogs::EMBEDDED_CATALOG_NAMES {
-        let catalog = match load_catalog(CatalogSource::Embedded(name)) {
+        let catalog = match load_catalog(name) {
             Ok(c) => c,
             Err(_) => continue,
         };
@@ -276,7 +279,10 @@ fn load_embedded_catalogs(registry: &mut FrameworkRegistry) {
             controls.push(FrameworkControl {
                 framework: name.to_string(),
                 control_id: control.id.clone(),
-                requirement: control.statement().unwrap_or(&control.title).to_string(),
+                requirement: control
+                    .statement()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| control.title.to_string()),
                 tag: format!("{name}:{}", control.id),
                 behavioral: true,
                 importance: 1.0,

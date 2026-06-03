@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
   "crates/agentcarousel",
-  "crates/oscal",
 ]
 
 [workspace.package]

@@ -1414,13 +1414,13 @@ pub(crate) fn serialize_assessment_results(
     run_id: &str,
     runs: &[agentcarousel_core::Run],
 ) -> String {
-    use oscal::assessment_results::{
-        AssessmentResult, AssessmentResults, AssessmentResultsDocument, AssessmentRisk, Finding,
-        FindingStatus, FindingTarget, ImportAp, Observation, RelatedObservation, RelevantEvidence,
+    use oscal::generated::types::{
+        AssessmentResults, Finding, FindingTarget, ImportAp, Metadata, Observation, OscalResult,
+        Property, RelatedObservation, RelevantEvidence, ReviewedControls, Risk, Status,
     };
-    use oscal::common::{Metadata, Property};
+    use oscal::primitives::{MarkupLine, MarkupMultiline, UriReference};
 
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now();
     let skill_label = skill.unwrap_or("all skills");
 
     // Collapse multi-model scores to one entry per control before serializing.
@@ -1428,26 +1428,20 @@ pub(crate) fn serialize_assessment_results(
 
     // Compute actual assessment window from the runs that informed the scores.
     let (window_start, window_end) = if runs.is_empty() {
-        (now.clone(), now.clone())
+        (now, now)
     } else {
-        let start = runs
-            .iter()
-            .map(|r| r.started_at)
-            .min()
-            .unwrap()
-            .to_rfc3339();
+        let start = runs.iter().map(|r| r.started_at).min().unwrap();
         let end = runs
             .iter()
             .map(|r| r.finished_at.unwrap_or(r.started_at))
             .max()
-            .unwrap()
-            .to_rfc3339();
+            .unwrap();
         (start, end)
     };
 
     let mut observations: Vec<Observation> = Vec::new();
     let mut findings: Vec<Finding> = Vec::new();
-    let mut risks: Vec<AssessmentRisk> = Vec::new();
+    let mut risks: Vec<Risk> = Vec::new();
 
     for score in &scores {
         let obs_uuid = uuid_from_str(&format!(
@@ -1460,9 +1454,12 @@ pub(crate) fn serialize_assessment_results(
         ));
 
         let obs = Observation {
-            uuid: obs_uuid.clone(),
-            title: format!("{} — {}", score.control.control_id, score.model_version),
-            description: format!(
+            uuid: obs_uuid,
+            title: Some(MarkupLine::from(format!(
+                "{} — {}",
+                score.control.control_id, score.model_version
+            ))),
+            description: MarkupMultiline::from(format!(
                 "{} fixture cases mapped to control {} executed against model {}. \
                  Pass rate: {:.0}%. Runs analyzed: {}.",
                 score.case_count,
@@ -1470,51 +1467,74 @@ pub(crate) fn serialize_assessment_results(
                 score.model_version,
                 score.pass_rate * 100.0,
                 score.run_count,
-            ),
+            )),
             props: vec![
                 Property {
                     name: "framework".to_string(),
+                    uuid: None,
                     ns: None,
                     value: framework.to_string(),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
                 Property {
                     name: "case-count".to_string(),
+                    uuid: None,
                     ns: None,
                     value: score.case_count.to_string(),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
                 Property {
                     name: "run-count".to_string(),
+                    uuid: None,
                     ns: None,
                     value: score.run_count.to_string(),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
                 Property {
                     name: "satisfaction-threshold".to_string(),
+                    uuid: None,
                     ns: None,
                     value: format!(
                         "{:.2}",
                         super::compliance_mappings::SATISFACTION_THRESHOLD_DEFAULT
                     ),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
                 Property {
                     name: "min-cases".to_string(),
+                    uuid: None,
                     ns: None,
                     value: super::compliance_mappings::MIN_CASES.to_string(),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
             ],
             links: vec![],
+            method: vec![],
+            type_: vec![],
+            origins: vec![],
+            subjects: vec![],
             relevant_evidence: vec![RelevantEvidence {
-                href: format!("run://{run_id}"),
-                description: format!(
+                href: Some(UriReference::from(format!("run://{run_id}"))),
+                description: MarkupMultiline::from(format!(
                     "AgentCarousel run {} — {} cases evaluated for control {}",
                     run_id, score.case_count, score.control.control_id
-                ),
+                )),
                 props: vec![],
+                links: vec![],
+                remarks: None,
             }],
+            collected: now,
+            expires: None,
             remarks: None,
         };
         observations.push(obs);
@@ -1529,88 +1549,138 @@ pub(crate) fn serialize_assessment_results(
 
         let finding = Finding {
             uuid: finding_uuid,
-            title: format!(
+            title: MarkupLine::from(format!(
                 "Control {} — {}",
                 score.control.control_id, score.model_version
-            ),
-            description: Some(score.control.requirement.clone()),
-            target: FindingTarget {
-                target_type: "statement-id".to_string(),
-                target_id: score.control.control_id.clone(),
-                status: FindingStatus {
-                    state: state.to_string(),
-                    reason: reason.map(|r| r.to_string()),
-                },
-            },
-            related_observations: vec![RelatedObservation {
-                observation_uuid: obs_uuid,
-            }],
+            )),
+            description: MarkupMultiline::from(score.control.requirement.as_str()),
             props: vec![
                 Property {
                     name: "effectiveness-mean".to_string(),
+                    uuid: None,
                     ns: None,
                     value: format!("{:.4}", score.effectiveness_mean),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
                 Property {
                     name: "coverage-status".to_string(),
+                    uuid: None,
                     ns: None,
                     value: format!("{:?}", score.status).to_lowercase(),
+                    class: None,
+                    group: None,
                     remarks: None,
                 },
             ],
+            links: vec![],
+            origins: vec![],
+            target: FindingTarget {
+                type_: "statement-id".to_string(),
+                target_id: score.control.control_id.clone(),
+                title: None,
+                description: None,
+                props: vec![],
+                links: vec![],
+                status: Status {
+                    state: state.to_string(),
+                    reason: reason.map(|r| r.to_string()),
+                    remarks: None,
+                },
+                implementation_status: None,
+                remarks: None,
+            },
+            implementation_statement_uuid: None,
+            related_observations: vec![RelatedObservation {
+                observation_uuid: obs_uuid,
+                remarks: None,
+            }],
+            related_risks: vec![],
             remarks: None,
         };
         findings.push(finding);
 
         if score.status == ControlCoverageStatus::Gap {
-            risks.push(AssessmentRisk {
+            risks.push(Risk {
                 uuid: uuid_from_str(&format!(
                     "{}-{}-risk",
                     score.control.control_id, score.model_version
                 )),
-                title: format!("Gap: No fixture coverage for {}", score.control.control_id),
-                description: format!(
+                title: MarkupLine::from(format!(
+                    "Gap: No fixture coverage for {}",
+                    score.control.control_id
+                )),
+                description: MarkupMultiline::from(format!(
                     "Control {} has no fixture cases mapped to tag '{}'. \
                      Explicit risk record required before formal acceptance.",
                     score.control.control_id, score.control.tag
-                ),
-                risk_status: "open".to_string(),
+                )),
+                statement: MarkupMultiline::from(format!(
+                    "No fixture cases are mapped to tag '{}'. \
+                     An explicit risk acceptance or remediation plan is required.",
+                    score.control.tag
+                )),
                 props: vec![Property {
                     name: "reason".to_string(),
+                    uuid: None,
                     ns: None,
                     value: "no-fixture-coverage".to_string(),
+                    class: None,
+                    group: None,
                     remarks: None,
                 }],
-                related_observation: None,
-                remediations: vec![],
+                links: vec![],
+                status: "open".to_string(),
+                origins: vec![],
+                threat_ids: vec![],
+                characterizations: vec![],
+                mitigating_factor: vec![],
                 deadline: None,
+                remediations: vec![],
+                risk_log: None,
+                related_observations: vec![],
             });
         }
     }
 
-    let doc = AssessmentResultsDocument {
+    #[derive(Serialize)]
+    struct OscalArDoc {
+        #[serde(rename = "assessment-results")]
+        assessment_results: AssessmentResults,
+    }
+
+    let doc = OscalArDoc {
         assessment_results: AssessmentResults {
             uuid: uuid_from_str(&format!("{run_id}-{framework}-ar")),
             metadata: Metadata {
-                title: format!("AgentCarousel Assessment Results — {framework}"),
-                published: Some(now.clone()),
-                last_modified: Some(now.clone()),
+                title: MarkupLine::from(format!("AgentCarousel Assessment Results — {framework}")),
+                published: Some(now),
+                last_modified: now,
                 version: "1.0.0".to_string(),
                 oscal_version: "1.1.2".to_string(),
-                roles: vec![],
-                parties: vec![],
-                responsible_parties: vec![],
+                revision: vec![],
+                document_ids: vec![],
+                props: vec![],
                 links: vec![],
+                role: vec![],
+                location: vec![],
+                party: vec![],
+                responsible_parties: vec![],
+                actions: vec![],
                 remarks: None,
             },
             import_ap: ImportAp {
-                href: "agentcarousel://fixture-suite".to_string(),
+                href: UriReference::from("agentcarousel://fixture-suite"),
+                remarks: None,
             },
-            results: vec![AssessmentResult {
+            local_definitions: None,
+            results: vec![OscalResult {
                 uuid: uuid_from_str(&format!("{run_id}-{framework}-result")),
-                title: format!("AgentCarousel Compliance Assessment — {framework}"),
-                description: Some(format!(
+                title: MarkupLine::from(format!(
+                    "AgentCarousel Compliance Assessment — {framework}"
+                )),
+                description: MarkupMultiline::from(format!(
                     "Automated behavioral attestation for skill '{skill_label}' \
                      against framework '{framework}'."
                 )),
@@ -1619,28 +1689,47 @@ pub(crate) fn serialize_assessment_results(
                 props: vec![
                     Property {
                         name: "skill".to_string(),
+                        uuid: None,
                         ns: None,
                         value: skill_label.to_string(),
+                        class: None,
+                        group: None,
                         remarks: None,
                     },
                     Property {
                         name: "framework".to_string(),
+                        uuid: None,
                         ns: None,
                         value: framework.to_string(),
+                        class: None,
+                        group: None,
                         remarks: None,
                     },
                     Property {
                         name: "run-id".to_string(),
+                        uuid: None,
                         ns: None,
                         value: run_id.to_string(),
+                        class: None,
+                        group: None,
                         remarks: None,
                     },
                 ],
                 links: vec![],
-                observations,
-                findings,
-                risks,
+                local_definitions: None,
+                reviewed_controls: ReviewedControls {
+                    description: None,
+                    props: vec![],
+                    links: vec![],
+                    control_selection: vec![],
+                    control_objective_selection: vec![],
+                    remarks: None,
+                },
+                attestation: vec![],
                 assessment_log: None,
+                observations,
+                risks,
+                findings,
                 remarks: None,
             }],
             back_matter: None,
@@ -1650,18 +1739,14 @@ pub(crate) fn serialize_assessment_results(
     serde_json::to_string_pretty(&doc).unwrap_or_default()
 }
 
-/// Deterministic UUID v4-format string derived from a seed via SHA-256.
-#[allow(dead_code)]
-fn uuid_from_str(seed: &str) -> String {
+/// Deterministic UUID v4-format from a seed string via SHA-256.
+fn uuid_from_str(seed: &str) -> uuid::Uuid {
     let h = Sha256::digest(seed.as_bytes());
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-4{:01x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        h[0], h[1], h[2], h[3],
-        h[4], h[5],
-        h[6] & 0x0f, h[7],
-        (h[8] & 0x3f) | 0x80, h[9],
-        h[10], h[11], h[12], h[13], h[14], h[15]
-    )
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&h[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes)
 }
 
 // ── Terminal Rendering ─────────────────────────────────────────────────────────
