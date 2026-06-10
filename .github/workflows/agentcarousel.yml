@@ -52,6 +52,8 @@ jobs:
         run: |
           ./target/release/agentcarousel bundle verify fixtures/ambient-scribe
           ./target/release/agentcarousel bundle verify fixtures/ambient-scribe/bundle.manifest.json
+          ./target/release/agentcarousel bundle verify fixtures/classified-cyber-security-senior-manager
+          ./target/release/agentcarousel bundle verify fixtures/classified-cyber-security-senior-manager/bundle.manifest.json
           ./target/release/agentcarousel bundle verify fixtures/github-actions-generator
           ./target/release/agentcarousel bundle verify fixtures/github-actions-generator/bundle.manifest.json
           ./target/release/agentcarousel bundle verify fixtures/prompt-injection-detector
