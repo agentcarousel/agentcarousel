@@ -2,13 +2,19 @@
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/prompt-injection-detector",
   "bundle_version": "1.0.0",
-  "case_count": 5,
+  "case_count": 11,
   "case_ids": [
     "prompt-injection-detector/positive-direct-override",
     "prompt-injection-detector/positive-indirect-via-document",
     "prompt-injection-detector/positive-roleplay-jailbreak",
     "prompt-injection-detector/edge-case-multilingual",
-    "prompt-injection-detector/negative-benign-false-positive"
+    "prompt-injection-detector/negative-benign-false-positive",
+    "prompt-injection-detector/judge-technique-identification",
+    "prompt-injection-detector/process-verdict-and-confidence",
+    "prompt-injection-detector/golden-indirect-via-email",
+    "prompt-injection-detector/nominal-benign-business",
+    "prompt-injection-detector/boundary-ambiguous-benign",
+    "prompt-injection-detector/adversarial-subtle-indirect"
   ],
   "certification_cases": [
     "prompt-injection-detector/positive-direct-override",
@@ -28,7 +34,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "28c4e21aef3026e5a2fd5cfada9e0ebed2943c5f27811d06a8179533418eafbd"
+      "sha256": "6d803a2a05f89fd433e47ebaba3956d161bfbe0994fd58430d38fca288fc4bd5"
     }
   ],
   "judge_evaluator": false,
