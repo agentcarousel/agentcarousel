@@ -10,6 +10,7 @@ use crate::fixtures::{validate_fixture_value, SchemaLocation};
 use crate::runner::{call_llm, AnthropicBatch, BatchDispatcher, CaseBatchItem};
 
 use super::exit_codes::ExitCode;
+use super::llm_output::{normalize_expected_block, prepare_llm_yaml};
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
 
@@ -28,6 +29,16 @@ enum DifficultyLevel {
     Easy,
     Medium,
     Hard,
+}
+
+impl DifficultyLevel {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Easy => "easy",
+            Self::Medium => "medium",
+            Self::Hard => "hard",
+        }
+    }
 }
 
 /// Generate fixture cases from a skill description or an existing system prompt.
@@ -186,11 +197,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         None
     };
 
-    let difficulty_str: Option<&str> = args.difficulty.as_ref().map(|d| match d {
-        DifficultyLevel::Easy => "easy",
-        DifficultyLevel::Medium => "medium",
-        DifficultyLevel::Hard => "hard",
-    });
+    let difficulty_str: Option<&str> = args.difficulty.as_ref().map(DifficultyLevel::as_str);
 
     let show_progress = !globals.quiet && !globals.json && std::io::stderr().is_terminal();
     let pb: Option<ProgressBar> = if show_progress {
@@ -251,7 +258,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
             })?
             .output;
 
-        let yaml_text = strip_markdown_fences(&raw);
+        let yaml_text = prepare_llm_yaml(&raw);
 
         // Validate; on failure retry once with the actual error text.
         let case_value = parse_and_validate(&yaml_text, &skill_name, None).or_else(
@@ -279,7 +286,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
                     .block_on(call_llm(args.model.as_deref().unwrap_or(DEFAULT_MODEL), &retry_prompt, Some(MAX_TOKENS), endpoint))
                     .map_err(|e| format!("retry LLM call failed: {e}"))?
                     .output;
-                let yaml2 = strip_markdown_fences(&raw2);
+                let yaml2 = prepare_llm_yaml(&raw2);
                 parse_and_validate(&yaml2, &skill_name, Some(&validation_errors))
             },
         );
@@ -350,6 +357,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         }
     }
 
+    strip_internal_keys(&mut valid_cases);
     let cases_value = serde_json::json!({ "cases": valid_cases });
     let cases_yaml = cases_to_yaml_block(&cases_value);
     let case_count = count_cases(&cases_value);
@@ -374,7 +382,7 @@ fn run_generate_inner(args: GenerateArgs, globals: &GlobalOptions) -> Result<i32
         )
     })?;
 
-    append_cases_to_file(&out_path, &cases_yaml, &skill_name)
+    super::fixture_utils::append_cases_to_fixture(&out_path, &cases_yaml, &skill_name)
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
 
     let result = GenerateResult {
@@ -568,19 +576,22 @@ fn read_existing_case_ids(cases_path: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Extract case IDs from a YAML text by scanning for `  - id:` patterns.
+/// Extract case IDs from a YAML text using proper YAML parsing (same logic as
+/// `read_existing_case_ids`), so all valid indentation styles are handled.
 fn extract_ids_from_yaml(text: &str) -> Vec<String> {
-    let mut ids = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("- id:") {
-            let id = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-            if !id.is_empty() {
-                ids.push(id);
-            }
-        }
-    }
-    ids
+    let Ok(value) = serde_yaml::from_str::<serde_json::Value>(text) else {
+        return vec![];
+    };
+    value
+        .get("cases")
+        .and_then(|c| c.as_array())
+        .map(|cases| {
+            cases
+                .iter()
+                .filter_map(|c| c.get("id").and_then(|id| id.as_str()).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn load_meta_prompt() -> String {
@@ -612,42 +623,6 @@ fn build_prompt(
         .replace("{{EXISTING_IDS}}", &existing)
 }
 
-fn strip_markdown_fences(text: &str) -> String {
-    let text = text.trim();
-    // Remove ```yaml or ``` fences if present
-    if let Some(stripped) = text.strip_prefix("```yaml") {
-        if let Some(inner) = stripped.strip_suffix("```") {
-            return inner.trim().to_string();
-        }
-    }
-    if let Some(stripped) = text.strip_prefix("```") {
-        if let Some(inner) = stripped.strip_suffix("```") {
-            return inner.trim().to_string();
-        }
-    }
-    text.to_string()
-}
-
-fn normalize_rubric_placement(value: &mut serde_json::Value) {
-    let Some(cases) = value.get_mut("cases").and_then(|c| c.as_array_mut()) else {
-        return;
-    };
-    for case in cases.iter_mut() {
-        let Some(obj) = case.as_object_mut() else {
-            continue;
-        };
-        // rubric belongs inside expected; move it if the LLM placed it at case root.
-        if let Some(rubric) = obj.remove("rubric") {
-            let expected = obj
-                .entry("expected")
-                .or_insert_with(|| serde_json::json!({}));
-            if let Some(exp_obj) = expected.as_object_mut() {
-                exp_obj.entry("rubric").or_insert(rubric);
-            }
-        }
-    }
-}
-
 fn parse_and_validate(
     yaml_text: &str,
     skill_name: &str,
@@ -662,7 +637,7 @@ fn parse_and_validate(
     }
 
     // Normalize before validation so schema checks see the corrected structure
-    normalize_rubric_placement(&mut value);
+    normalize_expected_block(&mut value);
 
     let cases_array = value
         .get("cases")
@@ -695,6 +670,16 @@ fn parse_and_validate(
     Ok(value)
 }
 
+/// Remove underscore-prefixed internal tracking keys (e.g. `_novelty_score`) from each
+/// case before serialization so they never appear in written fixture files.
+fn strip_internal_keys(cases: &mut [serde_json::Value]) {
+    for case in cases.iter_mut() {
+        if let Some(obj) = case.as_object_mut() {
+            obj.retain(|k, _| !k.starts_with('_'));
+        }
+    }
+}
+
 fn cases_to_yaml_block(value: &serde_json::Value) -> String {
     let cases = value
         .get("cases")
@@ -710,31 +695,6 @@ fn count_cases(value: &serde_json::Value) -> usize {
         .and_then(|c| c.as_array())
         .map(|a| a.len())
         .unwrap_or(0)
-}
-
-fn append_cases_to_file(path: &Path, cases_yaml: &str, skill_name: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
-    }
-
-    if path.exists() {
-        let cleaned = clean_for_append(cases_yaml);
-        let mut file = std::fs::OpenOptions::new()
-            .append(true)
-            .open(path)
-            .map_err(|e| format!("failed to open {}: {e}", path.display()))?;
-        use std::io::Write;
-        file.write_all(cleaned.as_bytes())
-            .map_err(|e| format!("failed to write to {}: {e}", path.display()))?;
-    } else {
-        // New file: write a minimal fixture header with cases.
-        let header =
-            format!("schema_version: 1\nskill_or_agent: {skill_name}\n\ncases:\n{cases_yaml}");
-        std::fs::write(path, header)
-            .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
-    }
-    Ok(())
 }
 
 /// Assign coverage categories to N generation slots.
@@ -1094,12 +1054,7 @@ Use e.g. --model claude-3-5-haiku-latest",
         None
     };
 
-    // Convert difficulty enum to string slice for prompts.
-    let difficulty_str: Option<&str> = args.difficulty.as_ref().map(|d| match d {
-        DifficultyLevel::Easy => "easy",
-        DifficultyLevel::Medium => "medium",
-        DifficultyLevel::Hard => "hard",
-    });
+    let difficulty_str: Option<&str> = args.difficulty.as_ref().map(DifficultyLevel::as_str);
 
     if !globals.quiet && !globals.json {
         eprintln!(
@@ -1154,7 +1109,7 @@ Use e.g. --model claude-3-5-haiku-latest",
 
     for (i, result) in batch_results.iter().enumerate() {
         if let Some(output) = &result.output {
-            let yaml_text = strip_markdown_fences(output);
+            let yaml_text = prepare_llm_yaml(output);
             match parse_and_validate(&yaml_text, skill_name, None) {
                 Ok(value) => {
                     if let Some(cases) = value.get("cases").and_then(|c| c.as_array()) {
@@ -1210,7 +1165,7 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
         if let Ok(retry_results) = runtime.block_on(dispatcher.dispatch(retry_items)) {
             for result in &retry_results {
                 if let Some(output) = &result.output {
-                    let yaml_text = strip_markdown_fences(output);
+                    let yaml_text = prepare_llm_yaml(output);
                     if let Ok(value) = parse_and_validate(&yaml_text, skill_name, None) {
                         if let Some(cases) = value.get("cases").and_then(|c| c.as_array()) {
                             valid_cases.extend(cases.iter().cloned());
@@ -1250,6 +1205,7 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
         ));
     }
 
+    strip_internal_keys(&mut valid_cases);
     let cases_value = serde_json::json!({ "cases": valid_cases });
     let cases_yaml = cases_to_yaml_block(&cases_value);
     let case_count = valid_cases.len();
@@ -1274,7 +1230,7 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
         )
     })?;
 
-    append_cases_to_file(out_path, &cases_yaml, skill_name)
+    super::fixture_utils::append_cases_to_fixture(out_path, &cases_yaml, skill_name)
         .map_err(|e| (ExitCode::RuntimeError.as_i32(), e))?;
 
     let result = GenerateResult {
@@ -1290,11 +1246,4 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
     }
 
     Ok(ExitCode::Ok.as_i32())
-}
-
-fn clean_for_append(yaml: &str) -> String {
-    // Cases are serialized at 0-indent by serde_yaml and the initial file header also writes
-    // them at 0-indent under `cases:`, so appended entries must stay at 0-indent to match.
-    let text = yaml.trim();
-    format!("\n{text}\n")
 }

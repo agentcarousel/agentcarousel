@@ -6,7 +6,12 @@ use console::style;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+
+use super::compliance_mappings::{
+    collapse_scores, compute_control_scores, ControlCoverageStatus, ControlScore, FrameworkControl,
+};
 
 use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
@@ -47,6 +52,11 @@ pub struct MetricsArgs {
     /// needs escalation, and how often it makes clinical claims without evidence.
     #[arg(long, value_name = "DOMAIN")]
     domain: Option<String>,
+
+    /// Show a per-control compliance attestation table for the named OSCAL framework.
+    /// Example: --framework nist-ai-rmf  --framework hipaa  --framework eu-ai-act
+    #[arg(long, value_name = "FRAMEWORK")]
+    framework: Option<String>,
 }
 
 struct ResolvedContext {
@@ -64,7 +74,8 @@ pub(crate) struct MetricResult {
     pub(crate) finding: String,
     pub(crate) sample_size: Option<usize>,
     pub(crate) detail: serde_json::Value,
-    pub(crate) compliance_hook: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) framework_controls: Vec<FrameworkControl>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -184,15 +195,20 @@ pub(crate) fn render_metrics_to_markdown(
             None => "n/a".to_string(),
         };
         let grade_str = m.grade.as_deref().unwrap_or("n/a");
-        let compliance = if m.compliance_hook.is_empty() {
+        let control_note = if m.framework_controls.is_empty() {
             String::new()
         } else {
-            format!(" *{}*", m.compliance_hook)
+            let ids: Vec<&str> = m
+                .framework_controls
+                .iter()
+                .map(|c| c.control_id.as_str())
+                .collect();
+            format!(" *{}*", ids.join(", "))
         };
         let _ = writeln!(
             md,
             "| {} | {} | {} | {}{} |",
-            m.title, score_str, grade_str, m.finding, compliance
+            m.title, score_str, grade_str, m.finding, control_note
         );
     }
     let _ = writeln!(md);
@@ -242,6 +258,12 @@ pub fn run_metrics(args: MetricsArgs, globals: &GlobalOptions) -> i32 {
         }
     }
 
+    let control_scores: Vec<ControlScore> = args
+        .framework
+        .as_deref()
+        .map(|fw| compute_control_scores(&runs, fw, ctx.effective_skill.as_deref(), None))
+        .unwrap_or_default();
+
     if globals.json {
         let skill_label = ctx
             .effective_skill
@@ -252,26 +274,17 @@ pub fn run_metrics(args: MetricsArgs, globals: &GlobalOptions) -> i32 {
             "generated_at": chrono::Utc::now().to_rfc3339(),
             "skill": skill_label,
             "analysis_window_runs": runs.len(),
-            "metrics": all_metrics
-                .iter()
-                .map(|m| json!({
-                    "id": m.id,
-                    "title": m.title,
-                    "domain": m.domain,
-                    "score_0_to_100": m.score_0_to_100,
-                    "grade": m.grade,
-                    "finding": m.finding,
-                    "sample_size": m.sample_size,
-                    "detail": m.detail,
-                    "compliance_hook": m.compliance_hook,
-                }))
-                .collect::<Vec<_>>()
+            "metrics": all_metrics,
+            "control_scores": control_scores,
         });
         JsonOutput::ok("metrics", data).print();
         return ExitCode::Ok.as_i32();
     }
 
     print_metrics_report(&all_metrics, ctx.effective_skill.as_deref(), runs.len());
+    if !control_scores.is_empty() {
+        print_control_scores_table(&control_scores, args.framework.as_deref().unwrap_or(""));
+    }
     ExitCode::Ok.as_i32()
 }
 
@@ -461,7 +474,7 @@ fn compute_injection_resistance(runs: &[agentcarousel_core::Run]) -> MetricResul
             finding: "No prompt injection test cases found in run history. Run the prompt-injection-detector fixture suite to generate this metric.".to_string(),
             sample_size: None,
             detail: json!({ "passed": 0, "total": 0 }),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -480,7 +493,7 @@ fn compute_injection_resistance(runs: &[agentcarousel_core::Run]) -> MetricResul
         ),
         sample_size: Some(total),
         detail: json!({ "passed": passed, "total": total }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -515,7 +528,7 @@ fn compute_drift_index(runs: &[agentcarousel_core::Run]) -> MetricResult {
             finding: "Insufficient scored run history to compute drift. At least two evaluated runs with effectiveness scores are needed.".to_string(),
             sample_size: Some(scored.len()),
             detail: json!({ "runs_with_scores": scored.len() }),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -558,7 +571,7 @@ fn compute_drift_index(runs: &[agentcarousel_core::Run]) -> MetricResult {
             "oldest_score": oldest,
             "runs_analyzed": scored.len()
         }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -591,7 +604,7 @@ fn compute_behavioral_coverage(fixtures: &[FixtureFile]) -> MetricResult {
                     .to_string(),
             sample_size: None,
             detail: json!({}),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -682,7 +695,7 @@ fn compute_behavioral_coverage(fixtures: &[FixtureFile]) -> MetricResult {
             "missing": missing,
             "total_cases_analyzed": all_cases.len()
         }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -726,7 +739,7 @@ fn compute_confidence_calibration(runs: &[agentcarousel_core::Run]) -> MetricRes
             finding: "Insufficient judge-scored cases to compute calibration (minimum 5 required). Run evaluation with --judge to generate this metric.".to_string(),
             sample_size: Some(total),
             detail: json!({ "judged_case_count": total }),
-            compliance_hook: "",
+            framework_controls: vec![],
         };
     }
 
@@ -777,7 +790,7 @@ fn compute_confidence_calibration(runs: &[agentcarousel_core::Run]) -> MetricRes
             "label": calibration_label,
             "judged_case_count": total
         }),
-        compliance_hook: "",
+        framework_controls: vec![],
     }
 }
 
@@ -895,7 +908,7 @@ fn compute_phi_leakage_rate(runs: &[agentcarousel_core::Run]) -> MetricResult {
             finding: "No PHI test cases found in run history. Run data-privacy-classifier or a HIPAA fixture suite to generate this metric.".to_string(),
             sample_size: None,
             detail: json!({ "phi_cases": 0, "failed_phi_cases": 0 }),
-            compliance_hook: "HIPAA § 164.514 · Minimum Necessary",
+            framework_controls: vec![],
         };
     }
 
@@ -920,7 +933,7 @@ fn compute_phi_leakage_rate(runs: &[agentcarousel_core::Run]) -> MetricResult {
             "failed_phi_cases": failed_phi,
             "leakage_rate": leakage_rate
         }),
-        compliance_hook: "HIPAA § 164.514 · Minimum Necessary",
+        framework_controls: vec![],
     }
 }
 
@@ -966,7 +979,7 @@ fn compute_escalation_latency(runs: &[agentcarousel_core::Run]) -> MetricResult 
             finding: "No escalation test cases found in run history.".to_string(),
             sample_size: None,
             detail: json!({ "sample_size": 0 }),
-            compliance_hook: "FDA SaMD AI/ML Action Plan · Joint Commission",
+            framework_controls: vec![],
         };
     }
 
@@ -988,7 +1001,7 @@ fn compute_escalation_latency(runs: &[agentcarousel_core::Run]) -> MetricResult 
         finding: format!("p50: {p50}ms  p95: {p95}ms across {n} trigger cases"),
         sample_size: Some(n),
         detail: json!({ "p50_ms": p50, "p95_ms": p95, "sample_size": n }),
-        compliance_hook: "FDA SaMD AI/ML Action Plan · Joint Commission",
+        framework_controls: vec![],
     }
 }
 
@@ -1065,7 +1078,7 @@ fn compute_escalation_precision_recall(runs: &[agentcarousel_core::Run]) -> Metr
             finding: "No escalation precision/recall test cases found. Label cases with 'requires-escalation' or 'no-escalation' in the case ID.".to_string(),
             sample_size: None,
             detail: json!({ "tp": 0, "fn": 0, "fp": 0, "tn": 0 }),
-            compliance_hook: "FDA SaMD Patient Safety · Joint Commission NPSG.15",
+            framework_controls: vec![],
         };
     }
 
@@ -1108,7 +1121,7 @@ fn compute_escalation_precision_recall(runs: &[agentcarousel_core::Run]) -> Metr
         finding,
         sample_size: Some(total),
         detail: json!({ "tp": tp, "fn": fn_, "fp": fp, "tn": tn }),
-        compliance_hook: "FDA SaMD Patient Safety · Joint Commission NPSG.15",
+        framework_controls: vec![],
     }
 }
 
@@ -1199,7 +1212,7 @@ fn compute_hallucination_density(runs: &[agentcarousel_core::Run]) -> MetricResu
                     finding: "Insufficient data to compute hallucination density (minimum 3 rubric scores or clinical cases required).".to_string(),
                     sample_size: None,
                     detail: json!({ "rubric_scores_found": rubric_scores.len() }),
-                    compliance_hook: "FDA SaMD Clinical Validity · Joint Commission",
+                    framework_controls: vec![],
                 };
             }
             (broad, "effectiveness-score proxy")
@@ -1231,7 +1244,7 @@ fn compute_hallucination_density(runs: &[agentcarousel_core::Run]) -> MetricResu
             "sample_size": n,
             "method": method
         }),
-        compliance_hook: "FDA SaMD Clinical Validity · Joint Commission",
+        framework_controls: vec![],
     }
 }
 
@@ -1247,7 +1260,592 @@ fn hallucination_density_grade(score: f64) -> Grade {
     }
 }
 
+// ── B-5: Framework Compliance Markdown Report ─────────────────────────────────
+
+/// Render a Markdown framework compliance report from scored controls.
+///
+/// Models are collapsed to one row per control (best status wins) so the table
+/// stays readable even when multiple generator models appear in run history.
+/// Gap controls are listed compactly at the end with a remediation hint;
+/// they are not repeated with placeholder "null" columns.
+#[allow(dead_code)]
+pub(crate) fn render_framework_compliance_report(
+    scores: &[ControlScore],
+    framework: &str,
+    skill: Option<&str>,
+) -> String {
+    use std::fmt::Write as _;
+    let mut md = String::new();
+
+    let collapsed = collapse_scores(scores);
+    let skill_label = skill.unwrap_or("all skills");
+
+    let satisfied = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Satisfied)
+        .count();
+    let partial = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
+        .count();
+    let failed = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Failed)
+        .count();
+    let gap = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Gap)
+        .count();
+    let procedural = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Procedural)
+        .count();
+    let total = collapsed.len();
+
+    use super::compliance_mappings::{MIN_CASES, SATISFACTION_THRESHOLD_DEFAULT};
+
+    let _ = writeln!(md, "## Framework Compliance — {framework}");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "**Skill:** {skill_label}  \
+         **Controls:** {total} total · ✅ {satisfied} satisfied · ⚠ {partial} partial · \
+         ❌ {failed} failed · ❌ {gap} gap · 📋 {procedural} procedural  \
+         **Threshold:** {:.0}% · **Min cases:** {MIN_CASES}",
+        SATISFACTION_THRESHOLD_DEFAULT * 100.0,
+    );
+    let _ = writeln!(md);
+
+    let covered: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.status,
+                ControlCoverageStatus::Satisfied
+                    | ControlCoverageStatus::PartialEvidence
+                    | ControlCoverageStatus::Failed
+            )
+        })
+        .collect();
+
+    let procedural_list: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Procedural)
+        .collect();
+
+    if covered.is_empty() && procedural_list.is_empty() {
+        let _ = writeln!(
+            md,
+            "> **No behavioral evidence yet.** Tag fixture cases with `{framework}:<control-id>` \
+             to link test results to controls, then re-run `agc compliance report`."
+        );
+        let _ = writeln!(md);
+    } else {
+        let _ = writeln!(md, "| Control | Score | Cases | Status | Requirement |");
+        let _ = writeln!(md, "|---------|-------|-------|--------|-------------|");
+        for s in &covered {
+            let score_str = format!("{:.0}%", s.effectiveness_mean * 100.0);
+            let status_cell = match s.status {
+                ControlCoverageStatus::Satisfied => "✅ Satisfied",
+                ControlCoverageStatus::Failed => "❌ Failed",
+                _ => "⚠ Partial",
+            };
+            let req = s.control.requirement.replace('\n', " ").replace('|', "\\|");
+            let _ = writeln!(
+                md,
+                "| {} | {} | {} | {} | {} |",
+                s.control.control_id, score_str, s.case_count, status_cell, req
+            );
+        }
+        for s in &procedural_list {
+            let req = s.control.requirement.replace('\n', " ").replace('|', "\\|");
+            let _ = writeln!(
+                md,
+                "| {} | n/a | — | 📋 Procedural | {} |",
+                s.control.control_id, req
+            );
+        }
+        let _ = writeln!(md);
+    }
+
+    let gaps: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Gap)
+        .collect();
+
+    if !gaps.is_empty() {
+        let _ = writeln!(md, "### Missing Coverage ({gap} controls)");
+        let _ = writeln!(md);
+        let _ = writeln!(
+            md,
+            "No fixture cases are tagged for these controls. \
+             Add cases or run `agc compliance scaffold --tag <tag>` to generate them."
+        );
+        let _ = writeln!(md);
+        for s in &gaps {
+            let _ = writeln!(
+                md,
+                "- **`{}`** — {}",
+                s.control.control_id, s.control.requirement
+            );
+        }
+        let _ = writeln!(md);
+    }
+
+    md
+}
+
+// ── B-6: OSCAL Assessment Results Serializer ──────────────────────────────────
+
+/// Serialize `ControlScore` entries to an OSCAL Assessment Results JSON document.
+///
+/// Each scored control becomes an Observation + Finding pair.
+/// Gap controls additionally produce an explicit `risks[]` entry so auditors
+/// see a documented risk record rather than a silent absence.
+///
+/// `runs` is used to compute the actual assessment window (start = earliest
+/// run start, end = latest run finish). Pass an empty slice when runs are
+/// unavailable; the timestamps will fall back to the current time.
+#[allow(dead_code)]
+pub(crate) fn serialize_assessment_results(
+    scores: &[ControlScore],
+    framework: &str,
+    skill: Option<&str>,
+    run_id: &str,
+    runs: &[agentcarousel_core::Run],
+) -> String {
+    use oscal::generated::types::{
+        AssessmentResults, Finding, FindingTarget, ImportAp, Metadata, Observation, OscalResult,
+        Property, RelatedObservation, RelevantEvidence, ReviewedControls, Risk, Status,
+    };
+    use oscal::primitives::{MarkupLine, MarkupMultiline, UriReference};
+
+    let now = chrono::Utc::now();
+    let skill_label = skill.unwrap_or("all skills");
+
+    // Collapse multi-model scores to one entry per control before serializing.
+    let scores = super::compliance_mappings::collapse_scores(scores);
+
+    // Compute actual assessment window from the runs that informed the scores.
+    let (window_start, window_end) = if runs.is_empty() {
+        (now, now)
+    } else {
+        let start = runs.iter().map(|r| r.started_at).min().unwrap();
+        let end = runs
+            .iter()
+            .map(|r| r.finished_at.unwrap_or(r.started_at))
+            .max()
+            .unwrap();
+        (start, end)
+    };
+
+    let mut observations: Vec<Observation> = Vec::new();
+    let mut findings: Vec<Finding> = Vec::new();
+    let mut risks: Vec<Risk> = Vec::new();
+
+    for score in &scores {
+        let obs_uuid = uuid_from_str(&format!(
+            "{}-{}-{}-obs",
+            run_id, score.control.control_id, score.model_version
+        ));
+        let finding_uuid = uuid_from_str(&format!(
+            "{}-{}-{}-finding",
+            run_id, score.control.control_id, score.model_version
+        ));
+
+        let obs = Observation {
+            uuid: obs_uuid,
+            title: Some(MarkupLine::from(format!(
+                "{} — {}",
+                score.control.control_id, score.model_version
+            ))),
+            description: MarkupMultiline::from(format!(
+                "{} fixture cases mapped to control {} executed against model {}. \
+                 Pass rate: {:.0}%. Runs analyzed: {}.",
+                score.case_count,
+                score.control.control_id,
+                score.model_version,
+                score.pass_rate * 100.0,
+                score.run_count,
+            )),
+            props: vec![
+                Property {
+                    name: "framework".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: framework.to_string(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+                Property {
+                    name: "case-count".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: score.case_count.to_string(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+                Property {
+                    name: "run-count".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: score.run_count.to_string(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+                Property {
+                    name: "satisfaction-threshold".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: format!(
+                        "{:.2}",
+                        super::compliance_mappings::SATISFACTION_THRESHOLD_DEFAULT
+                    ),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+                Property {
+                    name: "min-cases".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: super::compliance_mappings::MIN_CASES.to_string(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+            ],
+            links: vec![],
+            method: vec![],
+            type_: vec![],
+            origins: vec![],
+            subjects: vec![],
+            relevant_evidence: vec![RelevantEvidence {
+                href: Some(UriReference::from(format!("run://{run_id}"))),
+                description: MarkupMultiline::from(format!(
+                    "AgentCarousel run {} — {} cases evaluated for control {}",
+                    run_id, score.case_count, score.control.control_id
+                )),
+                props: vec![],
+                links: vec![],
+                remarks: None,
+            }],
+            collected: now,
+            expires: None,
+            remarks: None,
+        };
+        observations.push(obs);
+
+        let (state, reason) = match score.status {
+            ControlCoverageStatus::Satisfied => ("satisfied", None),
+            ControlCoverageStatus::Failed => ("not-satisfied", None),
+            ControlCoverageStatus::PartialEvidence => ("other", Some("partial-evidence")),
+            ControlCoverageStatus::Gap => ("other", Some("no-coverage")),
+            ControlCoverageStatus::Procedural => ("other", Some("procedural")),
+        };
+
+        let finding = Finding {
+            uuid: finding_uuid,
+            title: MarkupLine::from(format!(
+                "Control {} — {}",
+                score.control.control_id, score.model_version
+            )),
+            description: MarkupMultiline::from(score.control.requirement.as_str()),
+            props: vec![
+                Property {
+                    name: "effectiveness-mean".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: format!("{:.4}", score.effectiveness_mean),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+                Property {
+                    name: "coverage-status".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: format!("{:?}", score.status).to_lowercase(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                },
+            ],
+            links: vec![],
+            origins: vec![],
+            target: FindingTarget {
+                type_: "statement-id".to_string(),
+                target_id: score.control.control_id.clone(),
+                title: None,
+                description: None,
+                props: vec![],
+                links: vec![],
+                status: Status {
+                    state: state.to_string(),
+                    reason: reason.map(|r| r.to_string()),
+                    remarks: None,
+                },
+                implementation_status: None,
+                remarks: None,
+            },
+            implementation_statement_uuid: None,
+            related_observations: vec![RelatedObservation {
+                observation_uuid: obs_uuid,
+                remarks: None,
+            }],
+            related_risks: vec![],
+            remarks: None,
+        };
+        findings.push(finding);
+
+        if score.status == ControlCoverageStatus::Gap {
+            risks.push(Risk {
+                uuid: uuid_from_str(&format!(
+                    "{}-{}-risk",
+                    score.control.control_id, score.model_version
+                )),
+                title: MarkupLine::from(format!(
+                    "Gap: No fixture coverage for {}",
+                    score.control.control_id
+                )),
+                description: MarkupMultiline::from(format!(
+                    "Control {} has no fixture cases mapped to tag '{}'. \
+                     Explicit risk record required before formal acceptance.",
+                    score.control.control_id, score.control.tag
+                )),
+                statement: MarkupMultiline::from(format!(
+                    "No fixture cases are mapped to tag '{}'. \
+                     An explicit risk acceptance or remediation plan is required.",
+                    score.control.tag
+                )),
+                props: vec![Property {
+                    name: "reason".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: "no-fixture-coverage".to_string(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                }],
+                links: vec![],
+                status: "open".to_string(),
+                origins: vec![],
+                threat_ids: vec![],
+                characterizations: vec![],
+                mitigating_factor: vec![],
+                deadline: None,
+                remediations: vec![],
+                risk_log: None,
+                related_observations: vec![],
+            });
+        }
+    }
+
+    #[derive(Serialize)]
+    struct OscalArDoc {
+        #[serde(rename = "assessment-results")]
+        assessment_results: AssessmentResults,
+    }
+
+    let doc = OscalArDoc {
+        assessment_results: AssessmentResults {
+            uuid: uuid_from_str(&format!("{run_id}-{framework}-ar")),
+            metadata: Metadata {
+                title: MarkupLine::from(format!("AgentCarousel Assessment Results — {framework}")),
+                published: Some(now),
+                last_modified: now,
+                version: "1.0.0".to_string(),
+                oscal_version: "1.1.2".to_string(),
+                revision: vec![],
+                document_ids: vec![],
+                props: vec![],
+                links: vec![],
+                role: vec![],
+                location: vec![],
+                party: vec![],
+                responsible_parties: vec![],
+                actions: vec![],
+                remarks: None,
+            },
+            import_ap: ImportAp {
+                href: UriReference::from("agentcarousel://fixture-suite"),
+                remarks: None,
+            },
+            local_definitions: None,
+            results: vec![OscalResult {
+                uuid: uuid_from_str(&format!("{run_id}-{framework}-result")),
+                title: MarkupLine::from(format!(
+                    "AgentCarousel Compliance Assessment — {framework}"
+                )),
+                description: MarkupMultiline::from(format!(
+                    "Automated behavioral attestation for skill '{skill_label}' \
+                     against framework '{framework}'."
+                )),
+                start: window_start,
+                end: Some(window_end),
+                props: vec![
+                    Property {
+                        name: "skill".to_string(),
+                        uuid: None,
+                        ns: None,
+                        value: skill_label.to_string(),
+                        class: None,
+                        group: None,
+                        remarks: None,
+                    },
+                    Property {
+                        name: "framework".to_string(),
+                        uuid: None,
+                        ns: None,
+                        value: framework.to_string(),
+                        class: None,
+                        group: None,
+                        remarks: None,
+                    },
+                    Property {
+                        name: "run-id".to_string(),
+                        uuid: None,
+                        ns: None,
+                        value: run_id.to_string(),
+                        class: None,
+                        group: None,
+                        remarks: None,
+                    },
+                ],
+                links: vec![],
+                local_definitions: None,
+                reviewed_controls: ReviewedControls {
+                    description: None,
+                    props: vec![],
+                    links: vec![],
+                    control_selection: vec![],
+                    control_objective_selection: vec![],
+                    remarks: None,
+                },
+                attestation: vec![],
+                assessment_log: None,
+                observations,
+                risks,
+                findings,
+                remarks: None,
+            }],
+            back_matter: None,
+        },
+    };
+
+    serde_json::to_string_pretty(&doc).unwrap_or_default()
+}
+
+/// Deterministic UUID v4-format from a seed string via SHA-256.
+fn uuid_from_str(seed: &str) -> uuid::Uuid {
+    let h = Sha256::digest(seed.as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&h[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes)
+}
+
 // ── Terminal Rendering ─────────────────────────────────────────────────────────
+
+fn print_control_scores_table(scores: &[ControlScore], framework: &str) {
+    let collapsed = collapse_scores(scores);
+
+    let satisfied = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Satisfied)
+        .count();
+    let partial = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::PartialEvidence)
+        .count();
+    let failed = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Failed)
+        .count();
+    let gap = collapsed
+        .iter()
+        .filter(|s| s.status == ControlCoverageStatus::Gap)
+        .count();
+
+    println!();
+    println!(
+        "  {}",
+        style(format!("Framework Controls — {framework}")).bold()
+    );
+    println!(
+        "  {} satisfied  {} partial  {} failed  {} gap",
+        style(satisfied.to_string()).green(),
+        style(partial.to_string()).yellow(),
+        style(failed.to_string()).red(),
+        style(gap.to_string()).red(),
+    );
+    println!("  {}", "─".repeat(64));
+
+    let covered: Vec<&ControlScore> = collapsed
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.status,
+                ControlCoverageStatus::Satisfied
+                    | ControlCoverageStatus::PartialEvidence
+                    | ControlCoverageStatus::Failed
+                    | ControlCoverageStatus::Procedural
+            )
+        })
+        .collect();
+
+    if covered.is_empty() {
+        println!(
+            "  {}  Tag fixture cases with {}:<control-id> to populate this table.",
+            style("No coverage yet.").dim(),
+            framework,
+        );
+    } else {
+        println!(
+            "  {:<32} {:<8} {:<8} {}",
+            style("CONTROL").dim().bold(),
+            style("SCORE").dim().bold(),
+            style("CASES").dim().bold(),
+            style("STATUS").dim().bold(),
+        );
+        println!("  {}", "─".repeat(64));
+        for s in &covered {
+            let score_str = match s.status {
+                ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => "n/a".to_string(),
+                _ => format!("{:.0}%", s.effectiveness_mean * 100.0),
+            };
+            let status_str = match s.status {
+                ControlCoverageStatus::Satisfied => style("Satisfied").green().to_string(),
+                ControlCoverageStatus::PartialEvidence => style("Partial").yellow().to_string(),
+                ControlCoverageStatus::Failed => style("Failed").red().to_string(),
+                ControlCoverageStatus::Gap => style("Gap").red().to_string(),
+                ControlCoverageStatus::Procedural => style("Procedural").dim().to_string(),
+            };
+            println!(
+                "  {:<32} {:<8} {:<8} {}",
+                &s.control.control_id[..s.control.control_id.len().min(31)],
+                score_str,
+                s.case_count,
+                status_str,
+            );
+        }
+    }
+
+    if gap > 0 {
+        println!("  {}", "─".repeat(64));
+        println!(
+            "  {}  Run {} to see all {} controls without coverage.",
+            style(format!("{gap} gaps")).red(),
+            style(format!("agc compliance gaps --framework {framework}")).dim(),
+            gap,
+        );
+    }
+    println!();
+}
 
 fn print_metrics_report(
     metrics: &[MetricResult],
@@ -1322,8 +1920,13 @@ fn print_metrics_report(
             grade_str,
             style(&m.finding).dim()
         );
-        if !m.compliance_hook.is_empty() {
-            println!("  {} {}", style("↳").dim(), style(m.compliance_hook).dim());
+        if !m.framework_controls.is_empty() {
+            let ids: Vec<&str> = m
+                .framework_controls
+                .iter()
+                .map(|c| c.control_id.as_str())
+                .collect();
+            println!("  {} {}", style("↳").dim(), style(ids.join(", ")).dim());
         }
     }
 

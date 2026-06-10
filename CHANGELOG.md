@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.8.0 — 2026-06-02
+
+**Theme: OSCAL-native compliance attestation.**
+
+`agc` can now produce machine-readable compliance evidence that auditors and GRC tools accept directly. A new `crates/oscal` workspace crate implements the OSCAL data model; a tag-driven scoring engine maps fixture cases to control IDs; and three new CLI commands surface the results.
+
+### Added
+
+- **`crates/oscal`** — new workspace crate with Serde types for the full OSCAL data model: `Catalog`, `Group`, `Control`, `Part`, `ComponentDefinition`, `ControlImplementation`, `ImplementedRequirement`, `AssessmentResults`, `Finding`, `FindingTarget`, `Observation`, and `RelevantEvidence`. Round-trip JSON parse tested against bundled community catalogs.
+- **Bundled OSCAL catalogs** — NIST SP 800-171, 800-172, 800-207, NIST AI RMF, EU AI Act, ISO 42001, HIPAA, and FDA SaMD catalog JSON files shipped inside `crates/oscal/catalogs/`; loaded at runtime via `load_catalog()`.
+- **`CaseResult.tags`** — tags field added to `CaseResult` (core/models.rs) and populated from `Case.tags` at all eight orchestration construction sites, giving every scored case its control-ID annotations.
+- **`agc compliance report`** — Markdown compliance report: per-control pass/fail table with effectiveness scores, case counts, gap advisory, and overall framework attestation status. `--framework` accepts `nist-ai-rmf`, `nist-800-171`, `nist-800-172`, `eu-ai-act`, `iso-42001`, `hipaa`, `fda-samd`, `nist-800-207`, or `all`. `--model` scopes scoring to a specific generator model. `--json` emits a structured envelope for pipeline use.
+- **`agc compliance gaps`** — Lists controls that are `NotSatisfied` or `PartialEvidence` with suggested case improvements. Designed for remediation workflows.
+- **`agc compliance generate-cases`** — Generates fixture cases pre-tagged with control IDs for a specified framework, accelerating coverage of compliance gaps.
+- **OSCAL Assessment Results export** — `serialize_assessment_results()` produces a valid `assessment-results.oscal.json` artifact; included in every evidence tarball alongside `metrics.json`. Findings carry `status`, `reason`, and `relevant-evidence` links.
+- **`--framework` on `agc metrics`** — `framework_controls` field on `MetricResult` replaces the old `compliance_hook`; `agc metrics --framework <id>` scopes the control table to a single framework.
+- **Satisfaction threshold** — Documented at 0.80 (configurable per-framework); requires a minimum of three cases before a control can receive `Satisfied` status.
+- **OSCAL finding status** — Distinguishes `PartialEvidence` (some cases pass, some fail) from outright failure; `reason` field explains the gap.
+
+### Fixed
+
+- Byte-index string slice panic on multi-byte UTF-8 characters in control IDs in the compliance terminal renderer (`agc-inp6`).
+- Double mock-engine lookup in `executor::run_case_inner` (`agc-xaqg`).
+- Unreachable JSON error branch in `agc compliance report --framework all` (`agc-aa4n`).
+- OSCAL assessment results `start`/`end` timestamps now reflect the actual evaluation run window, not report-generation time (`agc-cfy0`).
+- OSCAL serializer calls `collapse_scores` before iterating findings, preventing duplicate finding entries per control (`agc-p9pj`).
+- `EvalScores.passed` no longer hardcoded to `1.0` in the judge evaluator (`agc-j7t6`).
+- Silent `JoinError` in `run_eval_cases` no longer silently drops case results (`agc-smum`).
+- `_novelty_score` internal metadata no longer written to `cases.yaml` output (`agc-rsd9`).
+
+---
+
 ## 0.7.0 — 2026-05-29
 
 ### Added

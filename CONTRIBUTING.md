@@ -41,7 +41,7 @@ Open an issue with the title `Fixture proposal: <skill-or-agent-id>` and fill in
 
 After issue acceptance, scaffold with `agentcarousel init`, then follow the `init → validate → test` loop before opening a PR.
 
-See [docs/contributing-fixtures.md](docs/contributing-fixtures.md) for the full process and [docs/fixture-format.md](docs/fixture-format.md) for field reference.
+See [docs/getting-started.md](docs/getting-started.md) for the full process and [docs/fixture-format.md](docs/fixture-format.md) for field reference.
 
 ---
 

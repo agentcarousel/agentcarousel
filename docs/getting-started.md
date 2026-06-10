@@ -79,7 +79,7 @@ agc validate fixtures/prompt-injection-detector/
 ```
 
 ```
-🎠 AgentCarousel v0.7.0 · validate · 1 fixture
+🎠 AgentCarousel v0.8.0 · validate · 1 fixture
 
 Checking JSON Schema, kebab-case ids, case id prefixes, and safe paths
 
@@ -112,7 +112,7 @@ agc eval fixtures/prompt-injection-detector/ \
 You'll see each case tick by. A passing run looks like this:
 
 ```
-🎠 AgentCarousel v0.7.0 · prompt-injection-detector · 9 cases
+🎠 AgentCarousel v0.8.0 · prompt-injection-detector · 9 cases
 
 Running eval (live)
 
@@ -203,3 +203,4 @@ agc pipeline improve my-support-bot --target-score 0.90
 - [Concepts](concepts.md) — understand fixtures, rubrics, evaluators, baselines, and the pipeline loop in depth
 - [Reference](reference.md) — every `agc` command and flag
 - Add `agc compare -l --threshold 0.05` to your CI pipeline as a regression gate
+- Tag cases with control IDs (e.g. `tags: [smoke, nist-ai-rmf:GOVERN-1.1]`) and run `agc compliance report --framework nist-ai-rmf` to generate OSCAL attestation evidence

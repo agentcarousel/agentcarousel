@@ -35,6 +35,7 @@ pub(super) fn aggregate_case_results(
         input: case.input.messages.clone(),
         discrimination_score: None,
         discrimination_label: None,
+        tags: case.tags.clone(),
     }
 }
 

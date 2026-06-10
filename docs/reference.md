@@ -227,12 +227,13 @@ agc metrics [flags]
 |---|---|
 | `--skill <name>` | Scope to a specific skill |
 | `--fixture <path>` | Read skill name from fixture file |
+| `--framework <id>` | Include OSCAL control coverage table for this framework |
 | `--limit <n>` | Number of historical runs to include (default: 20) |
 | `--json` | Machine-readable output |
 
 ```bash
 agc metrics --skill my-skill
-agc metrics --skill my-skill --json > metrics.json
+agc metrics --skill my-skill --framework nist-ai-rmf --json > metrics.json
 ```
 
 **Metrics:**
@@ -243,6 +244,97 @@ agc metrics --skill my-skill --json > metrics.json
 | Behavioral Stability | Effectiveness score drift over run history |
 | Test Coverage Completeness | Fraction of the 7-category risk taxonomy covered |
 | Score Accuracy (Calibration) | How well judge scores predict actual pass/fail |
+
+---
+
+## agc compliance
+
+Map fixture evidence to OSCAL compliance frameworks. Requires cases tagged with control IDs (e.g. `nist-ai-rmf:GOVERN-1.1`).
+
+### agc compliance report
+
+```bash
+agc compliance report [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--framework <id>` | required | Framework to report on: `nist-ai-rmf`, `nist-800-171`, `nist-800-172`, `nist-800-207`, `eu-ai-act`, `iso-42001`, `hipaa`, `fda-samd`, or `all` |
+| `--skill <name>` | all skills | Scope scoring to cases from this skill |
+| `--model <model>` | configured model | Scope scoring to this generator model |
+| `--all-models` | off | Include results from all models (disables model filter) |
+| `--oscal` | off | Emit an OSCAL Assessment Results JSON artifact |
+| `--out <dir>` | `./compliance-output` | Directory for `--oscal` output files |
+| `--run-id <id>` | `latest` | Run ID to use as the assessment window anchor |
+| `--json` | off | Machine-readable output |
+
+```bash
+# Terminal report for NIST AI RMF
+agc compliance report --framework nist-ai-rmf --skill my-skill
+
+# Full framework sweep as JSON
+agc compliance report --framework all --json
+
+# Export OSCAL Assessment Results artifact
+agc compliance report --framework eu-ai-act --oscal --out ./evidence/
+```
+
+**Satisfaction threshold:** A control reaches `Satisfied` when pass rate ≥ 0.80 across a minimum of three tagged cases. Controls with fewer than three cases receive `PartialEvidence` regardless of pass rate.
+
+**Frameworks:** `nist-ai-rmf` · `nist-800-171` · `nist-800-172` · `nist-800-207` · `eu-ai-act` · `iso-42001` · `hipaa` · `fda-samd`
+
+---
+
+### agc compliance gaps
+
+List controls that are `NotSatisfied` or `PartialEvidence`, with remediation suggestions.
+
+```bash
+agc compliance gaps [flags]
+```
+
+| Flag | Description |
+|---|---|
+| `--framework <id>` | Framework to inspect (same set as `report`) |
+| `--skill <name>` | Scope to a skill |
+| `--model <model>` | Scope to a model |
+| `--all-models` | Include all models |
+| `--json` | Machine-readable output |
+
+```bash
+agc compliance gaps --framework hipaa --skill ambient-scribe
+```
+
+---
+
+### agc compliance generate-cases
+
+Generate fixture cases pre-tagged with OSCAL control IDs to close compliance gaps.
+
+```bash
+agc compliance generate-cases [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--skill <name>` | required | Skill to generate cases for |
+| `--framework <id>` | required | Source framework for control tags |
+| `--tag <control-id>` | required | One or more control IDs to cover (repeatable) |
+| `--count <n>` | `3` | Cases to generate per tag |
+| `--model <model>` | config | Generator model |
+| `--out <path>` | stdout | Output YAML file (appends to existing fixture) |
+| `--json` | off | Emit structured JSON envelope |
+
+```bash
+# Generate 3 cases for NIST AI RMF GOVERN-1.1 and MAP-1.1
+agc compliance generate-cases \
+  --skill my-skill \
+  --framework nist-ai-rmf \
+  --tag nist-ai-rmf:GOVERN-1.1 \
+  --tag nist-ai-rmf:MAP-1.1 \
+  --count 3 \
+  --out fixtures/my-skill/cases.yaml
+```
 
 ---
 

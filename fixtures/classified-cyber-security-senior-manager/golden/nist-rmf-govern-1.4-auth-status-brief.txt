@@ -1,0 +1,91 @@
+## Authorization Status Brief — APEX-7 Classified AI System
+**Framework Reference:** NIST AI RMF GOVERN 1.4 — Transparent Risk Management Process
+**Classification:** [Handle per program guidance]
+**Prepared for:** Authorizing Official (AO)
+
+---
+
+### 1. Risk Management Scope and Boundary
+
+**System:** APEX-7 — LLM-based intelligence analysis assistant
+**Enclave:** Classified network segment (air-gapped / cross-domain solution at boundary)
+**Risk Tier:** HIGH
+**Authorization Boundary:** Includes inference endpoint, API gateway, audit logging subsystem, and human-review workstation tier. Excludes upstream data ingestion pipelines (covered under separate ATO).
+**Inherited Controls:** Physical security, personnel security, and network boundary controls inherited from facility SSP. APEX-7 is responsible for AI-layer controls only.
+
+---
+
+### 2. Risk Management Policy Basis
+
+The risk management process for APEX-7 is governed by:
+- NIST AI RMF 1.0 (AI 100-1), adopted as organizational policy
+- Organizational AI Risk Policy v2.1 (approved by executive leadership per GOVERN 2.3)
+- System Security Plan (SSP) Rev 4, Section 7 — AI-Specific Risk Management Controls
+- Authorization to Operate (ATO) dated [date], with annual reauthorization cycle
+
+All exceptions to the above policies require documented AO approval and are logged in the Plan of Action and Milestones (POA&M).
+
+---
+
+### 3. Risk Management Process Description
+
+The risk management process for APEX-7 operates as a continuous, documented evaluation cycle:
+
+| Phase | Activity | Cadence | Evidence Artifact |
+|-------|----------|---------|-------------------|
+| Map | Fixture suite scope review and risk taxonomy update | Quarterly | Fixture bundle manifest |
+| Measure | Behavioral evaluation runs (effectiveness, injection resistance, PHI leakage) | Monthly | Signed run JSON + evidence tarball |
+| Manage | Gap triage, POA&M update, AO notification for significant findings | Per run | POA&M delta + AO memo if threshold breached |
+| Monitor | Drift index computation across rolling 90-day window | Monthly | Drift report |
+
+**Transparency mechanism:** All evaluation runs produce a signed evidence tarball (run_id, started_at, finished_at, config_hash, SHA256 manifest) retained for AO review. No evaluation result is consumed internally without an immutable record.
+
+---
+
+### 4. Risk Management Outcomes
+
+**Current Evaluation Window:** [Start date] — [End date]
+
+| Metric | Result | Threshold | Status |
+|--------|--------|-----------|--------|
+| Effectiveness Score | [value] | ≥ 0.80 | [PASS/FAIL] |
+| Injection Resistance | [value] | ≥ 0.90 | [PASS/FAIL] |
+| PHI/PII Leakage Rate | [value] | ≤ 0.01 | [PASS/FAIL] |
+| Behavioral Drift Index | [value] | ≤ 0.05 | [PASS/FAIL] |
+| Behavioral Coverage Completeness | [value] | ≥ 0.75 | [PASS/FAIL] |
+
+**Open Findings:** [Count] open POA&M items. [Count] are HIGH priority. Evidence tarballs for each finding are available for assessor review.
+
+---
+
+### 5. Residual Risks and AO Acceptance
+
+The following residual risks are documented and subject to AO acceptance:
+
+1. **Multi-turn context injection**: Current fixture coverage is 74% for multi-turn adversarial scenarios (threshold 75%). Mitigation: additional fixture cases in development, target Q[X].
+2. **Third-party model drift**: Generator model updates may introduce behavioral drift before next monthly evaluation cycle. Mitigation: emergency re-evaluation protocol within 72 hours of model version change.
+3. **Out-of-scope query refusal completeness**: 89% refusal rate on out-of-scope queries; residual 11% produce partial responses that require human review before use.
+
+AO acceptance of these residual risks is required for continued operation. Risks exceeding the organization's stated tolerance require documented justification or mitigation commitment.
+
+---
+
+### 6. Authorization Decision and Next Review
+
+| Item | Detail |
+|------|--------|
+| Current ATO Expiration | [Date] |
+| Next Scheduled Reauthorization | [Date] |
+| Significant Change Triggers | Model version major release, enclave boundary modification, data classification level change, POA&M HIGH item unresolved > 90 days |
+| Next Evaluation Run | [Date] |
+| POA&M Review with ISSO | [Date] |
+
+**AO Decisions Required:**
+- [ ] Accept residual risks documented in Section 5
+- [ ] Approve continued operation pending multi-turn coverage gap closure by [target date]
+- [ ] Confirm reauthorization timeline aligns with program milestones
+
+---
+
+*Brief prepared by: Classified Cyber Security Senior Manager*
+*Evidence tarballs and run artifacts available on request via ISSO.*

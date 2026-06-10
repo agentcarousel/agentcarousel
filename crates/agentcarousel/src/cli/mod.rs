@@ -7,6 +7,8 @@ mod candidates;
 mod carousel;
 mod compare;
 mod completions;
+pub mod compliance;
+pub mod compliance_mappings;
 mod config;
 #[cfg(feature = "dashboard")]
 mod dashboard;
@@ -16,6 +18,7 @@ mod exit_codes;
 mod export;
 mod fixture_utils;
 mod generate;
+mod llm_output;
 mod local_config;
 mod metrics;
 mod optimize;
@@ -122,6 +125,8 @@ enum Command {
     Doctor(doctor::DoctorArgs),
     /// Compute compliance metrics: injection resistance, behavioral drift, test coverage, and score calibration.
     Metrics(metrics::MetricsArgs),
+    /// Generate per-control compliance attestation reports and gap advisories.
+    Compliance(compliance::ComplianceArgs),
     /// Compare two eval runs and gate on regressions.
     Compare(compare::CompareArgs),
     /// Run tests automatically whenever you save a fixture file.
@@ -177,6 +182,7 @@ fn help_template() -> String {
     let ab = c("ab");
     let generate = c("generate");
     let audit = c("audit");
+    let compliance = c("compliance");
     let report = c("report");
     let metrics = c("metrics");
     let compare = c("compare");
@@ -230,6 +236,7 @@ Usage:
   {report}       List recent runs or show details of a run (to compare runs: agc compare)
   {audit}        Prompt-audit a saved run (audit run) or apply its suggestions (audit suggest)
   {metrics}      Compliance metrics: injection resistance, drift, coverage, calibration
+  {compliance}   Per-control compliance attestation reports and gap advisories
   {compare}      Compare two eval runs and gate on regressions (CI regression gate)
   {export}       Export run(s) as signed evidence tarballs
 
@@ -344,6 +351,7 @@ pub fn run() -> i32 {
         Command::Update(args) => update::run_update(args),
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Metrics(args) => metrics::run_metrics(args, &globals),
+        Command::Compliance(args) => compliance::run_compliance(args, &globals, &config),
         Command::Compare(args) => compare::run_compare(args, &globals),
         #[cfg(feature = "watch")]
         Command::Watch(args) => watch::run_watch(args, &config, &globals),

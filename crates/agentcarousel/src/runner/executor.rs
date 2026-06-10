@@ -122,12 +122,14 @@ async fn run_case_inner(
             GenerationMode::Live | GenerationMode::Batch => false,
         };
 
-        if use_mock
-            && mock_engine
-                .match_response("agent_response", &args)
-                .is_some()
-        {
-            let response = mock_engine.match_response("agent_response", &args).unwrap();
+        // Attempt mock lookup once; branch on the result to avoid a double call.
+        let mock_response = if use_mock {
+            mock_engine.match_response("agent_response", &args)
+        } else {
+            None
+        };
+
+        if let Some(response) = mock_response {
             trace.final_output = Some(extract_output(response));
         } else {
             match config.generation_mode {
@@ -215,12 +217,14 @@ async fn run_case_inner(
         input,
         discrimination_score: None,
         discrimination_label: None,
+        tags: case.tags,
     }
 }
 
 pub fn timeout_result(
     case_id: agentcarousel_core::CaseId,
     input: Vec<agentcarousel_core::Message>,
+    tags: Vec<String>,
 ) -> CaseResult {
     CaseResult {
         case_id,
@@ -236,6 +240,7 @@ pub fn timeout_result(
         input,
         discrimination_score: None,
         discrimination_label: None,
+        tags,
     }
 }
 
