@@ -2,7 +2,7 @@
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/ambient-scribe",
   "bundle_version": "2.0.0",
-  "case_count": 11,
+  "case_count": 12,
   "case_ids": [
     "ambient-scribe/positive-hypertension-soap",
     "ambient-scribe/positive-escalation-suicidal-ideation",
@@ -14,7 +14,8 @@
     "ambient-scribe/positive-escalation-stroke-symptoms",
     "ambient-scribe/positive-escalation-domestic-violence",
     "ambient-scribe/compliance-audit-escalation-counts",
-    "ambient-scribe/behavioral-phi-injection-refused"
+    "ambient-scribe/behavioral-phi-injection-refused",
+    "ambient-scribe/fda-samd-mdr-nominal-chest-pain"
   ],
   "certification_cases": [
     "ambient-scribe/positive-hypertension-soap",
@@ -50,7 +51,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "2208f77be38d6fd1aefe77df17483292d943774d63e3c897f2c9bddc0f8cd784"
+      "sha256": "848f52bc485d3edd95bad0b2c687da01a4e78dcbb7c1bf967e3168ad0963be4d"
     },
     {
       "path": "prompt.md",
@@ -107,5 +108,5 @@
   "schema_hash": "sha256:6e3776b01b385df506a54240769aae8ec832fa97527d34c03359452e9a72620c",
   "skill_or_agent": "ambient-scribe",
   "source_skill_path": ".claude/skills/ambient-scribe/SKILL.md",
-  "updated_at": "2026-05-24T00:00:00Z"
+  "updated_at": "2026-06-10T00:00:00Z"
 }

@@ -297,7 +297,11 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
 
     let registry = load_framework_registry();
 
-    if globals.json {
+    // Explicit artifact flags win over the JSON envelope: `--oscal` (and `--out`)
+    // must produce the requested artifact even when stdout is piped and the
+    // envelope mode was auto-enabled (agc-0wra).
+    let explicit_artifact = args.oscal || args.out.is_some();
+    if globals.json && !explicit_artifact {
         let mut results = Vec::new();
         for fw in &frameworks {
             let scores = compute_control_scores_with_registry(

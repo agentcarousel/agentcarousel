@@ -55,18 +55,14 @@ agc eval fixtures/my-skill/ --execution-mode live --judge \
   --model gemini-2.5-flash --judge-model claude-haiku-4-5-20251001 --runs 3
 ```
 
-Let the pipeline automate it! 
-
+Or let the pipeline run the whole lifecycle:
 
 ```bash
+# Onboard a new skill: generate cases → validate → eval → tag a baseline
 agc pipeline onboard my-skill
-# generate cases     (agc generate --from-prompt fixtures/my-skill/prompt.md --model custom/deepseek-r1
-# validate           (agc validate <fixture>))
-# eval               (agc eval --execution-mode live --judge -J gemini-3.1-pro -m custom/deepseek-r1 --concurrency 4)
-# tag a baseline     (agc compare <run-id> --baseline <run-id>)
 
-agc pipeline improve my-skill 
-# 
+# Improve an existing skill: iterative eval → optimize → A/B gate loop
+agc pipeline improve my-skill
 ```
 
 ---
@@ -81,12 +77,36 @@ Every run is saved to a local history database. `agc compare` regression tests a
 
 The `agc pipeline` command wraps the full evaluation harness: it generates fixtures from a prompt, validates, evaluates using LLM-as-a-judge, and tags the result as your baseline. `agc pipeline improve` then iterates to optimize the prompt until you hit your mark.
 
+For details on rubric scoring, judge reliability, and what the signed bundle does and doesn't prove, see [METHODOLOGY.md](METHODOLOGY.md).
+
+---
+
+## Compliance reports (new in 0.8.0)
+
+Tag fixture cases with control IDs and `agc` scores your eval history against bundled OSCAL catalogs: NIST AI RMF, EU AI Act, ISO 42001, HIPAA, FDA SaMD, and NIST SP 800-171/172/207.
+
+```yaml
+tags:
+  - fda-samd:fda-samd-medical-device-reporting
+  - compliance
+```
+
+```bash
+agc compliance report --framework fda-samd          # per-control attestation report
+agc compliance report --framework hipaa --oscal     # OSCAL Assessment Results JSON
+agc compliance gaps --framework eu-ai-act           # uncovered controls + remediation advisories
+agc compliance generate --skill my-skill \
+  --tag nist-ai-rmf:measure-1.1                     # generate pre-tagged fixture cases
+```
+
+A control is reported `satisfied` only with three or more cases and effectiveness ≥ 0.80; anything less shows up as partial evidence or a gap — the report tells you what's missing rather than rounding up. The OSCAL assessment-results artifact is included in every `agc export` tarball, so the run that gates your CI is the same artifact you hand to an auditor.
+
 ---
 
 ## When to use it
 
 - **Before deploying an agent change -** evaluate your fixtures, compare to the baseline, fail CI if anything regressed.
-- **When you need evidence -** Every run exports a cryptographically signed bundle your auditors can read. Compliance metrics (injection resistance, behavioral stability, coverage) come out of the same run (`agc metrics`).
+- **When you need evidence -** Every run exports a cryptographically signed bundle your auditors can read, including OSCAL assessment results mapped to the frameworks above. Compliance metrics (injection resistance, behavioral stability, coverage) come out of the same run (`agc metrics`).
 - **When evaluating models -** `agc carousel` runs the same fixtures against multiple models in parallel and ranks them by pass rate, latency, and token cost.
 - **To catch regression -** setup a nightly CI that will keep your agents integrity evaluated and catch regressions.
 
