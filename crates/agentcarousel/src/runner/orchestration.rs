@@ -235,9 +235,7 @@ pub async fn submit_batch_only(
     judge_model: Option<String>,
 ) -> Result<String, super::batch::BatchError> {
     use super::batch::{AnthropicBatch, BatchStateRecord, BatchStateStore, CaseBatchItem};
-    use super::generator::{
-        build_user_prompt, resolve_generator_key, resolve_system_prompt, GeneratorProvider,
-    };
+    use super::generator::{resolve_generator_key, resolve_system_prompt, GeneratorProvider};
 
     let model = config
         .generator_model
@@ -259,7 +257,8 @@ pub async fn submit_batch_only(
         .map(|case| CaseBatchItem {
             case_id: case.id.clone(),
             system: resolve_system_prompt(case),
-            user_prompt: build_user_prompt(case),
+            messages: case.input.messages.clone(),
+            context: case.input.context.clone(),
             model: model.clone(),
             max_tokens,
             seed: case.seed,
@@ -346,9 +345,7 @@ pub(super) async fn run_batch(
     use super::batch::{
         AnthropicBatch, BatchDispatcher, BatchStateStore, CaseBatchItem, OpenAiBatch,
     };
-    use super::generator::{
-        build_user_prompt, resolve_generator_key, resolve_system_prompt, GeneratorProvider,
-    };
+    use super::generator::{resolve_generator_key, resolve_system_prompt, GeneratorProvider};
 
     // ── Collect-only path: results from an already-submitted batch ───────────────
     if let Some(ref collect_id) = config.batch_collect_id {
@@ -458,7 +455,8 @@ pub(super) async fn run_batch(
         .map(|case| CaseBatchItem {
             case_id: case.id.clone(),
             system: resolve_system_prompt(case),
-            user_prompt: build_user_prompt(case),
+            messages: case.input.messages.clone(),
+            context: case.input.context.clone(),
             model: model.clone(),
             max_tokens,
             seed: case.seed,

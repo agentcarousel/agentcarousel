@@ -9,7 +9,7 @@ schema_version: 1
 skill_or_agent: classified-cyber-security-senior-manager
 
 bundle_id: agentcarousel/classified-cyber-security-senior-manager
-bundle_version: 1.0.0
+bundle_version: 1.1.0
 certification_track: candidate
 risk_tier: high
 data_handling: synthetic-only
@@ -909,3 +909,64 @@ cases:
           auto_check:
             kind: regex
             value: '(?i)(owner|assign|responsible|timeline|target.*date|by.*Q|within.*\d+.*days)'
+
+  # ── Multi-turn: Authorization brief with follow-up drill-down ───────────────
+  - id: classified-cyber-security-senior-manager/multiturn-authorization-followup
+    description: >
+      Multi-turn conversation fidelity: the user requests an authorization status
+      brief, the assistant delivers it, and the user drills into what the open
+      findings mean for the POA&M and the authorizing official's decision. The
+      agent must answer the follow-up in the context of the brief it already
+      gave — same system, same findings — at manager depth.
+    tags: [multi-turn, happy-path, nightly]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Give me a short authorization status brief for the mission planning
+            system. Where do we stand for the AO review next month?
+        - role: assistant
+          content: |
+            Authorization status, mission planning system: the package is on track
+            for AO review. Control assessment is 92% complete. Two moderate
+            findings remain open: audit log retention falls short of the required
+            window on one enclave, and a session timeout setting exceeds policy on
+            the operator consoles. Both have draft remediations. No high or
+            critical findings are open. Continuous monitoring feeds are in place
+            and reporting.
+        - role: user
+          content: |
+            On those two open findings — what goes into the POA&M, and how should
+            we frame the residual risk for the AO if remediation isn't finished
+            before the review?
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(POA&M|plan of action)'
+        - kind: regex
+          value: '(?i)(residual risk|risk accept)'
+        - kind: regex
+          value: '(?i)(audit log|session timeout|retention|finding)'
+      rubric:
+        - id: poam-entries-grounded-in-brief
+          description: >
+            POA&M guidance is grounded in the two findings from the earlier
+            assistant turn (audit log retention, session timeout) — with owners,
+            milestones, or target dates — not generic POA&M boilerplate about
+            unrelated findings.
+          weight: 0.5
+          auto_check:
+            kind: regex
+            value: '(?i)(audit log|retention|session timeout)'
+        - id: ao-residual-risk-framing
+          description: >
+            Residual risk framing supports an AO decision: severity of what
+            remains, interim/compensating controls, and what the AO is being
+            asked to accept until remediation completes.
+          weight: 0.5
+          auto_check:
+            kind: regex
+            value: '(?i)(residual|accept|interim|compensating|mitigat)'

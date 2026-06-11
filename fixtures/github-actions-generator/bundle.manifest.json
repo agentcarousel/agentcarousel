@@ -1,15 +1,19 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/github-actions-generator",
-  "bundle_version": "1.0.0",
-  "case_count": 6,
+  "bundle_version": "1.1.0",
+  "case_count": 10,
   "case_ids": [
     "github-actions-generator/positive-push-pr-workflow",
     "github-actions-generator/positive-mutable-tag-audit",
     "github-actions-generator/positive-pwn-request-rejection",
     "github-actions-generator/edge-case-secret-in-logs",
     "github-actions-generator/positive-matrix-build",
-    "github-actions-generator/failure-mode-no-requirements"
+    "github-actions-generator/failure-mode-no-requirements",
+    "github-actions-generator/judge-security-hardening",
+    "github-actions-generator/process-workflow-structure",
+    "github-actions-generator/golden-release-tag-deploy",
+    "github-actions-generator/multiturn-workflow-revision"
   ],
   "certification_cases": [
     "github-actions-generator/positive-push-pr-workflow",
@@ -30,7 +34,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "96317ead868d3a2f141cf63df51f7c061239aac102b8173afd537dbb5968c75c"
+      "sha256": "0e8f74becbb9169616a03ae81b8ef5f8e5075793003be0ac91b030ee62433260"
     },
     {
       "path": "golden/push-pr-workflow.txt",
@@ -38,7 +42,7 @@
     }
   ],
   "judge_evaluator": false,
-  "min_agentcarousel_version": "0.2.0",
+  "min_agentcarousel_version": "0.8.1",
   "mocks": [],
   "negative_cases": [
     "github-actions-generator/failure-mode-no-requirements"
