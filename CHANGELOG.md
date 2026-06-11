@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.1 — 2026-06-10
+
+**Theme: multi-turn conversation fidelity.**
+
+Multi-turn fixture conversations are now sent to providers as native message arrays instead of being collapsed into a single flat user prompt, so evaluations exercise real multi-turn model behavior.
+
+### Changed
+
+- **Native multi-turn generation** — Anthropic, OpenAI, Gemini, and OpenRouter realtime generation now receive `messages: [{role: user}, {role: assistant}, ...]` built from the fixture's `input.messages` (`build_message_turns` in `runner/generator.rs`). Gemini assistant turns are sent as `model`; `tool` turns map to user-side context; consecutive same-role turns are collapsed to satisfy Anthropic's strict alternation; `input.context` is appended to the last user turn. Single-turn cases produce a byte-identical wire format to 0.8.0, so existing eval baselines are unaffected.
+- **Batch paths follow suit** — `CaseBatchItem` now carries the fixture `messages` and `context` instead of a pre-flattened `user_prompt`; the Anthropic batch submit and OpenAI batch JSONL bodies build the same multi-turn arrays. The custom/Ollama `/api/chat` path already sent native turns and is unchanged.
+
+### Added
+
+- One multi-turn case in each bundled fixture (`ambient-scribe/multiturn-amended-encounter`, `classified-cyber-security-senior-manager/multiturn-authorization-followup`, `github-actions-generator/multiturn-workflow-revision`, `prompt-injection-detector/multiturn-injection-in-followup`); bundle versions bumped and `min_agentcarousel_version` raised to 0.8.1 since these cases only evaluate faithfully on the new path.
+- Unit tests for `build_message_turns` (role mapping, same-role collapsing, context placement) and a fixture-driven test asserting every bundled fixture contains at least one multi-turn case that converts to a strictly alternating, user-first turn array.
+
+---
+
 ## 0.8.0 — 2026-06-02
 
 **Theme: OSCAL-native compliance attestation.**

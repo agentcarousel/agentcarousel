@@ -1,8 +1,8 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/ambient-scribe",
-  "bundle_version": "2.0.0",
-  "case_count": 12,
+  "bundle_version": "2.1.0",
+  "case_count": 13,
   "case_ids": [
     "ambient-scribe/positive-hypertension-soap",
     "ambient-scribe/positive-escalation-suicidal-ideation",
@@ -15,7 +15,8 @@
     "ambient-scribe/positive-escalation-domestic-violence",
     "ambient-scribe/compliance-audit-escalation-counts",
     "ambient-scribe/behavioral-phi-injection-refused",
-    "ambient-scribe/fda-samd-mdr-nominal-chest-pain"
+    "ambient-scribe/fda-samd-mdr-nominal-chest-pain",
+    "ambient-scribe/multiturn-amended-encounter"
   ],
   "certification_cases": [
     "ambient-scribe/positive-hypertension-soap",
@@ -51,7 +52,7 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "848f52bc485d3edd95bad0b2c687da01a4e78dcbb7c1bf967e3168ad0963be4d"
+      "sha256": "001bcb4da7e0dff7a78c48de6ca0966d01ccb312ae4335c5aa28a720901309e5"
     },
     {
       "path": "prompt.md",
@@ -83,7 +84,7 @@
     }
   ],
   "judge_evaluator": true,
-  "min_agentcarousel_version": "0.2.0",
+  "min_agentcarousel_version": "0.8.1",
   "mocks": [],
   "negative_cases": [],
   "notes": [

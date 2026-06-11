@@ -39,7 +39,10 @@ fn sanitize_custom_id(raw: &str) -> String {
 pub struct CaseBatchItem {
     pub case_id: agentcarousel_core::CaseId,
     pub system: String,
-    pub user_prompt: String,
+    /// Conversation turns from the fixture (system turns are carried in `system`).
+    pub messages: Vec<agentcarousel_core::Message>,
+    /// Optional structured context from the fixture's `input.context`.
+    pub context: Option<serde_json::Value>,
     pub model: String,
     pub max_tokens: u32,
     pub seed: Option<u64>,
@@ -205,11 +208,18 @@ impl AnthropicBatch {
         let requests: Vec<serde_json::Value> = items
             .iter()
             .map(|item| {
+                let messages: Vec<serde_json::Value> =
+                    super::generator::messages_to_turns(&item.messages, item.context.as_ref())
+                        .into_iter()
+                        .map(
+                            |(role, content)| serde_json::json!({"role": role, "content": content}),
+                        )
+                        .collect();
                 let mut params = serde_json::json!({
                     "model": item.model,
                     "max_tokens": item.max_tokens,
                     "temperature": 0.2,
-                    "messages": [{"role": "user", "content": item.user_prompt}],
+                    "messages": messages,
                 });
                 if !item.system.is_empty() {
                     params["system"] = serde_json::Value::String(item.system.clone());
@@ -515,16 +525,22 @@ impl BatchDispatcher for OpenAiBatch {
 
             let mut jsonl = String::new();
             for item in &items {
+                let mut messages =
+                    vec![serde_json::json!({"role": "system", "content": item.system})];
+                messages.extend(
+                    super::generator::messages_to_turns(&item.messages, item.context.as_ref())
+                        .into_iter()
+                        .map(
+                            |(role, content)| serde_json::json!({"role": role, "content": content}),
+                        ),
+                );
                 let line = serde_json::json!({
                     "custom_id": sanitize_custom_id(&item.case_id.0),
                     "method": "POST",
                     "url": "/v1/chat/completions",
                     "body": {
                         "model": item.model,
-                        "messages": [
-                            {"role": "system", "content": item.system},
-                            {"role": "user", "content": item.user_prompt}
-                        ],
+                        "messages": messages,
                         "temperature": 0.2,
                         "max_tokens": item.max_tokens
                     }

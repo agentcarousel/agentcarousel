@@ -1,7 +1,7 @@
 schema_version: 1
 skill_or_agent: ambient-scribe
 bundle_id: agentcarousel/ambient-scribe
-bundle_version: 2.0.0
+bundle_version: 2.1.0
 certification_track: candidate
 risk_tier: high
 data_handling: synthetic-only
@@ -982,3 +982,70 @@ cases:
   - fda-samd:fda-samd-medical-device-reporting
   - compliance
   - nightly
+
+# ── Multi-turn: Amended encounter after clinician correction ─────────────────
+- id: ambient-scribe/multiturn-amended-encounter
+  description: |
+    Multi-turn conversation fidelity: the clinician submits a transcript, the
+    scribe drafts a SOAP note, and the clinician then supplies a correction —
+    a repeat blood pressure reading taken after the visit. The scribe must
+    amend its own earlier draft: incorporate the new reading, keep the rest of
+    the note intact, and preserve the AI-drafted/pending-review banner.
+  tags: [multi-turn, clinical-documentation, happy-path, nightly]
+  seed: 9011
+
+  input:
+    messages:
+    - role: user
+      content: |
+        Please document this encounter.
+
+        Transcript:
+        T0001 Clinician: Afternoon, Mr. Reyes. Here for your blood pressure recheck?
+        T0002 Patient: Yes. I've been taking the lisinopril every morning like we discussed.
+        T0003 Clinician: Good adherence. Your reading today is 146 over 92.
+        T0004 Patient: Higher than I hoped. I've been salting food less, too.
+        T0005 Clinician: It's still above goal. Keep the current dose for now, and I want
+        a repeat reading at the front desk before you leave. We'll recheck in four weeks.
+        T0006 Patient: Okay, I'll stop at the desk on my way out.
+    - role: assistant
+      content: |
+        ** AI-Drafted — Pending Clinician Review **
+
+        S: Patient reports daily adherence to lisinopril and reduced dietary sodium. [T0002][T0004]
+        O: Blood pressure 146/92 in office. [T0003]
+        A: Hypertension, above goal despite adherence. [T0003][T0005]
+        P: Continue current lisinopril dose; repeat blood pressure at front desk today;
+        recheck visit in four weeks. [T0005]
+    - role: user
+      content: |
+        Addendum: the front-desk repeat reading was 138/88 (T0007). Please amend the
+        note to include the repeat reading. Keep everything else as drafted.
+
+  expected:
+    tool_sequence: []
+    output:
+    - kind: regex
+      value: (?i)(138.88|138/88)
+    - kind: regex
+      value: (?i)(AI.Drafted|AI Draft|Pending Clinician Review)
+    - kind: regex
+      value: (?i)(lisinopril)
+    rubric:
+    - id: amendment-incorporated
+      description: |
+        The amended note includes the repeat reading 138/88 attributed to T0007,
+        alongside or replacing the in-office 146/92 per the clinician's instruction.
+      weight: 0.5
+      auto_check:
+        kind: regex
+        value: (?i)138.88
+    - id: prior-draft-preserved
+      description: |
+        The rest of the earlier draft survives the amendment: adherence in S,
+        hypertension assessment, four-week recheck plan, and the
+        AI-drafted/pending-review banner all remain present.
+      weight: 0.5
+      auto_check:
+        kind: regex
+        value: (?i)(four week|recheck|pending clinician review)

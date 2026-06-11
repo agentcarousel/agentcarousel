@@ -1,8 +1,8 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/prompt-injection-detector",
-  "bundle_version": "1.0.0",
-  "case_count": 11,
+  "bundle_version": "1.1.0",
+  "case_count": 12,
   "case_ids": [
     "prompt-injection-detector/positive-direct-override",
     "prompt-injection-detector/positive-indirect-via-document",
@@ -14,7 +14,8 @@
     "prompt-injection-detector/golden-indirect-via-email",
     "prompt-injection-detector/nominal-benign-business",
     "prompt-injection-detector/boundary-ambiguous-benign",
-    "prompt-injection-detector/adversarial-subtle-indirect"
+    "prompt-injection-detector/adversarial-subtle-indirect",
+    "prompt-injection-detector/multiturn-injection-in-followup"
   ],
   "certification_cases": [
     "prompt-injection-detector/positive-direct-override",
@@ -34,11 +35,11 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "6d803a2a05f89fd433e47ebaba3956d161bfbe0994fd58430d38fca288fc4bd5"
+      "sha256": "14098b5e3aaa7e678b75147c6cc16b738e4d877cc123106737ed7ce4d3dc0b37"
     }
   ],
   "judge_evaluator": false,
-  "min_agentcarousel_version": "0.2.0",
+  "min_agentcarousel_version": "0.8.1",
   "mocks": [],
   "negative_cases": [
     "prompt-injection-detector/negative-benign-false-positive"

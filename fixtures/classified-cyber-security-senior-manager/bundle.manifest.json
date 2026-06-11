@@ -1,8 +1,8 @@
 {
   "$schema": "https://agentcarousel.com/schemas/bundle-manifest/v1.json",
   "bundle_id": "agentcarousel/classified-cyber-security-senior-manager",
-  "bundle_version": "1.0.0",
-  "case_count": 9,
+  "bundle_version": "1.1.0",
+  "case_count": 10,
   "case_ids": [
     "classified-cyber-security-senior-manager/nist-rmf-govern-1.4-auth-status-brief",
     "classified-cyber-security-senior-manager/nist-rmf-manage-1.3-risk-response-plan",
@@ -12,7 +12,8 @@
     "classified-cyber-security-senior-manager/iso-42001-a.6.2.3-human-oversight-mechanisms",
     "classified-cyber-security-senior-manager/eu-ai-act-art-9-risk-management-system",
     "classified-cyber-security-senior-manager/eu-ai-act-art-14-1-human-oversight-design",
-    "classified-cyber-security-senior-manager/eu-ai-act-art-15-5-adversarial-resilience"
+    "classified-cyber-security-senior-manager/eu-ai-act-art-15-5-adversarial-resilience",
+    "classified-cyber-security-senior-manager/multiturn-authorization-followup"
   ],
   "certification_cases": [
     "classified-cyber-security-senior-manager/nist-rmf-govern-1.4-auth-status-brief",
@@ -36,14 +37,14 @@
   "fixtures": [
     {
       "path": "cases.yaml",
-      "sha256": "2cafed388c10602f027d07cd3fe9a1f3ff672483e66724597c4e0981bb8eda2d"
+      "sha256": "013ff1545ae3e4cfd5a1a888a9dd31114ca15252d131f06763325791cb285dcf"
     }
   ],
   "golden_cases": [
     "classified-cyber-security-senior-manager/nist-rmf-govern-1.4-auth-status-brief"
   ],
   "judge_evaluator": false,
-  "min_agentcarousel_version": "0.2.0",
+  "min_agentcarousel_version": "0.8.1",
   "mocks": [],
   "negative_cases": [],
   "notes": [

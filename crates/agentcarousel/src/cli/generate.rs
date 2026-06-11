@@ -5,7 +5,7 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::core::CaseId;
+use crate::core::{CaseId, Message, Role};
 use crate::fixtures::{validate_fixture_value, SchemaLocation};
 use crate::runner::{call_llm, AnthropicBatch, BatchDispatcher, CaseBatchItem};
 
@@ -1081,7 +1081,11 @@ Use e.g. --model claude-3-5-haiku-latest",
             CaseBatchItem {
                 case_id: CaseId(format!("gen/slot-{i}")),
                 system: String::new(),
-                user_prompt: prompt,
+                messages: vec![Message {
+                    role: Role::User,
+                    content: prompt,
+                }],
+                context: None,
                 model: args
                     .model
                     .clone()
@@ -1154,7 +1158,11 @@ Fix all errors and try again. Return only the corrected `cases:` YAML."
                 CaseBatchItem {
                     case_id: CaseId(format!("gen/slot-{i}-retry")),
                     system: String::new(),
-                    user_prompt: retry_prompt,
+                    messages: vec![Message {
+                        role: Role::User,
+                        content: retry_prompt,
+                    }],
+                    context: None,
                     model: args.model.clone().unwrap_or_else(|| DEFAULT_MODEL.to_string()),
                     max_tokens: MAX_TOKENS,
                     seed: None,

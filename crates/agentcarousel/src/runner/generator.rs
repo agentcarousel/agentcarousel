@@ -1,4 +1,6 @@
-use agentcarousel_core::{compute_backoff_ms, is_retryable_status, retry_policy, Case, Role};
+use agentcarousel_core::{
+    compute_backoff_ms, is_retryable_status, retry_policy, Case, Message, Role,
+};
 use serde_json::json;
 use std::fmt;
 use std::sync::OnceLock;
@@ -182,19 +184,19 @@ pub async fn generate_case_output(
 
     let key = resolve_generator_key(provider)?;
     let system = resolve_system_prompt(case);
-    let user_prompt = build_user_prompt(case);
+    let turns = build_message_turns(case);
     match provider {
         GeneratorProvider::Gemini => {
-            generate_with_gemini(&key, model, &system, &user_prompt, max_tokens).await
+            generate_with_gemini(&key, model, &system, &turns, max_tokens).await
         }
         GeneratorProvider::OpenAi => {
-            generate_with_openai(&key, model, &system, &user_prompt, max_tokens).await
+            generate_with_openai(&key, model, &system, &turns, max_tokens).await
         }
         GeneratorProvider::Anthropic => {
-            generate_with_anthropic(&key, model, &system, &user_prompt, max_tokens).await
+            generate_with_anthropic(&key, model, &system, &turns, max_tokens).await
         }
         GeneratorProvider::OpenRouter => {
-            generate_with_openrouter(&key, model, &system, &user_prompt, max_tokens).await
+            generate_with_openrouter(&key, model, &system, &turns, max_tokens).await
         }
         GeneratorProvider::Custom => unreachable!(),
     }
@@ -370,11 +372,61 @@ pub(super) fn build_user_prompt(case: &Case) -> String {
     prompt
 }
 
+/// Convert fixture messages into provider-ready `(role, content)` turns.
+///
+/// System messages are skipped (consumed by `resolve_system_prompt`) and tool
+/// messages become user-side context — fixtures carry no `tool_call_id`, so
+/// native tool-result formats are not representable. Consecutive same-role
+/// turns are collapsed with a blank line because Anthropic requires strict
+/// user/assistant alternation (harmless for the other providers). `context`
+/// is appended to the last user turn, or becomes a synthetic user turn if
+/// the conversation has none.
+pub(super) fn messages_to_turns(
+    messages: &[Message],
+    context: Option<&serde_json::Value>,
+) -> Vec<(String, String)> {
+    let mut turns: Vec<(String, String)> = Vec::new();
+    for message in messages {
+        let role = match message.role {
+            Role::System => continue, // consumed by resolve_system_prompt
+            Role::User | Role::Tool => "user",
+            Role::Assistant => "assistant",
+        };
+        let content = message.content.trim();
+        if content.is_empty() {
+            continue; // providers reject empty content blocks
+        }
+        match turns.last_mut() {
+            Some((last_role, last_content)) if last_role == role => {
+                last_content.push_str("\n\n");
+                last_content.push_str(content);
+            }
+            _ => turns.push((role.to_string(), content.to_string())),
+        }
+    }
+    if let Some(context) = context {
+        let context_block = format!("Context:\n{context}");
+        match turns.iter_mut().rev().find(|(role, _)| role == "user") {
+            Some((_, content)) => {
+                content.push_str("\n\n");
+                content.push_str(&context_block);
+            }
+            None => turns.push(("user".to_string(), context_block)),
+        }
+    }
+    turns
+}
+
+/// Build the multi-turn message array for a case (everything except the system message).
+pub(super) fn build_message_turns(case: &Case) -> Vec<(String, String)> {
+    messages_to_turns(&case.input.messages, case.input.context.as_ref())
+}
+
 async fn generate_with_gemini(
     key: &str,
     model: &str,
     system: &str,
-    prompt: &str,
+    turns: &[(String, String)],
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
     let url = format!(
@@ -391,12 +443,16 @@ async fn generate_with_gemini(
                 }],
             })
         },
-        contents: vec![GeminiContent {
-            role: Some("user".to_string()),
-            parts: vec![GeminiPart {
-                text: prompt.to_string(),
-            }],
-        }],
+        contents: turns
+            .iter()
+            .map(|(role, content)| GeminiContent {
+                // Gemini calls the assistant role "model".
+                role: Some(if role == "assistant" { "model" } else { "user" }.to_string()),
+                parts: vec![GeminiPart {
+                    text: content.clone(),
+                }],
+            })
+            .collect(),
         generation_config: GeminiGenerationConfig {
             temperature: 0.2,
             max_output_tokens: max_tokens,
@@ -469,21 +525,21 @@ async fn generate_with_openai(
     key: &str,
     model: &str,
     system: &str,
-    prompt: &str,
+    turns: &[(String, String)],
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
+    let mut messages = Vec::with_capacity(turns.len() + 1);
+    messages.push(OpenAiMessage {
+        role: "system".to_string(),
+        content: system.to_string(),
+    });
+    messages.extend(turns.iter().map(|(role, content)| OpenAiMessage {
+        role: role.clone(),
+        content: content.clone(),
+    }));
     let request = OpenAiRequest {
         model: model.to_string(),
-        messages: vec![
-            OpenAiMessage {
-                role: "system".to_string(),
-                content: system.to_string(),
-            },
-            OpenAiMessage {
-                role: "user".to_string(),
-                content: prompt.to_string(),
-            },
-        ],
+        messages,
         temperature: 0.2,
         max_tokens,
         response_format: None,
@@ -550,7 +606,7 @@ async fn generate_with_anthropic(
     key: &str,
     model: &str,
     system: &str,
-    prompt: &str,
+    turns: &[(String, String)],
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
     let max_tokens = max_tokens.ok_or_else(|| {
@@ -566,10 +622,15 @@ async fn generate_with_anthropic(
         max_tokens,
         temperature: 0.2,
         system: system_blocks,
-        messages: vec![AnthropicMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        }],
+        // Turns already alternate strictly (messages_to_turns collapses
+        // consecutive same-role messages), as the API requires.
+        messages: turns
+            .iter()
+            .map(|(role, content)| AnthropicMessage {
+                role: role.clone(),
+                content: content.clone(),
+            })
+            .collect(),
     };
     let client = shared_client();
     let retry = retry_policy();
@@ -637,7 +698,7 @@ async fn generate_with_openrouter(
     key: &str,
     model: &str,
     system: &str,
-    prompt: &str,
+    turns: &[(String, String)],
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
     let openrouter_model = model.strip_prefix("openrouter/").unwrap_or(model);
@@ -645,17 +706,17 @@ async fn generate_with_openrouter(
     let candidates = openrouter_model_candidates(openrouter_model);
     let mut last_error = None;
     for candidate in candidates {
-        let mut messages = Vec::new();
+        let mut messages = Vec::with_capacity(turns.len() + 1);
         if !system.is_empty() {
             messages.push(OpenAiMessage {
                 role: "system".to_string(),
                 content: system.to_string(),
             });
         }
-        messages.push(OpenAiMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        });
+        messages.extend(turns.iter().map(|(role, content)| OpenAiMessage {
+            role: role.clone(),
+            content: content.clone(),
+        }));
         let request = OpenAiRequest {
             model: candidate.to_string(),
             messages,
@@ -769,20 +830,21 @@ pub async fn call_llm(
             .map_err(|e| e.to_string());
     }
     let key = resolve_generator_key(provider).map_err(|e| e.to_string())?;
+    let turns = vec![("user".to_string(), prompt.to_string())];
     match provider {
-        GeneratorProvider::Gemini => generate_with_gemini(&key, model, "", prompt, max_tokens)
+        GeneratorProvider::Gemini => generate_with_gemini(&key, model, "", &turns, max_tokens)
             .await
             .map_err(|e| e.to_string()),
-        GeneratorProvider::OpenAi => generate_with_openai(&key, model, "", prompt, max_tokens)
+        GeneratorProvider::OpenAi => generate_with_openai(&key, model, "", &turns, max_tokens)
             .await
             .map_err(|e| e.to_string()),
         GeneratorProvider::Anthropic => {
-            generate_with_anthropic(&key, model, "", prompt, max_tokens)
+            generate_with_anthropic(&key, model, "", &turns, max_tokens)
                 .await
                 .map_err(|e| e.to_string())
         }
         GeneratorProvider::OpenRouter => {
-            generate_with_openrouter(&key, model, "", prompt, max_tokens)
+            generate_with_openrouter(&key, model, "", &turns, max_tokens)
                 .await
                 .map_err(|e| e.to_string())
         }
@@ -891,7 +953,215 @@ async fn call_llm_custom(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentcarousel_core::{CaseId, CaseInput, Expected, Message};
+    use agentcarousel_core::{CaseId, CaseInput, Expected};
+
+    fn message(role: Role, content: &str) -> Message {
+        Message {
+            role,
+            content: content.to_string(),
+        }
+    }
+
+    fn make_case(messages: Vec<Message>, context: Option<serde_json::Value>) -> Case {
+        Case {
+            id: CaseId("test/case".to_string()),
+            description: None,
+            tags: vec![],
+            input: CaseInput {
+                messages,
+                context,
+                env_overrides: None,
+            },
+            expected: Expected {
+                tool_sequence: None,
+                output: None,
+                rubric: None,
+            },
+            evaluator_config: None,
+            timeout_secs: None,
+            seed: None,
+        }
+    }
+
+    #[test]
+    fn test_build_message_turns_single_user() {
+        let case = make_case(vec![message(Role::User, "hello")], None);
+        let turns = build_message_turns(&case);
+        assert_eq!(turns, vec![("user".to_string(), "hello".to_string())]);
+    }
+
+    #[test]
+    fn test_build_message_turns_multiturn() {
+        let case = make_case(
+            vec![
+                message(Role::System, "system prompt"),
+                message(Role::User, "first"),
+                message(Role::Assistant, "reply"),
+                message(Role::User, "second"),
+            ],
+            None,
+        );
+        let turns = build_message_turns(&case);
+        assert_eq!(
+            turns,
+            vec![
+                ("user".to_string(), "first".to_string()),
+                ("assistant".to_string(), "reply".to_string()),
+                ("user".to_string(), "second".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_message_turns_context_appended() {
+        let case = make_case(
+            vec![
+                message(Role::User, "first"),
+                message(Role::Assistant, "reply"),
+                message(Role::User, "second"),
+            ],
+            Some(serde_json::json!({"patient_id": 42})),
+        );
+        let turns = build_message_turns(&case);
+        assert_eq!(turns.len(), 3);
+        assert_eq!(turns[2].0, "user");
+        assert!(turns[2].1.starts_with("second"));
+        assert!(turns[2].1.contains("Context:\n{\"patient_id\":42}"));
+    }
+
+    #[test]
+    fn test_build_message_turns_tool_maps_to_user() {
+        let case = make_case(
+            vec![
+                message(Role::User, "run the lookup"),
+                message(Role::Assistant, "looking it up"),
+                message(Role::Tool, "lookup result: 7"),
+            ],
+            None,
+        );
+        let turns = build_message_turns(&case);
+        assert_eq!(
+            turns,
+            vec![
+                ("user".to_string(), "run the lookup".to_string()),
+                ("assistant".to_string(), "looking it up".to_string()),
+                ("user".to_string(), "lookup result: 7".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_message_turns_consecutive_same_role_collapsed() {
+        let case = make_case(
+            vec![
+                message(Role::User, "msg1"),
+                message(Role::User, "msg2"),
+                message(Role::Assistant, "reply"),
+            ],
+            None,
+        );
+        let turns = build_message_turns(&case);
+        assert_eq!(
+            turns,
+            vec![
+                ("user".to_string(), "msg1\n\nmsg2".to_string()),
+                ("assistant".to_string(), "reply".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_message_turns_context_no_user_turn() {
+        let case = make_case(
+            vec![message(Role::System, "system only")],
+            Some(serde_json::json!({"key": "value"})),
+        );
+        let turns = build_message_turns(&case);
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].0, "user");
+        assert!(turns[0].1.starts_with("Context:\n"));
+    }
+
+    /// Every bundled fixture must contain at least one multi-turn case, and
+    /// each multi-turn case must convert into a well-formed alternating turn
+    /// array that starts with a user turn.
+    #[test]
+    fn test_repo_fixtures_contain_multiturn_cases() {
+        // Canonicalize: the loader rejects paths containing `..` components.
+        let fixtures_root =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures"))
+                .canonicalize()
+                .expect("fixtures/ directory resolves");
+        let bundles: Vec<std::path::PathBuf> = std::fs::read_dir(fixtures_root)
+            .expect("fixtures/ directory exists")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.join("cases.yaml").is_file())
+            .collect();
+        assert!(!bundles.is_empty(), "no fixture bundles found");
+
+        for bundle in bundles {
+            let fixture = crate::fixtures::load_fixture(&bundle.join("cases.yaml"))
+                .unwrap_or_else(|e| panic!("failed to load {}: {e}", bundle.display()));
+
+            let multiturn: Vec<&Case> = fixture
+                .cases
+                .iter()
+                .filter(|case| {
+                    let non_system = case
+                        .input
+                        .messages
+                        .iter()
+                        .filter(|m| m.role != Role::System)
+                        .count();
+                    non_system > 1
+                        && case
+                            .input
+                            .messages
+                            .iter()
+                            .any(|m| m.role == Role::Assistant)
+                })
+                .collect();
+            assert!(
+                !multiturn.is_empty(),
+                "bundle {} has no multi-turn case (>1 non-system message incl. an assistant turn)",
+                bundle.display()
+            );
+
+            for case in multiturn {
+                let turns = build_message_turns(case);
+                assert!(turns.len() > 1, "{}: expected multiple turns", case.id.0);
+                assert_eq!(turns[0].0, "user", "{}: first turn must be user", case.id.0);
+                for pair in turns.windows(2) {
+                    assert_ne!(
+                        pair[0].0, pair[1].0,
+                        "{}: turns must alternate strictly",
+                        case.id.0
+                    );
+                }
+                for (role, content) in &turns {
+                    assert!(
+                        role == "user" || role == "assistant",
+                        "{}: unexpected provider role '{role}'",
+                        case.id.0
+                    );
+                    assert!(!content.is_empty(), "{}: empty turn content", case.id.0);
+                }
+                if let Some(context) = case.input.context.as_ref() {
+                    let last_user = turns
+                        .iter()
+                        .rev()
+                        .find(|(role, _)| role == "user")
+                        .expect("multi-turn case has a user turn");
+                    assert!(
+                        last_user.1.contains(&format!("Context:\n{context}")),
+                        "{}: context missing from last user turn",
+                        case.id.0
+                    );
+                }
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_custom_endpoint_connection_failure() {

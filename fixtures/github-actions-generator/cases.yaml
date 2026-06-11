@@ -8,7 +8,7 @@ schema_version: 1
 skill_or_agent: github-actions-generator
 
 bundle_id: agentcarousel/github-actions-generator
-bundle_version: 1.0.0
+bundle_version: 1.1.0
 certification_track: candidate
 risk_tier: high
 data_handling: synthetic-only
@@ -528,3 +528,72 @@ cases:
           value: '(?i)(SSH|deploy|staging)'
         - kind: regex
           value: '(?i)(permissions:|secret)'
+
+  # ── Multi-turn: Workflow revision across conversation turns ─────────────────
+  - id: github-actions-generator/multiturn-workflow-revision
+    description: >
+      Multi-turn conversation fidelity: the user requests a Node.js CI workflow,
+      the assistant produces one, and the user then asks for dependency caching
+      to be added. The agent must treat the prior assistant turn as its own
+      earlier output and revise it — not start over or ignore the follow-up.
+    tags: [ci-cd, multi-turn, happy-path, nightly]
+    seed: 4100
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Generate a GitHub Actions workflow that installs dependencies and runs
+            `npm test` on every push to main. Use Node.js 20.
+        - role: assistant
+          content: |
+            ```yaml
+            name: CI
+            on:
+              push:
+                branches: [main]
+            permissions:
+              contents: read
+            jobs:
+              test:
+                runs-on: ubuntu-latest
+                steps:
+                  - uses: actions/checkout@v4
+                  - uses: actions/setup-node@v4
+                    with:
+                      node-version: 20
+                  - run: npm ci
+                  - run: npm test
+            ```
+        - role: user
+          content: |
+            Great. Now update that workflow to cache npm dependencies so installs
+            are faster on repeat runs. Keep everything else the same.
+
+    expected:
+      tool_sequence: []
+      output:
+        - kind: regex
+          value: '(?i)(cache|actions/cache)'
+        - kind: regex
+          value: '(?i)(npm|node)'
+        - kind: regex
+          value: 'on:'
+      rubric:
+        - id: caching-added
+          description: >
+            The revised workflow adds npm dependency caching, either via
+            `actions/cache` or `actions/setup-node` `cache: npm`.
+          weight: 0.6
+          auto_check:
+            kind: regex
+            value: '(?i)(cache:\s*.?npm|actions/cache)'
+        - id: prior-workflow-retained
+          description: >
+            The revision builds on the workflow from the earlier assistant turn —
+            the push-to-main trigger and `npm test` step are still present rather
+            than replaced with an unrelated pipeline.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(npm test|push)'
