@@ -20,6 +20,20 @@ fn workspace_root() -> PathBuf {
         .expect("workspace root")
 }
 
+/// Seeded runs must match the live bundle version `agc publish` reads from the
+/// fixture, so derive it from cases.yaml instead of hardcoding it.
+fn github_actions_bundle_version() -> String {
+    let cases =
+        fs::read_to_string(workspace_root().join("fixtures/github-actions-generator/cases.yaml"))
+            .expect("read github-actions-generator cases.yaml");
+    cases
+        .lines()
+        .find_map(|line| line.strip_prefix("bundle_version:"))
+        .expect("bundle_version in cases.yaml")
+        .trim()
+        .to_string()
+}
+
 fn temp_paths() -> (PathBuf, PathBuf, PathBuf) {
     let dir = tempfile::tempdir().expect("temp dir");
     let base = dir.keep();
@@ -127,7 +141,7 @@ fn publish_dry_run_auto_selects_latest_matching_run() {
     persist_run(&minimal_run(
         "bundle-registry-run-match",
         "agentcarousel/github-actions-generator",
-        "1.0.0",
+        &github_actions_bundle_version(),
     ))
     .expect("persist run");
 
@@ -165,9 +179,13 @@ history_db = "{}"
         stdout.contains("bundle-registry-run-match"),
         "expected selected run id in output, got: {stdout:?}"
     );
+    let registry_id = format!(
+        "github-actions-generator-{}",
+        github_actions_bundle_version()
+    );
     assert!(
-        stdout.contains("github-actions-generator-1.0.0"),
-        "expected registry bundle id in output, got: {stdout:?}"
+        stdout.contains(&registry_id),
+        "expected registry bundle id {registry_id} in output, got: {stdout:?}"
     );
 
     std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
@@ -181,13 +199,13 @@ fn publish_dry_run_all_runs_lists_multiple_run_ids() {
     persist_run(&minimal_run(
         "bundle-registry-run-match-a",
         "agentcarousel/github-actions-generator",
-        "1.0.0",
+        &github_actions_bundle_version(),
     ))
     .expect("persist run a");
     persist_run(&minimal_run(
         "bundle-registry-run-match-b",
         "agentcarousel/github-actions-generator",
-        "1.0.0",
+        &github_actions_bundle_version(),
     ))
     .expect("persist run b");
 
@@ -243,7 +261,7 @@ fn publish_dry_run_all_runs_skips_unreadable_history_rows() {
     persist_run(&minimal_run(
         "bundle-registry-run-match-good",
         "agentcarousel/github-actions-generator",
-        "1.0.0",
+        &github_actions_bundle_version(),
     ))
     .expect("persist valid run");
 
@@ -324,7 +342,7 @@ fn publish_fails_fast_when_token_missing() {
     persist_run(&minimal_run(
         "bundle-registry-run-token-missing",
         "agentcarousel/github-actions-generator",
-        "1.0.0",
+        &github_actions_bundle_version(),
     ))
     .expect("persist run");
     std::env::remove_var("AGENTCAROUSEL_API_TOKEN");
