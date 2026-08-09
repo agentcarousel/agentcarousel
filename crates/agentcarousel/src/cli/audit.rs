@@ -187,7 +187,7 @@ fn run_audit(
         );
         pb.set_message(format!(
             "Running prompt audit for run {} with {}...",
-            &run.id.0, judge_model
+            run.id.0, judge_model
         ));
         pb.enable_steady_tick(Duration::from_millis(120));
         Some(pb)
@@ -228,10 +228,7 @@ fn run_audit(
     if !no_save {
         if let Err(err) = persist_run(&run) {
             eprintln!("warn: audit result was not saved to history: {err}");
-            eprintln!(
-                "hint: rerun `agc audit run {}` to retry the save",
-                &run.id.0
-            );
+            eprintln!("hint: rerun `agc audit run {}` to retry the save", run.id.0);
         }
     }
 

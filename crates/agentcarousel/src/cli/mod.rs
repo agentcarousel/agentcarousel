@@ -1,4 +1,7 @@
 mod ab;
+mod athlon;
+mod athlon_format;
+mod athlon_validate;
 mod audit;
 mod batch_cmd;
 mod bundle;
@@ -144,6 +147,8 @@ enum Command {
     Pipeline(pipeline::PipelineArgs),
     /// List all pipeline candidate skills with their evaluation scores and metrics.
     Candidates(candidates::CandidatesArgs),
+    /// Author, validate, run, and report on a TEVV-Athlon assessment (NIST AI 200-2).
+    Athlon(athlon::AthlonArgs),
 }
 
 fn cli_command() -> clap::Command {
@@ -361,6 +366,7 @@ pub fn run() -> i32 {
         Command::Optimize(args) => optimize::run_optimize_command(args, &config, &globals),
         Command::Pipeline(args) => pipeline::run_pipeline(args, &config, &globals),
         Command::Candidates(args) => candidates::run_candidates(args, &globals),
+        Command::Athlon(args) => athlon::run_athlon(args, &globals),
     }
 }
 

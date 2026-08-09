@@ -22,6 +22,12 @@ pub struct FrameworkControl {
     pub behavioral: bool,
     /// Relative importance weight for scoring (default 1.0).
     pub importance: f32,
+    /// AI RMF Trustworthiness Characteristics this control addresses (e.g. "Safe",
+    /// "Valid & Reliable"). Free-form, deliberately not a fixed enum — see
+    /// docs/plans/2026-08-08-tevv-athlon-independent-baseline.md, Adversarial #6.
+    /// Empty for frameworks that predate this field.
+    #[serde(default)]
+    pub trustworthiness_characteristics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,6 +282,15 @@ fn load_embedded_catalogs(registry: &mut FrameworkRegistry) {
         };
         let controls = registry.entry(name.to_string()).or_default();
         for control in catalog.all_controls() {
+            // `evidence-type: procedural` means the control is validated by documentation
+            // or process review, not by fixture behavior — it must never be scored as
+            // behavioral. Absent the prop, default to `true` to preserve today's behavior
+            // for the 7 catalogs that don't carry it yet.
+            let behavioral = control
+                .props
+                .iter()
+                .find(|p| p.name == "evidence-type")
+                .is_none_or(|p| p.value != "procedural");
             controls.push(FrameworkControl {
                 framework: name.to_string(),
                 control_id: control.id.clone(),
@@ -284,8 +299,9 @@ fn load_embedded_catalogs(registry: &mut FrameworkRegistry) {
                     .map(str::to_string)
                     .unwrap_or_else(|| control.title.to_string()),
                 tag: format!("{name}:{}", control.id),
-                behavioral: true,
+                behavioral,
                 importance: 1.0,
+                trustworthiness_characteristics: Vec::new(),
             });
         }
     }
@@ -317,4 +333,76 @@ fn load_directory_catalogs(registry: &mut FrameworkRegistry, dir: &std::path::Pa
 
 fn home_frameworks_dir() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|h| h.join(".agentcarousel").join("frameworks"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_shape_json_without_trustworthiness_characteristics_still_deserializes() {
+        let raw = r#"[{
+            "framework": "legacy-framework",
+            "control_id": "legacy-1",
+            "requirement": "A pre-existing control with no trustworthiness_characteristics field.",
+            "tag": "legacy-framework:legacy-1",
+            "behavioral": true,
+            "importance": 1.0
+        }]"#;
+        let controls: Vec<FrameworkControl> = serde_json::from_str(raw).unwrap();
+        assert_eq!(controls.len(), 1);
+        assert!(controls[0].trustworthiness_characteristics.is_empty());
+    }
+
+    #[test]
+    fn new_shape_json_with_trustworthiness_characteristics_round_trips() {
+        let raw = r#"[{
+            "framework": "tevv-athlon:demo",
+            "control_id": "helpfulness",
+            "requirement": "Extent to which the system answers users' queries usefully.",
+            "tag": "tevv-athlon:demo:helpfulness",
+            "behavioral": true,
+            "importance": 1.0,
+            "trustworthiness_characteristics": ["Valid & Reliable"]
+        }]"#;
+        let controls: Vec<FrameworkControl> = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            controls[0].trustworthiness_characteristics,
+            vec!["Valid & Reliable".to_string()]
+        );
+    }
+
+    #[test]
+    fn embedded_procedural_control_is_marked_non_behavioral() {
+        let mut registry = FrameworkRegistry::new();
+        load_embedded_catalogs(&mut registry);
+        let controls = controls_for_framework(&registry, "nist-ai-rmf");
+        assert!(
+            !controls.is_empty(),
+            "expected the embedded nist-ai-rmf catalog to load"
+        );
+        let govern_1_1 = controls
+            .iter()
+            .find(|c| c.control_id == "nist-ai-rmf-govern-1.1")
+            .expect("nist-ai-rmf-govern-1.1 should be present in the embedded catalog");
+        assert!(
+            !govern_1_1.behavioral,
+            "nist-ai-rmf-govern-1.1 carries evidence-type: procedural and must not be scored as behavioral"
+        );
+    }
+
+    #[test]
+    fn embedded_control_without_evidence_type_prop_defaults_behavioral_true() {
+        let mut registry = FrameworkRegistry::new();
+        load_embedded_catalogs(&mut registry);
+        let controls = controls_for_framework(&registry, "nist-ai-rmf");
+        let non_procedural = controls
+            .iter()
+            .find(|c| c.control_id != "nist-ai-rmf-govern-1.1")
+            .expect("expected at least one other control in nist-ai-rmf");
+        assert!(
+            non_procedural.behavioral,
+            "controls without an evidence-type prop must default to behavioral: true"
+        );
+    }
 }
