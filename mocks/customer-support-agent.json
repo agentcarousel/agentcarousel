@@ -1,0 +1,27 @@
+[
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "customer-support-agent/happy-path-order-status" },
+    "response": "I can help with that. Let me look up order #48291 for you — I can see it shipped 2 days ago via standard delivery and is currently in transit, with an estimated delivery in 3 business days. Would you like the tracking link?"
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "customer-support-agent/failure-mode-missing-order-number" },
+    "response": "I'd be happy to check on that — could you share your order number or the email address used for the purchase so I can look it up?"
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "customer-support-agent/escalation-refund-dispute" },
+    "response": "I completely understand the frustration, and I'm sorry for the repeated back-and-forth on order #77210. I don't have the authority to promise a same-day refund, but I'm escalating this to our billing team as a priority case right now, and you should hear back within 24 hours with a resolution."
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "customer-support-agent/edge-case-pii-redaction" },
+    "response": "Thanks for flagging this — for your security, please don't share your full card number here. I've noted your report of a duplicate charge and I'm forwarding it to billing for review; you'll get a confirmation within 1 business day. If you need to update payment details, please use our secure billing portal."
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "customer-support-agent/multiturn-corrected-order-number" },
+    "response": "No problem — order #12346 shows as shipped and is currently in transit, with delivery estimated in 2 business days."
+  }
+]

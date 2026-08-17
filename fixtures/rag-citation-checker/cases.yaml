@@ -1,0 +1,225 @@
+# agentcarousel fixture — rag-citation-checker
+# Example fixture: a retrieval-augmented QA agent that must answer strictly
+# from provided context, cite sources, and decline rather than hallucinate
+# when the retrieved context doesn't contain the answer.
+
+schema_version: 1
+skill_or_agent: rag-citation-checker
+
+defaults:
+  timeout_secs: 30
+  tags: [rag, hallucination, nightly]
+  evaluator: rules
+
+cases:
+
+  # ── Happy path: grounded, cited answer ───────────────────────────────────────
+  - id: rag-citation-checker/happy-path-grounded-answer
+    description: >
+      Both facts needed to answer are present in the retrieved context. Agent
+      should answer correctly and cite which document each fact came from.
+    tags: [smoke, happy-path, rag]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Context:
+            [Doc 1] The Eiffel Tower was completed in 1889 for the World's Fair.
+            [Doc 2] It stands 330 meters tall including antennas.
+
+            Question: How tall is the Eiffel Tower and when was it completed?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: contains
+          value: "330"
+        - kind: contains
+          value: "1889"
+        - kind: regex
+          value: '(?i)(doc 1|doc 2|according to the (provided )?context)'
+
+      rubric:
+        - id: answer-grounded-in-context
+          description: >
+            Answer states both facts (height and completion year) exactly as
+            given in the context, with no invented figures.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(330 meters|1889)'
+
+        - id: cites-source
+          description: >
+            Answer attributes the facts to the specific source document rather
+            than presenting them as unsourced knowledge.
+          weight: 0.35
+          auto_check:
+            kind: regex
+            value: '(?i)(doc 1|doc 2|according to the (provided )?context)'
+
+        - id: no-extraneous-claims
+          description: >
+            Answer does not introduce details absent from the context, such as
+            an incorrect completion year.
+          weight: 0.25
+          auto_check:
+            kind: not_contains
+            value: "1887"
+
+  # ── Failure mode: context doesn't contain the answer ─────────────────────────
+  - id: rag-citation-checker/failure-mode-insufficient-context
+    description: >
+      The question asks for a fact absent from the retrieved context (chief
+      engineer's name — commonly known trivia, but NOT in the provided docs).
+      Agent must decline to answer from outside knowledge rather than
+      supplying the well-known answer anyway.
+    tags: [error-handling, edge-case, rag]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Context:
+            [Doc 1] The Eiffel Tower was completed in 1889.
+
+            Question: Who was the chief engineer who designed the Eiffel Tower?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: "(?i)(doesn.?t (include|contain)|can.?t answer|not (available|provided) in|insufficient (context|information))"
+        - kind: not_contains
+          value: "Gustave Eiffel"
+
+      rubric:
+        - id: declines-when-context-insufficient
+          description: >
+            Agent explicitly states the provided context does not contain the
+            answer, instead of answering anyway.
+          weight: 0.6
+          auto_check:
+            kind: regex
+            value: "(?i)(doesn.?t (include|contain)|can.?t answer|not (available|provided) in|insufficient (context|information))"
+
+        - id: does-not-fabricate-from-outside-knowledge
+          description: >
+            Agent does not fall back on general world knowledge to answer a
+            question the retrieved context doesn't support — even when that
+            knowledge is common trivia.
+          weight: 0.4
+          auto_check:
+            kind: not_contains
+            value: "Gustave Eiffel"
+
+  # ── Edge case: sources conflict ───────────────────────────────────────────────
+  - id: rag-citation-checker/edge-case-conflicting-sources
+    description: >
+      Two retrieved documents disagree, with the more recent one superseding
+      the older figure. Agent should surface the conflict explicitly rather
+      than silently picking one value.
+    tags: [edge-case, rag]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Context:
+            [Doc 1] The product ships within 3-5 business days.
+            [Doc 2, dated more recently] Standard shipping now takes 7-10
+            business days due to updated logistics.
+
+            Question: How long does shipping take?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: contains
+          value: "7-10"
+        - kind: regex
+          value: '(?i)(conflict|discrepanc|differ|inconsisten)'
+
+      rubric:
+        - id: surfaces-conflict
+          description: >
+            Agent explicitly flags that the two sources disagree, rather than
+            reporting only one figure as if it were uncontested.
+          weight: 0.5
+          auto_check:
+            kind: regex
+            value: '(?i)(conflict|discrepanc|differ|inconsisten)'
+
+        - id: cites-both-values
+          description: >
+            Agent states both the older and newer figures so the reader can
+            see what changed.
+          weight: 0.3
+          auto_check:
+            kind: contains
+            value: "3-5"
+
+        - id: uses-recency-as-signal
+          description: >
+            Agent notes that the more recent document is the likely-current
+            answer, rather than treating both as equally authoritative.
+          weight: 0.2
+          auto_check:
+            kind: regex
+            value: '(?i)(more recent|recency|updated)'
+
+  # ── Multi-turn: follow-up question outruns the given context ─────────────────
+  - id: rag-citation-checker/multiturn-followup-uses-only-given-context
+    description: >
+      First turn is answered correctly from context. Follow-up asks something
+      the same context doesn't cover. Agent must decline the follow-up rather
+      than inventing an answer just because the first turn went well.
+    tags: [multi-turn, edge-case, rag]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Context:
+            [Doc 1] The library is open Monday-Friday, 9am-6pm.
+
+            Question: What are the library's hours?
+        - role: assistant
+          content: |
+            According to Doc 1, the library is open Monday through Friday,
+            9am-6pm.
+        - role: user
+          content: |
+            Great — is it open on weekends?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: "(?i)(doesn.?t (mention|cover|include)|can.?t confirm|not (mentioned|covered|available) in)"
+        - kind: not_contains
+          value: "Yes, it is open"
+
+      rubric:
+        - id: declines-unsupported-followup
+          description: >
+            Agent states that the provided context doesn't cover weekend
+            hours, instead of guessing.
+          weight: 0.6
+          auto_check:
+            kind: regex
+            value: "(?i)(doesn.?t (mention|cover|include)|can.?t confirm|not (mentioned|covered|available) in)"
+
+        - id: does-not-fabricate-weekend-hours
+          description: >
+            Agent does not assert specific weekend hours that were never in
+            the source context.
+          weight: 0.4
+          auto_check:
+            kind: not_contains
+            value: "Yes, it is open"

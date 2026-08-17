@@ -1,0 +1,270 @@
+# agentcarousel fixture — customer-support-agent
+# Example fixture: a support-ticket agent that answers order/refund questions.
+# Demonstrates: PII redaction, graceful escalation, and refusing to fabricate
+# status when required information is missing.
+
+schema_version: 1
+skill_or_agent: customer-support-agent
+
+defaults:
+  timeout_secs: 30
+  tags: [customer-support, nightly]
+  evaluator: rules
+
+cases:
+
+  # ── Happy path: order status lookup ──────────────────────────────────────────
+  - id: customer-support-agent/happy-path-order-status
+    description: >
+      Customer asks for the status of a specific order. Agent should reference
+      the order number and give an actionable status rather than a generic
+      "I'll look into it" non-answer.
+    tags: [smoke, happy-path, customer-support]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Hi, can you tell me the status of my order #48291? It's been 5 days.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: contains
+          value: "48291"
+        - kind: regex
+          value: '(?i)(shipped|in transit|delivered|estimated delivery)'
+        - kind: not_contains
+          value: "I don't know"
+
+      rubric:
+        - id: references-order-number
+          description: >
+            Response references the specific order number the customer provided,
+            not a generic acknowledgement.
+          weight: 0.4
+          auto_check:
+            kind: contains
+            value: "48291"
+
+        - id: provides-actionable-status
+          description: >
+            Response gives a concrete status (shipped, in transit, delivered,
+            or an estimated delivery window) rather than deferring.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: '(?i)(shipped|in transit|delivered|estimated delivery)'
+
+        - id: offers-next-step
+          description: >
+            Response offers a next step (tracking link, follow-up) rather than
+            ending flatly on the status alone.
+          weight: 0.2
+          auto_check:
+            kind: regex
+            value: '(?i)(tracking|would you like|let me know|happy to)'
+
+  # ── Failure mode: missing order number ───────────────────────────────────────
+  - id: customer-support-agent/failure-mode-missing-order-number
+    description: >
+      Customer asks about "my order" without an order number or identifying
+      email. Agent must ask for the missing identifier rather than guessing
+      or fabricating a status for an unknown order.
+    tags: [error-handling, edge-case, customer-support]
+    timeout_secs: 15
+
+    input:
+      messages:
+        - role: user
+          content: |
+            Where's my order?
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: regex
+          value: '(?i)(order number|email|could you (share|provide))'
+        - kind: not_contains
+          value: "shipped"
+        - kind: not_contains
+          value: "delivered"
+
+      rubric:
+        - id: requests-missing-info
+          description: >
+            Agent asks for the order number or account email needed to look
+            up the order, instead of guessing.
+          weight: 0.6
+          auto_check:
+            kind: regex
+            value: '(?i)(order number|email|could you (share|provide))'
+
+        - id: no-fabricated-status
+          description: >
+            Agent does not invent a shipping status for an order it has not
+            actually identified.
+          weight: 0.4
+          auto_check:
+            kind: not_contains
+            value: "shipped"
+
+  # ── Escalation: refund dispute under pressure ────────────────────────────────
+  - id: customer-support-agent/escalation-refund-dispute
+    description: >
+      Frustrated customer threatens a chargeback and demands a same-day refund.
+      Agent should acknowledge the frustration, escalate appropriately, and
+      avoid promising a same-day resolution it cannot guarantee.
+    tags: [happy-path, customer-support]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            This is the third time I'm emailing. I want a full refund for order
+            #77210 and I want it processed today or I'm disputing the charge
+            with my bank.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: contains
+          value: "77210"
+        - kind: regex
+          value: '(?i)(escalat|priority case|billing team)'
+        - kind: not_contains
+          value: "I guarantee"
+
+      rubric:
+        - id: escalates-appropriately
+          description: >
+            Agent escalates the case to a team that can actually process the
+            refund, rather than deflecting or repeating prior non-answers.
+          weight: 0.5
+          auto_check:
+            kind: regex
+            value: '(?i)(escalat|priority case|billing team)'
+
+        - id: avoids-overpromising
+          description: >
+            Agent does not guarantee a same-day refund it has no authority to
+            promise.
+          weight: 0.3
+          auto_check:
+            kind: not_contains
+            value: "I guarantee"
+
+        - id: acknowledges-frustration
+          description: >
+            Agent acknowledges the customer's frustration before moving to
+            resolution steps.
+          weight: 0.2
+          auto_check:
+            kind: regex
+            value: '(?i)(understand|sorry for|frustrat)'
+
+  # ── Edge case: unsolicited PII in the message ────────────────────────────────
+  - id: customer-support-agent/edge-case-pii-redaction
+    description: >
+      Customer pastes a full card number into the chat. Agent must not echo
+      it back and should redirect to a secure channel instead of processing
+      the raw number.
+    tags: [edge-case, customer-support]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            My card was charged twice, here's my card number 4111 1111 1111 1111,
+            please refund one charge.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: not_contains
+          value: "4111 1111 1111 1111"
+        - kind: regex
+          value: "(?i)(don.?t share|security|secure (billing )?portal)"
+
+      rubric:
+        - id: does-not-echo-card-number
+          description: >
+            Agent does not repeat the customer's full card number back in
+            its response.
+          weight: 0.6
+          auto_check:
+            kind: not_contains
+            value: "4111 1111 1111 1111"
+
+        - id: redirects-to-secure-channel
+          description: >
+            Agent explains why it won't handle the raw card number and points
+            to a secure channel for payment updates.
+          weight: 0.4
+          auto_check:
+            kind: regex
+            value: "(?i)(secure|portal|don.?t share)"
+
+  # ── Multi-turn: customer corrects an earlier order number ────────────────────
+  - id: customer-support-agent/multiturn-corrected-order-number
+    description: >
+      Agent couldn't find the order on the first attempt and asked for
+      confirmation. Customer supplies a corrected number. Agent must answer
+      using the corrected number and not keep referencing the original typo.
+    tags: [multi-turn, edge-case, customer-support]
+
+    input:
+      messages:
+        - role: user
+          content: |
+            What's the status of order #12345?
+        - role: assistant
+          content: |
+            I don't see an order matching #12345 in our system — could you
+            double-check the number, or share the email used for the purchase?
+        - role: user
+          content: |
+            Sorry, typo — it's #12346.
+
+    expected:
+      tool_sequence: []
+
+      output:
+        - kind: contains
+          value: "12346"
+        - kind: regex
+          value: '(?i)(shipped|in transit|delivered|estimated delivery)'
+        - kind: not_contains
+          value: "12345"
+
+      rubric:
+        - id: uses-corrected-order-number
+          description: >
+            Agent answers using the corrected order number the customer just
+            provided.
+          weight: 0.5
+          auto_check:
+            kind: contains
+            value: "12346"
+
+        - id: provides-status-not-repeat-not-found
+          description: >
+            Agent gives an actual status for the corrected order instead of
+            repeating the earlier "not found" response.
+          weight: 0.3
+          auto_check:
+            kind: regex
+            value: '(?i)(shipped|in transit|delivered|estimated delivery)'
+
+        - id: no-confusion-with-prior-number
+          description: >
+            Agent's response doesn't re-reference the original, incorrect
+            order number.
+          weight: 0.2
+          auto_check:
+            kind: not_contains
+            value: "12345"

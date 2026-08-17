@@ -1,0 +1,22 @@
+[
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-citation-checker/happy-path-grounded-answer" },
+    "response": "According to the provided context, the Eiffel Tower is 330 meters tall (Doc 2) and was completed in 1889 for the World's Fair (Doc 1)."
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-citation-checker/failure-mode-insufficient-context" },
+    "response": "The provided context doesn't include information about the chief engineer, so I can't answer that from the given sources. You may want to search for additional documents about the Eiffel Tower's design team."
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-citation-checker/edge-case-conflicting-sources" },
+    "response": "The sources conflict: Doc 1 states 3-5 business days, while the more recent Doc 2 states 7-10 business days due to updated logistics. Based on recency, 7-10 business days is likely the current figure, but you may want to confirm."
+  },
+  {
+    "tool": "agent_response",
+    "args_match": { "case_id": "rag-citation-checker/multiturn-followup-uses-only-given-context" },
+    "response": "The provided context (Doc 1) only covers Monday-Friday hours and doesn't mention weekend hours, so I can't confirm whether it's open on weekends from the given source."
+  }
+]
