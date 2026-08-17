@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 — 2026-08-17
+
+**Theme: independent TEVV-Athlon baseline + OSS onboarding.**
+
+`agc` gains a first-party workflow for NIST AI 200-2 (TEVV-Athlon) bespoke assessments, and the project gets the example fixtures, contribution scaffolding, and docs cleanup needed to make it easier for a new contributor to land a first PR.
+
+### Added
+
+- **`agc athlon` command group** — `init`, `add-block`, `add-event`, `validate`, `run`, and `report` for building a bespoke, per-org `athlon.yaml` assessment against the NIST AI 200-2 (TEVV-Athlon) Blocks/Events model. Scoring reuses the existing `FrameworkControl` and `compute_control_scores_with_registry` machinery via a two-tag (`Block` / `Block:Event`) scheme. No new embedded OSCAL catalog ships with this release, by design — the source NIST Initial Public Draft is still under public comment as of this release.
+- **Two new example fixtures** — `fixtures/customer-support-agent/` (tool-free support agent: order-status happy path, missing-order-number failure mode, refund-dispute escalation, PII-redaction edge case, and a multi-turn corrected-order-number case) and `fixtures/rag-citation-checker/` (grounded QA agent: cited answer, insufficient-context refusal, conflicting-sources handling, and a multi-turn case where a follow-up outruns the given context). Both ship with full `mocks/*.json` coverage so `agc test --offline true` passes cleanly out of the box — no API key required to see a real run.
+- **GitHub contribution scaffolding** — `.github/ISSUE_TEMPLATE/` (bug report, feature request, and a fixture-proposal template mirroring the checklist in `CONTRIBUTING.md`), `.github/PULL_REQUEST_TEMPLATE.md`, and `CODE_OF_CONDUCT.md` (Contributor Covenant v2.1).
+- **README "How it compares" section** — an honest comparison table against promptfoo and Braintrust/LangSmith, so evaluators can pick the right tool instead of guessing.
+
+### Fixed
+
+- **`load_embedded_catalogs`** previously hardcoded every control as behavioral, ignoring the evidence-type property on the control; it now respects it. Found while building the athlon evidence-type handling.
+- Three pre-existing clippy lint violations that were blocking the lint gate.
+- Two dead links in `docs/fixture-format.md` (`fixtures/regex-builder/`, `docs/fixture-tag-examples.md` — neither existed in the repo); now points at the three real bundled example fixtures.
+
+### Changed
+
+- Internal planning/design docs (`docs/plans/`) are no longer written into the public `docs/` tree — added to `.gitignore` under the existing "internal process / planning" section, alongside `docs/designs/` and `docs/launch/`.
+
 ## 0.8.1 — 2026-06-10
 
 **Theme: multi-turn conversation fidelity.**
