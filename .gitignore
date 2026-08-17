@@ -10,6 +10,7 @@ authorizing-packages/
 docs/designs/
 docs/launch/
 docs/api/
+docs/plans/
 fixtures/intake/
 reports/carousel-runs/
 reports/*.md

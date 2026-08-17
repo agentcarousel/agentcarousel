@@ -103,6 +103,24 @@ A control is reported `satisfied` only with three or more cases and effectivenes
 
 ---
 
+## How it compares
+
+Several tools test LLM prompts and agents. Here's the honest difference, so you can pick the right one instead of guessing:
+
+| | **agc** | promptfoo | Braintrust / LangSmith |
+|---|---|---|---|
+| Distribution | Single static Rust binary, no runtime deps | Node/npm | Hosted SaaS (+ SDKs) |
+| Data leaves your machine? | No — local-first, SQLite run history | No (self-hosted eval runs) | Yes, by default (cloud platform) |
+| Compliance/control mapping | Built-in OSCAL catalogs (NIST AI RMF, EU AI Act, ISO 42001, HIPAA, FDA SaMD, NIST SP 800-171/172/207) | No | No |
+| Signed, exportable evidence for auditors | Yes — `agc export` (SHA-256 + minisign) | No | No |
+| Multi-model comparison | Yes — `agc carousel` | Yes | Partial (via tracing) |
+| Team collaboration / hosted dashboards | Minimal (local `agc dashboard`) | Minimal | Strong — this is their core strength |
+| Best fit | CI regression gate + audit-ready evidence, without sending fixtures to a third party | Broad provider support, mature red-team plugin ecosystem, JS-native teams | Team observability, tracing, and dataset curation at scale |
+
+If you need rich team dashboards and tracing across a large org, Braintrust/LangSmith will serve you better today. If you're already in the Node ecosystem and want the broadest red-teaming plugin library, promptfoo is a strong choice. `agc` exists for the case those don't cover well: a CI gate that never leaves your infrastructure and produces evidence a third-party auditor will actually accept.
+
+---
+
 ## When to use it
 
 - **Before deploying an agent change -** evaluate your fixtures, compare to the baseline, fail CI if anything regressed.

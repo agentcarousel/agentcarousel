@@ -100,5 +100,4 @@ Prefer tags in all new fixtures and examples.
 - Template: `templates/fixture-skeleton.yaml`
 - Bundle manifest template: `templates/bundle-manifest-skeleton.json`
 - Intake: open a GitHub issue using the checklist in [CONTRIBUTING.md](https://github.com/agentcarousel/agentcarousel/blob/main/CONTRIBUTING.md) before large additions
-- Tag examples: [`docs/fixture-tag-examples.md`](fixture-tag-examples.md)
-- Example fixtures: [`fixtures/regex-builder/`](../fixtures/regex-builder/)
+- Example fixtures: [`fixtures/customer-support-agent/`](../fixtures/customer-support-agent/) (tool-free support agent, escalation/PII handling), [`fixtures/rag-citation-checker/`](../fixtures/rag-citation-checker/) (grounded QA, hallucination refusal), [`fixtures/prompt-injection-detector/`](../fixtures/prompt-injection-detector/) (security classifier, judge + golden evaluators)
