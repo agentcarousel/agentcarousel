@@ -383,14 +383,44 @@ agc compare -l --baseline prod-v1 --threshold 0.05
 
 ## agc export
 
-Package a run as a signed evidence bundle.
+Package a run as an evidence bundle.
 
 ```bash
 agc export <run-id>
-agc export -l       # latest run
+agc export -l 1                              # latest run
+agc export <run-id> --sign-key agc.key       # also sign MANIFEST.json with minisign
 ```
 
-The bundle includes `run.json`, `report.md`, `metrics.json`, `MANIFEST.json`, and a SHA-256 fingerprint of every file.
+The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports, `assessment-results.oscal.json`, and `MANIFEST.json` with a SHA-256 hash of every file.
+
+| Flag | Description |
+|---|---|
+| `-l, --last N` | Export the N most recent runs (max 50) |
+| `-o, --out` | Output path for a single run |
+| `-d, --out-dir` | Output directory with `--last` |
+| `--sign-key` | minisign secret key; writes `MANIFEST.json.minisig` |
+| `--minisign-bin` | minisign binary (default: `minisign`) |
+
+An unsigned manifest proves the files are consistent with each other, not that they are authentic: anyone who edits a file can regenerate the hashes. Sign the manifest when the bundle leaves your hands. For CI, create a passwordless key with `minisign -G -W` and keep the secret key in your CI secret store.
+
+---
+
+## agc verify
+
+Check an evidence bundle produced by `agc export`.
+
+```bash
+agc verify agentcarousel-evidence-<run-id>.tar.gz
+agc verify agentcarousel-evidence-<run-id>.tar.gz --minisign-pubkey agc.pub
+```
+
+Recomputes every hash in `MANIFEST.json` and fails on any mismatched, missing, or unlisted file. With `--minisign-pubkey`, a valid `MANIFEST.json.minisig` is also required. Accepts a `.tar.gz` or an extracted bundle directory.
+
+| Result | Meaning |
+|---|---|
+| `verified` (exit 0) | Hashes match and the signature is valid for the given key |
+| `integrity_only` (exit 0) | Hashes match; no public key given, so authenticity was not checked |
+| failure (exit 1) | Hash mismatch, missing/unlisted file, missing or invalid signature |
 
 ---
 

@@ -230,3 +230,143 @@ history_db = "{}"
     );
     std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
 }
+
+fn export_for_verify(run_id: &str, extra: &[&str]) -> (PathBuf, PathBuf, tempfile::TempDir) {
+    let (history_path, _config_path) = temp_paths();
+    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
+    persist_run(&minimal_run(run_id, Utc::now())).expect("persist run");
+    let dir = tempfile::tempdir().expect("out dir");
+    let out_path = dir.path().join(format!("{run_id}.tar.gz"));
+    let mut args = vec!["export", run_id, "--out", out_path.to_str().unwrap()];
+    args.extend_from_slice(extra);
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(workspace_root())
+        .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
+        .args(&args)
+        .assert()
+        .success();
+    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+    (out_path, history_path, dir)
+}
+
+fn verify_json(args: &[&str]) -> (bool, Value) {
+    let output = Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .arg("--json")
+        .arg("verify")
+        .args(args)
+        .output()
+        .expect("run verify");
+    let v: Value = serde_json::from_slice(&output.stdout).unwrap_or(Value::Null);
+    (output.status.success(), v)
+}
+
+#[test]
+fn verify_unsigned_export_reports_integrity_only_and_detects_tampering() {
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let run_id = "verify-unsigned-run";
+    let (tarball, _db, dir) = export_for_verify(run_id, &[]);
+
+    let (ok, v) = verify_json(&[tarball.to_str().unwrap()]);
+    assert!(ok, "{v}");
+    assert_eq!(v["data"]["status"], "integrity_only", "{v}");
+    assert_eq!(v["data"]["signature"], "absent", "{v}");
+
+    // A public key demands a signature; an unsigned bundle must fail.
+    let fake_pub = dir.path().join("nokey.pub");
+    fs::write(&fake_pub, "untrusted comment: x\nRWQ\n").unwrap();
+    let (ok, _) = verify_json(&[
+        tarball.to_str().unwrap(),
+        "--minisign-pubkey",
+        fake_pub.to_str().unwrap(),
+    ]);
+    assert!(!ok, "unsigned bundle must fail when a pubkey is required");
+
+    // Extract, tamper with one file, and add an unlisted one.
+    let extract = dir.path().join("x");
+    fs::create_dir_all(&extract).unwrap();
+    let status = std::process::Command::new("tar")
+        .args([
+            "-xzf",
+            tarball.to_str().unwrap(),
+            "-C",
+            extract.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let bundle = extract.join(format!("agentcarousel-evidence-{run_id}"));
+    let (ok, _) = verify_json(&[bundle.to_str().unwrap()]);
+    assert!(ok, "pristine extracted dir should verify");
+
+    fs::write(bundle.join("report.md"), "edited").unwrap();
+    fs::write(bundle.join("extra.txt"), "smuggled").unwrap();
+    let (ok, v) = verify_json(&[bundle.to_str().unwrap()]);
+    assert!(!ok);
+    let msg = v["error"]["message"].as_str().unwrap_or_default();
+    assert!(msg.contains("hash mismatch: report.md"), "{v}");
+    assert!(msg.contains("not listed in manifest: extra.txt"), "{v}");
+}
+
+#[test]
+fn signed_export_verifies_with_matching_key_only() {
+    if std::process::Command::new("minisign")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping: minisign not installed");
+        return;
+    }
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let keys = tempfile::tempdir().unwrap();
+    let gen = |name: &str| {
+        let (sk, pk) = (
+            keys.path().join(format!("{name}.key")),
+            keys.path().join(format!("{name}.pub")),
+        );
+        let st = std::process::Command::new("minisign")
+            .args([
+                "-G",
+                "-W",
+                "-f",
+                "-s",
+                sk.to_str().unwrap(),
+                "-p",
+                pk.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            st.status.success(),
+            "{}",
+            String::from_utf8_lossy(&st.stderr)
+        );
+        (sk, pk)
+    };
+    let (sk, pk) = gen("good");
+    let (_other_sk, other_pk) = gen("other");
+
+    let (tarball, _db, _dir) =
+        export_for_verify("verify-signed-run", &["--sign-key", sk.to_str().unwrap()]);
+
+    let (ok, v) = verify_json(&[
+        tarball.to_str().unwrap(),
+        "--minisign-pubkey",
+        pk.to_str().unwrap(),
+    ]);
+    assert!(ok, "{v}");
+    assert_eq!(v["data"]["status"], "verified", "{v}");
+
+    let (ok, v) = verify_json(&[tarball.to_str().unwrap()]);
+    assert!(ok);
+    assert_eq!(v["data"]["signature"], "present_unverified", "{v}");
+
+    let (ok, v) = verify_json(&[
+        tarball.to_str().unwrap(),
+        "--minisign-pubkey",
+        other_pk.to_str().unwrap(),
+    ]);
+    assert!(!ok, "wrong key must fail: {v}");
+}

@@ -33,9 +33,9 @@ A satisfied control means *behavioral test evidence exists for the scenarios tes
 
 ## What the signed bundle proves — and what it doesn't
 
-`agc export` produces a self-contained evidence tarball: fixtures, per-case results, judge rationales, metrics, OSCAL assessment results, and a `MANIFEST.json` with a SHA-256 hash of every file. Registry attestations are signed and can be verified offline against the issuer's public key with `agc trust-check` — no account required.
+`agc export` produces a self-contained evidence tarball: fixtures, per-case results, judge rationales, metrics, OSCAL assessment results, and a `MANIFEST.json` with a SHA-256 hash of every file. With `agc export --sign-key`, the manifest is also signed with minisign, and `agc verify --minisign-pubkey` checks both hashes and signature offline. Registry attestations are signed and can be verified offline against the issuer's public key with `agc trust-check` — no account required.
 
-**This proves:** the bundle is exactly what was produced at export time. Nothing was edited, added, or removed afterward. Anyone you hand it to can verify that independently.
+**This proves (for a signed bundle verified against a key you trust):** the bundle is exactly what was produced at export time. Nothing was edited, added, or removed afterward. Anyone you hand it to can verify that independently. An unsigned manifest only shows the files are self-consistent — whoever edits them can regenerate the hashes.
 
 **This does not prove:** that the tests were well-chosen, that the agent behaves correctly outside the tested scenarios, or that the evidence is independent — you ran the tests yourself. Self-run evidence is an integrity claim, not an independence claim. Independent test design and domain-expert attestation are a separate, third-party exercise (that's the [certification service](https://agentcarousel.com), which is optional and never required to use this tool).
 

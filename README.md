@@ -73,7 +73,7 @@ You describe what your agent should and shouldn't do in a YAML fixture. `agc eva
 
 Every run is saved to a local history database. `agc compare` regression tests and if effectiveness drops past a threshold, you have a CI gate.
 
-`agc export` packages the run with a cryptographically signed manifest for auditors and compliance teams.
+`agc export` packages the run with a SHA-256 manifest for auditors and compliance teams; add `--sign-key` to sign it with minisign, and anyone can check it with `agc verify`.
 
 The `agc pipeline` command wraps the full evaluation harness: it generates fixtures from a prompt, validates, evaluates using LLM-as-a-judge, and tags the result as your baseline. `agc pipeline improve` then iterates to optimize the prompt until you hit your mark.
 
@@ -106,7 +106,7 @@ A control is reported `satisfied` only with three or more cases and effectivenes
 ## When to use it
 
 - **Before deploying an agent change -** evaluate your fixtures, compare to the baseline, fail CI if anything regressed.
-- **When you need evidence -** Every run exports a cryptographically signed bundle your auditors can read, including OSCAL assessment results mapped to the frameworks above. Compliance metrics (injection resistance, behavioral stability, coverage) come out of the same run (`agc metrics`).
+- **When you need evidence -** Every run exports a hashed, optionally minisign-signed bundle your auditors can verify with `agc verify`, including OSCAL assessment results mapped to the frameworks above. Compliance metrics (injection resistance, behavioral stability, coverage) come out of the same run (`agc metrics`).
 - **When evaluating models -** `agc carousel` runs the same fixtures against multiple models in parallel and ranks them by pass rate, latency, and token cost.
 - **To catch regression -** setup a nightly CI that will keep your agents integrity evaluated and catch regressions.
 

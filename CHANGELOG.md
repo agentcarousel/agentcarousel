@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Signed evidence manifests** — `agc export --sign-key <minisign.key>` signs `MANIFEST.json` and writes `MANIFEST.json.minisig` into the bundle (`--minisign-bin` to override the binary). Use a key generated with `minisign -G -W` for non-interactive CI signing.
+- **`agc verify`** — verifies an evidence tarball or extracted directory: recomputes every manifest hash, fails on mismatched, missing, or unlisted files, and with `--minisign-pubkey` requires a valid manifest signature. Reports `verified` or `integrity_only`; tar entries that are links or escape the bundle directory are rejected.
+
+### Changed
+
+- README, METHODOLOGY, and `agc export` help no longer describe unsigned bundles as "signed"; an unsigned SHA-256 manifest proves self-consistency, not authenticity.
+- `agc trust-check --attestation` now shares the minisign verification helper with `agc verify` (no behavior change).
+
+### Fixed
+
+- `docs/reference.md`: `agc export -l` example now passes the required count (`-l 1`).
+
 ## 0.8.1 — 2026-06-10
 
 **Theme: multi-turn conversation fidelity.**

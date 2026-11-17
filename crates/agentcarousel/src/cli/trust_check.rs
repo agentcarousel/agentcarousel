@@ -1,11 +1,11 @@
 use clap::{Parser, ValueEnum};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tempfile::NamedTempFile;
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
+use super::minisign::{self, MinisignError};
 use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
 use super::GlobalOptions;
@@ -272,43 +272,18 @@ fn verify_attestation(
     attestation: &Path,
     pubkey: &Path,
 ) -> Result<(), TrustCheckError> {
-    if std::path::Path::new(minisign_bin)
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return Err(TrustCheckError::Runtime(
-            "--minisign-bin path must not contain '..'".to_string(),
-        ));
-    }
     if !attestation.exists() {
         return Err(TrustCheckError::Runtime(format!(
             "attestation file not found: {}",
             attestation.display()
         )));
     }
-    if !pubkey.exists() {
-        return Err(TrustCheckError::Runtime(format!(
-            "minisign public key file not found: {}",
-            pubkey.display()
-        )));
+    match minisign::verify_file(minisign_bin, attestation, None, pubkey) {
+        Ok(()) => {
+            println!("  Signature: [SIGNATURE VALID]");
+            Ok(())
+        }
+        Err(MinisignError::Invalid(msg)) => Err(TrustCheckError::SignatureInvalid(msg)),
+        Err(MinisignError::Runtime(msg)) => Err(TrustCheckError::Runtime(msg)),
     }
-    let output = Command::new(minisign_bin)
-        .arg("-Vm")
-        .arg(attestation)
-        .arg("-p")
-        .arg(pubkey)
-        .output()
-        .map_err(|err| {
-            TrustCheckError::Runtime(format!(
-                "failed to run `{minisign_bin}`: {err}. Install minisign or pass --minisign-bin"
-            ))
-        })?;
-    if output.status.success() {
-        println!("  Signature: [SIGNATURE VALID]");
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let detail = if !stderr.is_empty() { stderr } else { stdout };
-    Err(TrustCheckError::SignatureInvalid(detail))
 }
