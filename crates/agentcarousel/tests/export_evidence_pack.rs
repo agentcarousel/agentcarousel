@@ -424,3 +424,81 @@ fn export_oscal_ar_uses_import_ap_and_schema_shapes() {
         );
     }
 }
+
+#[test]
+fn export_signs_with_password_protected_key_and_keeps_json_stdout_clean() {
+    if std::process::Command::new("minisign")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping: minisign not installed");
+        return;
+    }
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let keys = tempfile::tempdir().unwrap();
+    let (sk, pk) = (keys.path().join("enc.key"), keys.path().join("enc.pub"));
+    let mut gen = std::process::Command::new("minisign")
+        .args([
+            "-G",
+            "-f",
+            "-s",
+            sk.to_str().unwrap(),
+            "-p",
+            pk.to_str().unwrap(),
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    std::io::Write::write_all(gen.stdin.as_mut().unwrap(), b"pw\npw\n").unwrap();
+    assert!(gen.wait().unwrap().success());
+
+    let (history_path, _config) = temp_paths();
+    let run_id = "verify-encrypted-key-run";
+    persist_run_with_db(&history_path, run_id);
+    let dir = tempfile::tempdir().unwrap();
+    let out_path = dir.path().join("enc.tar.gz");
+    let output = Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(workspace_root())
+        .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
+        .args([
+            "--json",
+            "export",
+            run_id,
+            "--out",
+            out_path.to_str().unwrap(),
+            "--sign-key",
+            sk.to_str().unwrap(),
+        ])
+        .write_stdin("pw\n")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout: Value = serde_json::from_slice(&output.stdout).expect("stdout is pure JSON");
+    assert_eq!(stdout["ok"], true);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Password"),
+        "password prompt should reach the user's terminal (stderr)"
+    );
+
+    let (ok, v) = verify_json(&[
+        out_path.to_str().unwrap(),
+        "--minisign-pubkey",
+        pk.to_str().unwrap(),
+    ]);
+    assert!(ok, "{v}");
+    assert_eq!(v["data"]["status"], "verified");
+}
+
+fn persist_run_with_db(history_path: &std::path::Path, run_id: &str) {
+    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", history_path);
+    persist_run(&minimal_run(run_id, Utc::now())).expect("persist run");
+    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+}

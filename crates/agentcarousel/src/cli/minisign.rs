@@ -60,8 +60,10 @@ fn output_detail(output: &std::process::Output) -> String {
 }
 
 /// Sign `file` with the minisign secret key at `secret_key`, writing
-/// `<file>.minisig`. Password-protected keys prompt on the terminal; for CI use
-/// a key generated with `minisign -G -W`.
+/// `<file>.minisig`. Password-protected keys prompt for the password (minisign
+/// writes the prompt to stderr and reads stdin, both inherited here); for CI use
+/// a key generated with `minisign -G -W`. minisign's stdout is sent to our
+/// stderr so `--json` output on stdout stays parseable.
 pub fn sign_file(
     bin: &str,
     secret_key: &Path,
@@ -76,7 +78,7 @@ pub fn sign_file(
         )));
     }
     let sig = default_sig_path(file);
-    let output = Command::new(bin)
+    let status = Command::new(bin)
         .arg("-S")
         .arg("-s")
         .arg(secret_key)
@@ -87,14 +89,15 @@ pub fn sign_file(
         .arg("-t")
         .arg(trusted_comment)
         .stdin(Stdio::inherit())
-        .output()
+        .stdout(Stdio::from(std::io::stderr()))
+        .stderr(Stdio::inherit())
+        .status()
         .map_err(|err| spawn_err(bin, err))?;
-    if output.status.success() && sig.exists() {
+    if status.success() && sig.exists() {
         return Ok(sig);
     }
     Err(MinisignError::Runtime(format!(
-        "minisign signing failed: {}",
-        output_detail(&output)
+        "minisign signing failed ({status}); see minisign output above"
     )))
 }
 
