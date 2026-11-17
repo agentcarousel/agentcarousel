@@ -1406,13 +1406,21 @@ pub(crate) fn render_framework_compliance_report(
 /// `runs` is used to compute the actual assessment window (start = earliest
 /// run start, end = latest run finish). Pass an empty slice when runs are
 /// unavailable; the timestamps will fall back to the current time.
-#[allow(dead_code)]
+///
+/// `import_ap` is the href of the OSCAL Assessment Plan these results answer
+/// (e.g. the SAP exported by a GRC platform); defaults to [`DEFAULT_IMPORT_AP`].
+///
+/// Finding status follows the OSCAL 1.1.2 schema: `satisfied` or
+/// `not-satisfied` (gaps and partial evidence are not-satisfied, with the
+/// detail in `reason`). Procedural controls are not assessable by behavioral
+/// tests, so they get an observation but no finding.
 pub(crate) fn serialize_assessment_results(
     scores: &[ControlScore],
     framework: &str,
     skill: Option<&str>,
     run_id: &str,
     runs: &[agentcarousel_core::Run],
+    import_ap: Option<&str>,
 ) -> String {
     use oscal::generated::types::{
         AssessmentResults, Finding, FindingTarget, ImportAp, Metadata, Observation, OscalResult,
@@ -1442,6 +1450,7 @@ pub(crate) fn serialize_assessment_results(
     let mut observations: Vec<Observation> = Vec::new();
     let mut findings: Vec<Finding> = Vec::new();
     let mut risks: Vec<Risk> = Vec::new();
+    let mut assessed_control_ids: Vec<String> = Vec::new();
 
     for score in &scores {
         let obs_uuid = uuid_from_str(&format!(
@@ -1519,7 +1528,7 @@ pub(crate) fn serialize_assessment_results(
                 },
             ],
             links: vec![],
-            method: vec![],
+            method: vec!["TEST".to_string()],
             type_: vec![],
             origins: vec![],
             subjects: vec![],
@@ -1537,15 +1546,61 @@ pub(crate) fn serialize_assessment_results(
             expires: None,
             remarks: None,
         };
-        observations.push(obs);
 
+        if score.status == ControlCoverageStatus::Gap {
+            risks.push(Risk {
+                uuid: uuid_from_str(&format!(
+                    "{}-{}-risk",
+                    score.control.control_id, score.model_version
+                )),
+                title: MarkupLine::from(format!(
+                    "Gap: No fixture coverage for {}",
+                    score.control.control_id
+                )),
+                description: MarkupMultiline::from(format!(
+                    "Control {} has no fixture cases mapped to tag '{}'. \
+                     Explicit risk record required before formal acceptance.",
+                    score.control.control_id, score.control.tag
+                )),
+                statement: MarkupMultiline::from(format!(
+                    "No fixture cases are mapped to tag '{}'. \
+                     An explicit risk acceptance or remediation plan is required.",
+                    score.control.tag
+                )),
+                props: vec![Property {
+                    name: "reason".to_string(),
+                    uuid: None,
+                    ns: None,
+                    value: "no-fixture-coverage".to_string(),
+                    class: None,
+                    group: None,
+                    remarks: None,
+                }],
+                links: vec![],
+                status: "open".to_string(),
+                origins: vec![],
+                threat_ids: vec![],
+                characterizations: vec![],
+                mitigating_factor: vec![],
+                deadline: None,
+                remediations: vec![],
+                risk_log: None,
+                related_observations: vec![],
+            });
+        }
+
+        // Only controls exercised by at least one case are assessed. Gaps (no
+        // cases) are recorded as open risks above; procedural controls are out
+        // of scope for behavioral testing. Neither becomes a finding, so a GRC
+        // platform does not read "never tested" as "tested and failed".
         let (state, reason) = match score.status {
             ControlCoverageStatus::Satisfied => ("satisfied", None),
-            ControlCoverageStatus::Failed => ("not-satisfied", None),
-            ControlCoverageStatus::PartialEvidence => ("other", Some("partial-evidence")),
-            ControlCoverageStatus::Gap => ("other", Some("no-coverage")),
-            ControlCoverageStatus::Procedural => ("other", Some("procedural")),
+            ControlCoverageStatus::Failed => ("not-satisfied", Some("fail")),
+            ControlCoverageStatus::PartialEvidence => ("not-satisfied", Some("partial-evidence")),
+            ControlCoverageStatus::Gap | ControlCoverageStatus::Procedural => continue,
         };
+        observations.push(obs);
+        assessed_control_ids.push(score.control.control_id.clone());
 
         let finding = Finding {
             uuid: finding_uuid,
@@ -1600,48 +1655,6 @@ pub(crate) fn serialize_assessment_results(
             remarks: None,
         };
         findings.push(finding);
-
-        if score.status == ControlCoverageStatus::Gap {
-            risks.push(Risk {
-                uuid: uuid_from_str(&format!(
-                    "{}-{}-risk",
-                    score.control.control_id, score.model_version
-                )),
-                title: MarkupLine::from(format!(
-                    "Gap: No fixture coverage for {}",
-                    score.control.control_id
-                )),
-                description: MarkupMultiline::from(format!(
-                    "Control {} has no fixture cases mapped to tag '{}'. \
-                     Explicit risk record required before formal acceptance.",
-                    score.control.control_id, score.control.tag
-                )),
-                statement: MarkupMultiline::from(format!(
-                    "No fixture cases are mapped to tag '{}'. \
-                     An explicit risk acceptance or remediation plan is required.",
-                    score.control.tag
-                )),
-                props: vec![Property {
-                    name: "reason".to_string(),
-                    uuid: None,
-                    ns: None,
-                    value: "no-fixture-coverage".to_string(),
-                    class: None,
-                    group: None,
-                    remarks: None,
-                }],
-                links: vec![],
-                status: "open".to_string(),
-                origins: vec![],
-                threat_ids: vec![],
-                characterizations: vec![],
-                mitigating_factor: vec![],
-                deadline: None,
-                remediations: vec![],
-                risk_log: None,
-                related_observations: vec![],
-            });
-        }
     }
 
     #[derive(Serialize)]
@@ -1671,7 +1684,7 @@ pub(crate) fn serialize_assessment_results(
                 remarks: None,
             },
             import_ap: ImportAp {
-                href: UriReference::from("agentcarousel://fixture-suite"),
+                href: UriReference::from(import_ap.unwrap_or(DEFAULT_IMPORT_AP)),
                 remarks: None,
             },
             local_definitions: None,
@@ -1736,7 +1749,60 @@ pub(crate) fn serialize_assessment_results(
         },
     };
 
-    serde_json::to_string_pretty(&doc).unwrap_or_default()
+    let mut value = serde_json::to_value(&doc).unwrap_or_default();
+    normalize_ar_json(&mut value, &assessed_control_ids);
+    serde_json::to_string_pretty(&value).unwrap_or_default()
+}
+
+/// `import-ap` href used when no assessment plan is supplied.
+pub(crate) const DEFAULT_IMPORT_AP: &str = "agentcarousel://fixture-suite";
+
+/// Bring `oscal` 0.1.x serializer output in line with the OSCAL 1.1.2 JSON schema.
+///
+/// The crate emits singular names for some JSON group-as arrays (`method`,
+/// `control-selection`) and cannot express the `include-controls` choice, so the
+/// document is patched here. Remove once the upstream types serialize correctly.
+fn normalize_ar_json(doc: &mut serde_json::Value, assessed_control_ids: &[String]) {
+    use serde_json::{json, Value};
+    let Some(results) = doc
+        .pointer_mut("/assessment-results/results")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    for result in results {
+        if let Some(observations) = result.get_mut("observations").and_then(Value::as_array_mut) {
+            for obs in observations {
+                if let Some(obj) = obs.as_object_mut() {
+                    let methods = obj
+                        .remove("method")
+                        .filter(|m| m.as_array().is_some_and(|a| !a.is_empty()))
+                        .unwrap_or_else(|| json!(["TEST"]));
+                    obj.insert("methods".to_string(), methods);
+                }
+            }
+        }
+        if let Some(reviewed) = result
+            .get_mut("reviewed-controls")
+            .and_then(Value::as_object_mut)
+        {
+            reviewed.remove("control-selection");
+            let selection = if assessed_control_ids.is_empty() {
+                json!({ "description": "No controls were exercised by tagged behavioral test cases." })
+            } else {
+                let mut ids: Vec<&String> = assessed_control_ids.iter().collect();
+                ids.sort();
+                ids.dedup();
+                json!({
+                    "include-controls": ids
+                        .into_iter()
+                        .map(|id| json!({ "control-id": id }))
+                        .collect::<Vec<_>>()
+                })
+            };
+            reviewed.insert("control-selections".to_string(), json!([selection]));
+        }
+    }
 }
 
 /// Deterministic UUID v4-format from a seed string via SHA-256.
@@ -1946,4 +2012,41 @@ fn print_metrics_report(
         style("Export for evidence bundle:").dim()
     );
     println!();
+}
+
+#[cfg(test)]
+mod oscal_ar_tests {
+    use super::normalize_ar_json;
+    use serde_json::json;
+
+    fn doc() -> serde_json::Value {
+        json!({ "assessment-results": { "results": [{
+            "reviewed-controls": { "control-selection": [] },
+            "observations": [{ "uuid": "o", "method": [] }]
+        }]}})
+    }
+
+    #[test]
+    fn renames_group_as_fields_and_lists_assessed_controls() {
+        let mut d = doc();
+        normalize_ar_json(&mut d, &["b".into(), "a".into(), "a".into()]);
+        let r = &d["assessment-results"]["results"][0];
+        assert!(r["observations"][0].get("method").is_none());
+        assert_eq!(r["observations"][0]["methods"], json!(["TEST"]));
+        assert!(r["reviewed-controls"].get("control-selection").is_none());
+        assert_eq!(
+            r["reviewed-controls"]["control-selections"],
+            json!([{ "include-controls": [{ "control-id": "a" }, { "control-id": "b" }] }])
+        );
+    }
+
+    #[test]
+    fn nothing_assessed_never_claims_include_all() {
+        let mut d = doc();
+        normalize_ar_json(&mut d, &[]);
+        let sel =
+            &d["assessment-results"]["results"][0]["reviewed-controls"]["control-selections"][0];
+        assert!(sel.get("include-all").is_none());
+        assert!(sel["description"].is_string());
+    }
 }

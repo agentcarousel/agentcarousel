@@ -370,3 +370,57 @@ fn signed_export_verifies_with_matching_key_only() {
     ]);
     assert!(!ok, "wrong key must fail: {v}");
 }
+
+#[test]
+fn export_oscal_ar_uses_import_ap_and_schema_shapes() {
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let run_id = "oscal-ar-shape-run";
+    let href = "https://grc.example/plans/sap-1.json";
+    let (tarball, _db, _dir) = export_for_verify(run_id, &["--import-ap", href]);
+
+    let out = std::process::Command::new("tar")
+        .args([
+            "-xOzf",
+            tarball.to_str().unwrap(),
+            &format!("agentcarousel-evidence-{run_id}/assessment-results.oscal.json"),
+        ])
+        .output()
+        .expect("tar");
+    assert!(out.status.success());
+    let ar: Value = serde_json::from_slice(&out.stdout).expect("AR json");
+    let doc = &ar["assessment-results"];
+    assert_eq!(doc["import-ap"]["href"], href);
+
+    let result = &doc["results"][0];
+    let selections = result["reviewed-controls"]["control-selections"]
+        .as_array()
+        .expect("control-selections array (OSCAL 1.1.2 group-as name)");
+    assert!(!selections.is_empty());
+    assert!(result["reviewed-controls"]
+        .get("control-selection")
+        .is_none());
+    // Only assessed controls appear: no blanket include-all, one finding each.
+    assert!(selections.iter().all(|s| s.get("include-all").is_none()));
+    let findings = result["findings"].as_array().map_or(0, Vec::len);
+    let included: usize = selections
+        .iter()
+        .filter_map(|s| s["include-controls"].as_array())
+        .map(Vec::len)
+        .sum();
+    assert_eq!(findings, included, "one finding per assessed control");
+
+    for obs in result["observations"].as_array().into_iter().flatten() {
+        assert!(obs.get("method").is_none(), "{obs}");
+        assert!(
+            obs["methods"].as_array().is_some_and(|m| !m.is_empty()),
+            "{obs}"
+        );
+    }
+    for f in result["findings"].as_array().into_iter().flatten() {
+        let state = f["target"]["status"]["state"].as_str().unwrap();
+        assert!(
+            state == "satisfied" || state == "not-satisfied",
+            "invalid OSCAL finding state {state}"
+        );
+    }
+}

@@ -47,9 +47,22 @@ pub struct ExportArgs {
     /// minisign binary name/path (default: minisign).
     #[arg(long, default_value = "minisign")]
     minisign_bin: String,
+    /// href of the OSCAL Assessment Plan (SAP) the assessment results answer,
+    /// e.g. the plan exported from your GRC platform. Written to `import-ap`.
+    #[arg(long, value_name = "HREF")]
+    import_ap: Option<String>,
 }
 
-/// Optional manifest-signing settings for an export.
+/// Optional settings for an export beyond run selection.
+#[derive(Default)]
+pub(crate) struct ExportOptions<'a> {
+    /// Sign MANIFEST.json with this minisign key.
+    pub sign: Option<SignOptions<'a>>,
+    /// OSCAL `import-ap` href for assessment-results.oscal.json.
+    pub import_ap: Option<&'a str>,
+}
+
+/// Manifest-signing settings for an export.
 pub(crate) struct SignOptions<'a> {
     pub secret_key: &'a Path,
     pub minisign_bin: &'a str,
@@ -59,11 +72,13 @@ const EXPORT_LAST_MAX: usize = 50;
 
 pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
     let json = globals.json;
-    let sign = args.sign_key.as_deref().map(|secret_key| SignOptions {
-        secret_key,
-        minisign_bin: args.minisign_bin.as_str(),
-    });
-    let sign = sign.as_ref();
+    let opts = ExportOptions {
+        sign: args.sign_key.as_deref().map(|secret_key| SignOptions {
+            secret_key,
+            minisign_bin: args.minisign_bin.as_str(),
+        }),
+        import_ap: args.import_ap.as_deref(),
+    };
     let run_id = args.run_id_positional.as_ref();
     match (run_id, args.last) {
         (Some(_), Some(_)) => {
@@ -110,7 +125,7 @@ pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
                 }
                 return ExitCode::RuntimeError.as_i32();
             }
-            match export_run_artifact_with(run_id, args.out.as_deref(), sign) {
+            match export_run_artifact_with(run_id, args.out.as_deref(), &opts) {
                 Ok(path) => {
                     if json {
                         JsonOutput::ok(
@@ -151,7 +166,7 @@ pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
                 }
                 return ExitCode::RuntimeError.as_i32();
             }
-            match export_last_n(n, args.out_dir.as_deref(), sign) {
+            match export_last_n(n, args.out_dir.as_deref(), &opts) {
                 Ok(paths) => {
                     if json {
                         let strs: Vec<String> =
@@ -194,7 +209,7 @@ fn infer_domain_from_skill(skill: Option<&str>) -> Option<&'static str> {
 fn export_last_n(
     n: usize,
     out_dir: Option<&Path>,
-    sign: Option<&SignOptions<'_>>,
+    opts: &ExportOptions<'_>,
 ) -> Result<Vec<PathBuf>, String> {
     if n == 0 || n > EXPORT_LAST_MAX {
         return Err(format!(
@@ -218,19 +233,19 @@ fn export_last_n(
     let mut paths = Vec::new();
     for listing in listings {
         let path = base.join(format!("agentcarousel-evidence-{}.tar.gz", listing.id));
-        paths.push(export_run_artifact_with(&listing.id, Some(&path), sign)?);
+        paths.push(export_run_artifact_with(&listing.id, Some(&path), opts)?);
     }
     Ok(paths)
 }
 
 pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<PathBuf, String> {
-    export_run_artifact_with(run_id, out, None)
+    export_run_artifact_with(run_id, out, &ExportOptions::default())
 }
 
 pub(crate) fn export_run_artifact_with(
     run_id: &str,
     out: Option<&Path>,
-    sign: Option<&SignOptions<'_>>,
+    opts: &ExportOptions<'_>,
 ) -> Result<PathBuf, String> {
     let run = fetch_run(run_id).map_err(|err| err.to_string())?;
     let root = std::env::temp_dir().join(format!("agentcarousel-evidence-{run_id}"));
@@ -369,6 +384,7 @@ pub(crate) fn export_run_artifact_with(
         skill,
         run_id,
         &compliance_runs,
+        opts.import_ap,
     );
     let oscal_path = root.join("assessment-results.oscal.json");
     let mut f = fs::File::create(&oscal_path).map_err(|err| err.to_string())?;
@@ -378,7 +394,7 @@ pub(crate) fn export_run_artifact_with(
     let manifest_path = root.join("MANIFEST.json");
     let manifest = build_manifest(&root)?;
     write_json(&manifest_path, &manifest)?;
-    if let Some(sign) = sign {
+    if let Some(sign) = opts.sign.as_ref() {
         if let Err(err) = super::minisign::sign_file(
             sign.minisign_bin,
             sign.secret_key,

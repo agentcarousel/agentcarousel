@@ -83,6 +83,27 @@ jobs:
           ./target/release/agentcarousel test fixtures/ \
             --filter-tags smoke \
             --offline true | tee test-results-smoke.json
+      - name: OSCAL Assessment Results conform to NIST schema
+        env:
+          OSCAL_AR_SCHEMA: https://github.com/usnistgov/OSCAL/releases/download/v1.1.2/oscal_assessment-results_schema.json
+        run: |
+          set -euo pipefail
+          mkdir -p oscal-check
+          curl -fsSL -o oscal-check/schema-ar.json "$OSCAL_AR_SCHEMA"
+          for fw in nist-ai-rmf eu-ai-act iso-42001 hipaa fda-samd nist-800-171 nist-800-172 nist-800-207; do
+            ./target/release/agentcarousel compliance report --framework "$fw" --oscal --all-models \
+              --import-ap "https://example.invalid/sap.json" > "oscal-check/ar-$fw.json"
+          done
+          pipx run --spec check-jsonschema==0.38.2 check-jsonschema --schemafile oscal-check/schema-ar.json oscal-check/ar-*.json
+      - name: Evidence export round-trip (export -> verify)
+        run: |
+          set -euo pipefail
+          ./target/release/agentcarousel export --last 1 --out-dir oscal-check/evidence
+          for t in oscal-check/evidence/*.tar.gz; do
+            ./target/release/agentcarousel verify "$t"
+            tar -xOzf "$t" --wildcards '*/assessment-results.oscal.json' > oscal-check/ar-export.json
+            pipx run --spec check-jsonschema==0.38.2 check-jsonschema --schemafile oscal-check/schema-ar.json oscal-check/ar-export.json
+          done
       - name: Upload test results (JSON)
         uses: actions/upload-artifact@v4
         with:

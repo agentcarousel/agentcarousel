@@ -266,6 +266,7 @@ agc compliance report [flags]
 | `--oscal` | off | Emit an OSCAL Assessment Results JSON artifact |
 | `--out <dir>` | `./compliance-output` | Directory for `--oscal` output files |
 | `--run-id <id>` | `latest` | Run ID to use as the assessment window anchor |
+| `--import-ap <href>` | `agentcarousel://fixture-suite` | With `--oscal`: href of the OSCAL Assessment Plan (e.g. a SAP exported from your GRC platform) written to `import-ap` |
 | `--json` | off | Machine-readable output |
 
 ```bash
@@ -278,6 +279,8 @@ agc compliance report --framework all --json
 # Export OSCAL Assessment Results artifact
 agc compliance report --framework eu-ai-act --oscal --out ./evidence/
 ```
+
+**OSCAL output** validates against the NIST OSCAL 1.1.2 Assessment Results JSON schema (checked in CI). Findings cover only controls exercised by at least one case: `satisfied`, or `not-satisfied` with `reason` `fail` or `partial-evidence`. Controls with no cases appear as open `risks[]` entries, not findings; procedural (non-behavioral) controls are omitted. `reviewed-controls` lists exactly the assessed control IDs.
 
 **Satisfaction threshold:** A control reaches `Satisfied` when pass rate ≥ 0.80 across a minimum of three tagged cases. Controls with fewer than three cases receive `PartialEvidence` regardless of pass rate.
 
@@ -399,6 +402,7 @@ The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports,
 | `-o, --out` | Output path for a single run |
 | `-d, --out-dir` | Output directory with `--last` |
 | `--sign-key` | minisign secret key; writes `MANIFEST.json.minisig` |
+| `--import-ap` | OSCAL Assessment Plan href for `assessment-results.oscal.json` |
 | `--minisign-bin` | minisign binary (default: `minisign`) |
 
 An unsigned manifest proves the files are consistent with each other, not that they are authentic: anyone who edits a file can regenerate the hashes. Sign the manifest when the bundle leaves your hands. For CI, create a passwordless key with `minisign -G -W` and keep the secret key in your CI secret store.
