@@ -409,3 +409,145 @@ history_db = "{}"
         "expected run selection error, got stdout: {stdout:?}, stderr: {stderr:?}"
     );
 }
+
+/// Minimal HTTP capture server: answers every request with `{}` and records
+/// "<METHOD> <PATH>\n<body>" for each one.
+fn spawn_capture_registry() -> (String, std::sync::Arc<Mutex<Vec<String>>>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture registry");
+    let url = format!("http://{}", listener.local_addr().expect("addr"));
+    let captured = std::sync::Arc::new(Mutex::new(Vec::new()));
+    let sink = captured.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
+            let mut request_line = String::new();
+            if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
+                continue;
+            }
+            let mut content_length = 0usize;
+            let mut chunked = false;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("header line");
+                let lower = line.to_ascii_lowercase();
+                if let Some(v) = lower.strip_prefix("content-length:") {
+                    content_length = v.trim().parse().unwrap_or(0);
+                }
+                if lower.starts_with("transfer-encoding:") && lower.contains("chunked") {
+                    chunked = true;
+                }
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+            }
+            let mut body = Vec::new();
+            if chunked {
+                loop {
+                    let mut size_line = String::new();
+                    reader.read_line(&mut size_line).expect("chunk size");
+                    let size = usize::from_str_radix(size_line.trim(), 16).unwrap_or(0);
+                    let mut chunk = vec![0u8; size + 2];
+                    reader.read_exact(&mut chunk).expect("chunk");
+                    if size == 0 {
+                        break;
+                    }
+                    body.extend_from_slice(&chunk[..size]);
+                }
+            } else {
+                body.resize(content_length, 0);
+                reader.read_exact(&mut body).expect("body");
+            }
+            let path = request_line
+                .split_whitespace()
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(" ");
+            sink.lock()
+                .expect("capture lock")
+                .push(format!("{path}\n{}", String::from_utf8_lossy(&body)));
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            );
+        }
+    });
+    (url, captured)
+}
+
+fn publish_against_capture(include_prompt: bool) -> (String, Vec<String>) {
+    let (history_path, _config_path, evidence_path) = temp_paths();
+    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
+    persist_run(&minimal_run(
+        "bundle-registry-prompt-disclosure",
+        "agentcarousel/github-actions-generator",
+        &github_actions_bundle_version(),
+    ))
+    .expect("persist run");
+    fs::write(&evidence_path, b"fake").expect("write evidence");
+    let (url, captured) = spawn_capture_registry();
+    let mut cmd = Command::cargo_bin("agentcarousel").unwrap();
+    cmd.current_dir(workspace_root())
+        .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
+        .env("AGENTCAROUSEL_API_TOKEN", "test-token")
+        .args([
+            "publish",
+            "fixtures/github-actions-generator",
+            "--url",
+            &url,
+            "--evidence",
+            evidence_path.to_str().expect("evidence path"),
+        ]);
+    if include_prompt {
+        cmd.arg("--include-prompt");
+    }
+    let assert = cmd.assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).to_string();
+    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+    let requests = captured.lock().expect("capture lock").clone();
+    (stdout, requests)
+}
+
+#[test]
+fn publish_uploads_prompt_only_with_include_prompt() {
+    let _guard = HISTORY_ENV_LOCK.lock().expect("history lock");
+    let prompt =
+        fs::read_to_string(workspace_root().join("fixtures/github-actions-generator/prompt.md"))
+            .expect("read prompt.md");
+    let probe = prompt
+        .lines()
+        .find(|line| line.trim().len() > 20)
+        .expect("a distinctive prompt line")
+        .trim()
+        .to_string();
+
+    let (stdout, requests) = publish_against_capture(false);
+    let bundle_push = requests
+        .iter()
+        .find(|r| r.starts_with("POST /v1/bundles\n"))
+        .expect("bundle push request");
+    assert!(
+        !bundle_push.contains(&probe) && !bundle_push.contains("name=\"prompt\""),
+        "prompt uploaded without --include-prompt: {bundle_push}"
+    );
+    assert!(
+        stdout.contains("\"prompt_disclosure\": \"digest_only\""),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\"prompt_sha256\": \"sha256:"), "{stdout}");
+
+    let (stdout, requests) = publish_against_capture(true);
+    let bundle_push = requests
+        .iter()
+        .find(|r| r.starts_with("POST /v1/bundles\n"))
+        .expect("bundle push request");
+    assert!(
+        bundle_push.contains(&probe),
+        "--include-prompt should upload prompt.md"
+    );
+    assert!(
+        stdout.contains("\"prompt_disclosure\": \"included\""),
+        "{stdout}"
+    );
+}

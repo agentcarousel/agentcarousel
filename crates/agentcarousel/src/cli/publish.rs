@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use super::config::ResolvedConfig;
 use super::exit_codes::ExitCode;
-use super::export::export_run_artifact;
+use super::export::{export_run_artifact_with, sha256_file_hex, ExportOptions};
 use super::output::{JsonError, JsonOutput};
 use super::registry_client::{resolve_registry_url, RegistryClient};
 use super::GlobalOptions;
@@ -41,6 +41,11 @@ pub struct PublishArgs {
     /// Resolve and print values without API writes.
     #[arg(short = 'n', long, default_value_t = false)]
     dry_run: bool,
+    /// Upload prompt.md to the registry and include system prompts in freshly exported
+    /// evidence. By default only the prompt's SHA-256 digest is reported and nothing
+    /// containing prompt text is uploaded.
+    #[arg(long, default_value_t = false)]
+    include_prompt: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,7 +80,18 @@ pub fn run_publish(args: PublishArgs, config: &ResolvedConfig, globals: &GlobalO
 }
 
 fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, String> {
-    let (manifest, meta, _root) = load_bundle_manifest(&args.path)?;
+    let (manifest, meta, root) = load_bundle_manifest(&args.path)?;
+    let prompt_path = root.join("prompt.md");
+    let prompt_sha256 = if prompt_path.is_file() {
+        Some(sha256_file_hex(&prompt_path)?)
+    } else {
+        None
+    };
+    let prompt_disclosure = match (&prompt_sha256, args.include_prompt) {
+        (None, _) => "not_applicable",
+        (Some(_), true) => "included",
+        (Some(_), false) => "digest_only",
+    };
     let endpoint = resolve_registry_url(args.url.as_deref(), config)?;
     let registry_bundle_id = compute_registry_bundle_id(&meta);
     if args.all_runs && args.run_id.is_some() {
@@ -107,7 +123,11 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
         } else if selected_run_id.is_empty() {
             PathBuf::from("<none>")
         } else {
-            locate_or_export_evidence(&selected_run_id, meta.skill_or_agent.as_deref())?
+            locate_or_export_evidence(
+                &selected_run_id,
+                meta.skill_or_agent.as_deref(),
+                args.include_prompt,
+            )?
         };
         return Ok(json!({
             "mode": "dry-run",
@@ -117,6 +137,8 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
             "run_ids": selected_run_ids,
             "run_count": selected_run_ids.len(),
             "evidence": evidence_hint.display().to_string(),
+            "prompt_disclosure": prompt_disclosure,
+            "prompt_sha256": prompt_sha256,
             "bundle_id": meta.bundle_id,
             "bundle_version": meta.bundle_version
         }));
@@ -124,7 +146,11 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
 
     let token = token.expect("token is resolved for non-dry-run path");
     let client = RegistryClient::new(&endpoint, &token)?;
-    let prompt_text = fs::read_to_string(_root.join("prompt.md")).ok();
+    let prompt_text = if args.include_prompt {
+        fs::read_to_string(&prompt_path).ok()
+    } else {
+        None
+    };
     let bundle_response = match prompt_text.as_deref() {
         Some(prompt) => client.push_bundle_manifest_with_prompt(&manifest, prompt)?,
         None => client.push_bundle_manifest(&manifest)?,
@@ -135,7 +161,7 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
         let evidence_path = if let Some(path) = &args.evidence {
             path.clone()
         } else {
-            locate_or_export_evidence(run_id, meta.skill_or_agent.as_deref())?
+            locate_or_export_evidence(run_id, meta.skill_or_agent.as_deref(), args.include_prompt)?
         };
         if !evidence_path.exists() {
             return Err(format!(
@@ -169,6 +195,8 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
         "selected_run_id": selected_run_ids.first().cloned().unwrap_or_default(),
         "selected_run_ids": selected_run_ids,
         "registry_bundle_id": registry_bundle_id,
+        "prompt_disclosure": prompt_disclosure,
+        "prompt_sha256": prompt_sha256,
         "trust_state_url": trust_state_url
     }))
 }
@@ -300,6 +328,7 @@ fn matching_run_ids(
 fn locate_or_export_evidence(
     run_id: &str,
     skill_or_agent: Option<&str>,
+    include_prompt: bool,
 ) -> Result<PathBuf, String> {
     let mut candidates = Vec::new();
     if let Some(skill) = skill_or_agent {
@@ -315,8 +344,19 @@ fn locate_or_export_evidence(
     )));
     for candidate in &candidates {
         if candidate.exists() {
+            eprintln!(
+                "note: using existing evidence {}; its prompt disclosure was fixed when it was exported",
+                candidate.display()
+            );
             return Ok(candidate.to_path_buf());
         }
     }
-    export_run_artifact(run_id, None)
+    export_run_artifact_with(
+        run_id,
+        None,
+        &ExportOptions {
+            include_prompt,
+            ..ExportOptions::default()
+        },
+    )
 }

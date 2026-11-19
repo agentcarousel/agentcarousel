@@ -51,6 +51,10 @@ pub struct ExportArgs {
     /// e.g. the plan exported from your GRC platform. Written to `import-ap`.
     #[arg(long, value_name = "HREF")]
     import_ap: Option<String>,
+    /// Include system prompts verbatim in run.json and report.md. By default, system-prompt
+    /// messages are replaced by their SHA-256 digest and prompt-audit rewrites are omitted.
+    #[arg(long, default_value_t = false)]
+    include_prompt: bool,
 }
 
 /// Optional settings for an export beyond run selection.
@@ -60,6 +64,8 @@ pub(crate) struct ExportOptions<'a> {
     pub sign: Option<SignOptions<'a>>,
     /// OSCAL `import-ap` href for assessment-results.oscal.json.
     pub import_ap: Option<&'a str>,
+    /// Disclose system prompts verbatim instead of their digests (spec INV-7).
+    pub include_prompt: bool,
 }
 
 /// Manifest-signing settings for an export.
@@ -78,6 +84,7 @@ pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
             minisign_bin: args.minisign_bin.as_str(),
         }),
         import_ap: args.import_ap.as_deref(),
+        include_prompt: args.include_prompt,
     };
     let run_id = args.run_id_positional.as_ref();
     match (run_id, args.last) {
@@ -248,6 +255,11 @@ pub(crate) fn export_run_artifact_with(
     opts: &ExportOptions<'_>,
 ) -> Result<PathBuf, String> {
     let run = fetch_run(run_id).map_err(|err| err.to_string())?;
+    let run = if opts.include_prompt {
+        run
+    } else {
+        redact_prompt_material(run)
+    };
     let root = std::env::temp_dir().join(format!("agentcarousel-evidence-{run_id}"));
     if root.exists() {
         fs::remove_dir_all(&root).map_err(|err| err.to_string())?;
@@ -417,6 +429,34 @@ pub(crate) fn export_run_artifact_with(
     tar.finish().map_err(|err| err.to_string())?;
     fs::remove_dir_all(&root).ok();
     Ok(out_path)
+}
+
+/// Withhold prompt text from an exported run (spec INV-7): replace every system-role input
+/// message with a digest marker and drop prompt-audit rewrites, which reproduce prompt.md text.
+/// The local history copy is untouched.
+pub(crate) fn redact_prompt_material(mut run: Run) -> Run {
+    for case in &mut run.cases {
+        for msg in &mut case.input {
+            if msg.role == Role::System {
+                msg.content = system_prompt_marker(&msg.content);
+            }
+        }
+    }
+    if let Some(audit) = run.prompt_audit.as_mut() {
+        audit.suggested_implementations.clear();
+        audit.suggested_locations.clear();
+    }
+    run
+}
+
+/// Marker substituted for withheld system-prompt content.
+pub(crate) fn system_prompt_marker(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!(
+        "[system prompt withheld; sha256:{}]",
+        hex_lower(hasher.finalize().as_ref())
+    )
 }
 
 fn render_markdown_report(run: &Run, metrics_section: &str) -> String {
