@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assurance-spec.invalid/schemas/0.1/agent-evaluation-statement.schema.json",
+  "$id": "https://agentcarousel.com/spec/schemas/0.1/agent-evaluation-statement.schema.json",
   "title": "Agent evaluation attestation statement",
   "description": "An in-toto Statement v1 (https://in-toto.io/Statement/v1) whose subjects are the tested artifacts (test-suite files and, when present, the system prompt) and whose predicate is an agent evaluation.",
   "type": "object",
@@ -25,7 +25,7 @@
         }
       }
     },
-    "predicateType": { "const": "https://assurance-spec.invalid/predicates/agent-evaluation/v0.1" },
+    "predicateType": { "const": "https://agentcarousel.com/spec/predicates/agent-evaluation/v0.1" },
     "predicate": { "$ref": "agent-evaluation-predicate.schema.json" }
   }
 }

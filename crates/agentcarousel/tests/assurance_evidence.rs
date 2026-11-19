@@ -319,6 +319,36 @@ fn verify_flags_doctored_evidence_even_with_regenerated_manifest() {
 }
 
 #[test]
+fn verify_rejects_provisional_identifiers_from_0_9_0_with_reexport_hint() {
+    let (_dir, bundle) = eval_and_export(&[]);
+    let evidence_path = bundle.join("evidence.json");
+    let mut evidence = read_json(&evidence_path);
+    evidence["spec"]["name"] = serde_json::json!("assurance-spec/evidence");
+    fs::write(
+        &evidence_path,
+        serde_json::to_string_pretty(&evidence).unwrap(),
+    )
+    .unwrap();
+    let statement_path = bundle.join("attestation.intoto.json");
+    let mut statement = read_json(&statement_path);
+    statement["predicateType"] =
+        serde_json::json!("https://assurance-spec.invalid/predicates/agent-evaluation/v0.1");
+    fs::write(
+        &statement_path,
+        serde_json::to_string_pretty(&statement).unwrap(),
+    )
+    .unwrap();
+    regenerate_manifest(&bundle);
+
+    let (ok, v) = verify_json(&bundle);
+    assert!(!ok, "{v}");
+    assert_eq!(v["error"]["code"], "nonconformant", "{v}");
+    let msg = v["error"]["message"].as_str().unwrap();
+    assert!(msg.contains("SCH-001"), "{msg}");
+    assert!(msg.contains("agc 0.9.1 or later"), "{msg}");
+}
+
+#[test]
 fn verify_requires_both_assurance_documents() {
     let (_dir, bundle) = eval_and_export(&[]);
     fs::remove_file(bundle.join("attestation.intoto.json")).unwrap();

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assurance-spec.invalid/schemas/0.1/agent-evaluation-predicate.schema.json",
+  "$id": "https://agentcarousel.com/spec/schemas/0.1/agent-evaluation-predicate.schema.json",
   "title": "Agent evaluation predicate",
-  "description": "in-toto predicate for predicateType https://assurance-spec.invalid/predicates/agent-evaluation/v0.1 (spec/04-attestation.md). MUST NOT reference MANIFEST.json, which itself lists the statement.",
+  "description": "in-toto predicate for predicateType https://agentcarousel.com/spec/predicates/agent-evaluation/v0.1 (spec/04-attestation.md). MUST NOT reference MANIFEST.json, which itself lists the statement.",
   "type": "object",
   "required": ["run_id", "evaluated_at", "producer", "agent", "configuration", "summary", "limitations", "evidence_documents"],
   "properties": {

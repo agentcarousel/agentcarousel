@@ -394,7 +394,7 @@ agc export -l 1                              # latest run
 agc export <run-id> --sign-key agc.key       # also sign MANIFEST.json with minisign
 ```
 
-The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports, `assessment-results.oscal.json`, `evidence.json` and `attestation.intoto.json` ([assurance spec](https://github.com/agentcarousel/assurance-spec) draft 0.1), and `MANIFEST.json` with a SHA-256 hash of every file.
+The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports, `assessment-results.oscal.json`, `evidence.json` and `attestation.intoto.json` ([AgentCarousel Specification](https://github.com/agentcarousel/assurance-spec) draft 0.1), and `MANIFEST.json` with a SHA-256 hash of every file.
 
 `evidence.json` and the in-toto statement are built from the run record alone: each case's status (including `not_tested`), where its trace came from, how each score was decided (`deterministic`, `golden`, `process`, `llm_judge`), and machine-readable limitations. Runs recorded by earlier versions have no recorded subject, so they export without these two files. `metrics.json` and the compliance reports summarize recent history and are labelled as derived.
 
@@ -427,7 +427,7 @@ agc verify agentcarousel-evidence-<run-id>.tar.gz --minisign-pubkey agc.pub
 
 Recomputes every hash in `MANIFEST.json` and fails on any mismatched, missing, or unlisted file. With `--minisign-pubkey`, a valid `MANIFEST.json.minisig` is also required. Accepts a `.tar.gz` or an extracted bundle directory.
 
-When the bundle carries `evidence.json` and `attestation.intoto.json`, verify also checks them against the assurance spec v0.1: JSON Schemas (resolved locally, no network), semantic rules such as "summary counts equal per-case statuses" and "synthesized tool traces carry a `tool_calls_not_observed` limitation", and cross-document digests. The JSON output reports `conformance`: `conformant`, or `not_present` for older bundles.
+When the bundle carries `evidence.json` and `attestation.intoto.json`, verify also checks them against the AgentCarousel Specification v0.1: JSON Schemas (resolved locally, no network), semantic rules such as "summary counts equal per-case statuses" and "synthesized tool traces carry a `tool_calls_not_observed` limitation", and cross-document digests. The JSON output reports `conformance`: `conformant`, or `not_present` for older bundles. Bundles exported by agc 0.9.0 carry the spec's retired provisional identifiers (`https://assurance-spec.invalid/`) and fail as nonconformant; run `agc export <run-id>` again with 0.9.1 or later to re-create them.
 
 | Result | Meaning |
 |---|---|

@@ -16,7 +16,7 @@ Use **`bundle_id`** and **`bundle_version`** (semver recommended) at the top lev
 - `certification_track` (string, optional): `none`, `candidate`, `stable`, `trusted`.
 - `risk_tier` (string, optional): `low`, `medium`, `high`.
 - `data_handling` (string, optional): `synthetic-only`, `no-pii`, `pii-reviewed`.
-- `agent` (object, optional): declared identity of the agent under test, recorded in run subjects and `evidence.json`. Fields: `id` (required, absolute URI such as a `tag:` URI), `version`, `name`, `description`, `owner`, `framework`, `runtime`, `risk_class`, `tools` (list of `{name, description, scopes}`), `external_ids` (list of `{system, id}`). Mirrors the assurance spec `agent.schema.json`.
+- `agent` (object, optional): declared identity of the agent under test, recorded in run subjects and `evidence.json`. Fields: `id` (required, absolute URI such as a `tag:` URI), `version`, `name`, `description`, `owner`, `framework`, `runtime`, `risk_class`, `tools` (list of `{name, description, scopes}`), `external_ids` (list of `{system, id}`). Mirrors the AgentCarousel Specification `agent.schema.json`.
 - `cases` (array, required): one or more case definitions.
 
 ## defaults

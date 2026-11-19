@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assurance-spec.invalid/schemas/0.1/evidence.schema.json",
+  "$id": "https://agentcarousel.com/spec/schemas/0.1/evidence.schema.json",
   "title": "Agent evaluation evidence",
   "description": "evidence.json: the record of exactly one evaluation run of one agent configuration (spec/03-evidence.md). Semantic rules SEM-001..SEM-008 apply in addition to this schema.",
   "type": "object",
@@ -10,7 +10,7 @@
       "type": "object",
       "required": ["name", "version"],
       "properties": {
-        "name": { "const": "assurance-spec/evidence" },
+        "name": { "const": "agentcarousel-spec/evidence" },
         "version": { "type": "string", "pattern": "^0\\.1\\.(0|[1-9][0-9]*)$" }
       },
       "additionalProperties": false

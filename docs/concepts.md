@@ -145,7 +145,7 @@ data_handling: synthetic-only    # synthetic-only, no-pii, pii-reviewed
 
 These three fields appear in the compliance metrics report (`agc metrics`) and in exported evidence bundles.
 
-`certification_track` is declarative AgentCarousel metadata. It is not part of the open [assurance specification](https://github.com/agentcarousel/assurance-spec), which separates evidence status, assurance profiles, and determinations instead of using one ladder of levels.
+`certification_track` is declarative AgentCarousel metadata. It is not part of the open [AgentCarousel Specification](https://github.com/agentcarousel/assurance-spec), which separates evidence status, assurance profiles, and determinations instead of using one ladder of levels.
 
 ---
 
