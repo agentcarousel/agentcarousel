@@ -117,6 +117,11 @@ struct ReportArgs {
     #[arg(long, default_value = "latest")]
     run_id: String,
 
+    /// With --oscal: href of the OSCAL Assessment Plan (SAP) these results answer,
+    /// e.g. the plan exported from your GRC platform. Written to `import-ap`.
+    #[arg(long, value_name = "HREF", requires = "oscal")]
+    import_ap: Option<String>,
+
     /// Skip per-model filtering and include all models in history.
     /// Useful for historical audit reviews when you want the full multi-model picture.
     #[arg(long)]
@@ -370,6 +375,7 @@ fn run_report(args: ReportArgs, globals: &GlobalOptions, model_filter: Option<&s
             args.skill.as_deref(),
             &resolved_run_id,
             &runs,
+            args.import_ap.as_deref(),
         );
         return match args.out {
             Some(path) => write_output(&path, &content),

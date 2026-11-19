@@ -266,6 +266,7 @@ agc compliance report [flags]
 | `--oscal` | off | Emit an OSCAL Assessment Results JSON artifact |
 | `--out <dir>` | `./compliance-output` | Directory for `--oscal` output files |
 | `--run-id <id>` | `latest` | Run ID to use as the assessment window anchor |
+| `--import-ap <href>` | `agentcarousel://fixture-suite` | With `--oscal`: href of the OSCAL Assessment Plan (e.g. a SAP exported from your GRC platform) written to `import-ap` |
 | `--json` | off | Machine-readable output |
 
 ```bash
@@ -278,6 +279,8 @@ agc compliance report --framework all --json
 # Export OSCAL Assessment Results artifact
 agc compliance report --framework eu-ai-act --oscal --out ./evidence/
 ```
+
+**OSCAL output** validates against the NIST OSCAL 1.1.2 Assessment Results JSON schema (checked in CI). Findings cover only controls exercised by at least one case: `satisfied`, or `not-satisfied` with `reason` `fail` or `partial-evidence`. Controls with no cases appear as open `risks[]` entries, not findings; procedural (non-behavioral) controls are omitted. `reviewed-controls` lists exactly the assessed control IDs.
 
 **Satisfaction threshold:** A control reaches `Satisfied` when pass rate ≥ 0.80 across a minimum of three tagged cases. Controls with fewer than three cases receive `PartialEvidence` regardless of pass rate.
 
@@ -383,14 +386,45 @@ agc compare -l --baseline prod-v1 --threshold 0.05
 
 ## agc export
 
-Package a run as a signed evidence bundle.
+Package a run as an evidence bundle.
 
 ```bash
 agc export <run-id>
-agc export -l       # latest run
+agc export -l 1                              # latest run
+agc export <run-id> --sign-key agc.key       # also sign MANIFEST.json with minisign
 ```
 
-The bundle includes `run.json`, `report.md`, `metrics.json`, `MANIFEST.json`, and a SHA-256 fingerprint of every file.
+The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports, `assessment-results.oscal.json`, and `MANIFEST.json` with a SHA-256 hash of every file.
+
+| Flag | Description |
+|---|---|
+| `-l, --last N` | Export the N most recent runs (max 50) |
+| `-o, --out` | Output path for a single run |
+| `-d, --out-dir` | Output directory with `--last` |
+| `--sign-key` | minisign secret key; writes `MANIFEST.json.minisig` |
+| `--import-ap` | OSCAL Assessment Plan href for `assessment-results.oscal.json` |
+| `--minisign-bin` | minisign binary (default: `minisign`) |
+
+An unsigned manifest proves the files are consistent with each other, not that they are authentic: anyone who edits a file can regenerate the hashes. Sign the manifest when the bundle leaves your hands. For CI, create a passwordless key with `minisign -G -W` and keep the secret key in your CI secret store.
+
+---
+
+## agc verify
+
+Check an evidence bundle produced by `agc export`.
+
+```bash
+agc verify agentcarousel-evidence-<run-id>.tar.gz
+agc verify agentcarousel-evidence-<run-id>.tar.gz --minisign-pubkey agc.pub
+```
+
+Recomputes every hash in `MANIFEST.json` and fails on any mismatched, missing, or unlisted file. With `--minisign-pubkey`, a valid `MANIFEST.json.minisig` is also required. Accepts a `.tar.gz` or an extracted bundle directory.
+
+| Result | Meaning |
+|---|---|
+| `verified` (exit 0) | Hashes match and the signature is valid for the given key |
+| `integrity_only` (exit 0) | Hashes match; no public key given, so authenticity was not checked |
+| failure (exit 1) | Hash mismatch, missing/unlisted file, missing or invalid signature |
 
 ---
 

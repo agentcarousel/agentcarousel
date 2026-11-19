@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Signed evidence manifests** — `agc export --sign-key <minisign.key>` signs `MANIFEST.json` and writes `MANIFEST.json.minisig` into the bundle (`--minisign-bin` to override the binary). Use a key generated with `minisign -G -W` for non-interactive CI signing.
+- **`--import-ap <href>`** on `agc compliance report --oscal` and `agc export` — sets the OSCAL Assessment Results `import-ap` to the assessment plan (SAP) the results answer, so GRC platforms can link them; defaults to `agentcarousel://fixture-suite`.
+- **CI: OSCAL schema conformance** — the offline smoke job validates Assessment Results for every bundled framework, and the AR inside an exported bundle, against the NIST OSCAL 1.1.2 JSON schema, and round-trips `agc export` → `agc verify`.
+- **`agc verify`** — verifies an evidence tarball or extracted directory: recomputes every manifest hash, fails on mismatched, missing, or unlisted files, and with `--minisign-pubkey` requires a valid manifest signature. Reports `verified` or `integrity_only`; tar entries that are links or escape the bundle directory are rejected.
+
+### Changed
+
+- README, METHODOLOGY, and `agc export` help no longer describe unsigned bundles as "signed"; an unsigned SHA-256 manifest proves self-consistency, not authenticity.
+- `agc trust-check --attestation` now shares the minisign verification helper with `agc verify` (no behavior change).
+
+### Fixed
+
+- **OSCAL Assessment Results were not schema-valid.** Output now conforms to the NIST OSCAL 1.1.2 JSON schema: observations carry `methods: ["TEST"]` (was `method: []`), `reviewed-controls` carries `control-selections` with `include-controls` for the assessed controls (was an empty `control-selection`), and finding states are `satisfied`/`not-satisfied` (was `other`).
+- **Findings now cover only assessed controls (behavior change).** Previously every catalog control got a finding, including controls with no cases. Now only controls exercised by at least one case get an observation and finding: `satisfied`, or `not-satisfied` with `reason` `fail` or `partial-evidence`. Uncovered controls stay visible as open `risks[]` entries and in `agc compliance gaps`; procedural controls are omitted. GRC tools ingesting the AR no longer read "never tested" as "tested and failed".
+- `docs/reference.md`: `agc export -l` example now passes the required count (`-l 1`).
+
 ## 0.8.1 — 2026-06-10
 
 **Theme: multi-turn conversation fidelity.**

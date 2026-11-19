@@ -35,7 +35,7 @@ impl ProcessEvaluator {
         }
         eprintln!(
             "WARN: process evaluator will run `{}` from fixture config — only use with trusted fixtures",
-            &command[0]
+            command[0]
         );
         Ok(Self { command })
     }

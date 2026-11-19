@@ -21,6 +21,7 @@ mod generate;
 mod llm_output;
 mod local_config;
 mod metrics;
+mod minisign;
 mod optimize;
 mod output;
 mod pipeline;
@@ -32,6 +33,7 @@ mod test;
 mod trust_check;
 mod update;
 mod validate;
+mod verify;
 #[cfg(feature = "watch")]
 mod watch;
 
@@ -113,8 +115,10 @@ enum Command {
     Publish(publish::PublishArgs),
     /// Promote golden files from a saved run; optionally submit to the registry.
     Promote(promote::PromoteArgs),
-    /// Export run(s) as signed evidence tarballs.
+    /// Export run(s) as evidence tarballs (optionally minisign-signed).
     Export(export::ExportArgs),
+    /// Verify an evidence tarball's manifest hashes and (optionally) its signature.
+    Verify(verify::VerifyArgs),
     /// Check a bundle's trust state in the registry and optionally verify its attestation.
     TrustCheck(trust_check::TrustCheckArgs),
     /// Print a shell completion script to stdout.
@@ -187,6 +191,7 @@ fn help_template() -> String {
     let metrics = c("metrics");
     let compare = c("compare");
     let export = c("export");
+    let verify = c("verify");
     let bundle = c("bundle");
     let publish = c("publish");
     let promote = c("promote");
@@ -238,7 +243,8 @@ Usage:
   {metrics}      Compliance metrics: injection resistance, drift, coverage, calibration
   {compliance}   Per-control compliance attestation reports and gap advisories
   {compare}      Compare two eval runs and gate on regressions (CI regression gate)
-  {export}       Export run(s) as signed evidence tarballs
+  {export}       Export run(s) as evidence tarballs (--sign-key to sign)
+  {verify}       Verify an evidence tarball's hashes and signature
 
 {bu}:
   {bundle}       Pack, verify, or pull fixture bundles
@@ -346,6 +352,7 @@ pub fn run() -> i32 {
         Command::Publish(args) => publish::run_publish(args, &config, &globals),
         Command::Promote(args) => promote::run_promote(args, &config, &globals),
         Command::Export(args) => export::run_export(args, &globals),
+        Command::Verify(args) => verify::run_verify(args, &globals),
         Command::TrustCheck(args) => trust_check::run_trust_check(args, &config, &globals),
         Command::Completions(args) => completions::run_completions(args),
         Command::Update(args) => update::run_update(args),
@@ -370,13 +377,13 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(all(feature = "dashboard", feature = "watch"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(all(feature = "dashboard", not(feature = "watch")))]
-    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(all(not(feature = "dashboard"), feature = "watch"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare doctor completions update\n");
     #[cfg(all(not(feature = "dashboard"), not(feature = "watch")))]
-    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc generate --from-prompt fixtures/my-skill/prompt.md");
     println!("  agc test fixtures/my-skill/");

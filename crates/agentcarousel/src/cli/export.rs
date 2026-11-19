@@ -20,10 +20,13 @@ const SKILL_DEFINITION_SCHEMA: &str = include_str!(concat!(
 use super::exit_codes::ExitCode;
 use super::output::{JsonError, JsonOutput};
 use super::GlobalOptions;
-/// Export run results as a signed evidence archive for audits or sharing.
+/// Export run results as an evidence archive for audits or sharing.
 ///
-/// agc export packages one or more run records (including results, traces, and cryptographic fingerprints) into a .tar.gz archive. Use this to share evidence with auditors, upload to compliance systems, or archive a set of results outside the local history database.
+/// agc export packages one or more run records (including results, traces, and cryptographic fingerprints) into a .tar.gz archive with a SHA-256 MANIFEST.json. Pass --sign-key to also sign the manifest with minisign so recipients can check it with `agc verify --minisign-pubkey`.
 #[derive(Debug, Parser)]
+#[command(
+    after_help = "Examples:\n  agc export --last 1\n  agc export <run-id> --sign-key ~/.minisign/agc.key\n  agc verify agentcarousel-evidence-<run-id>.tar.gz --minisign-pubkey agc.pub"
+)]
 pub struct ExportArgs {
     /// Run id to export (from `report list` or eval/test hint lines; omit with `--last`).
     #[arg(value_name = "RUN_ID")]
@@ -37,12 +40,45 @@ pub struct ExportArgs {
     /// With `--last`, write each tarball under this directory (created if missing; default: cwd).
     #[arg(short = 'd', long, value_name = "DIR")]
     out_dir: Option<PathBuf>,
+    /// minisign secret key used to sign MANIFEST.json (writes MANIFEST.json.minisig).
+    /// For non-interactive use (CI), generate the key with `minisign -G -W`.
+    #[arg(long, value_name = "PATH")]
+    sign_key: Option<PathBuf>,
+    /// minisign binary name/path (default: minisign).
+    #[arg(long, default_value = "minisign")]
+    minisign_bin: String,
+    /// href of the OSCAL Assessment Plan (SAP) the assessment results answer,
+    /// e.g. the plan exported from your GRC platform. Written to `import-ap`.
+    #[arg(long, value_name = "HREF")]
+    import_ap: Option<String>,
+}
+
+/// Optional settings for an export beyond run selection.
+#[derive(Default)]
+pub(crate) struct ExportOptions<'a> {
+    /// Sign MANIFEST.json with this minisign key.
+    pub sign: Option<SignOptions<'a>>,
+    /// OSCAL `import-ap` href for assessment-results.oscal.json.
+    pub import_ap: Option<&'a str>,
+}
+
+/// Manifest-signing settings for an export.
+pub(crate) struct SignOptions<'a> {
+    pub secret_key: &'a Path,
+    pub minisign_bin: &'a str,
 }
 
 const EXPORT_LAST_MAX: usize = 50;
 
 pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
     let json = globals.json;
+    let opts = ExportOptions {
+        sign: args.sign_key.as_deref().map(|secret_key| SignOptions {
+            secret_key,
+            minisign_bin: args.minisign_bin.as_str(),
+        }),
+        import_ap: args.import_ap.as_deref(),
+    };
     let run_id = args.run_id_positional.as_ref();
     match (run_id, args.last) {
         (Some(_), Some(_)) => {
@@ -89,7 +125,7 @@ pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
                 }
                 return ExitCode::RuntimeError.as_i32();
             }
-            match export_run_artifact(run_id, args.out.as_deref()) {
+            match export_run_artifact_with(run_id, args.out.as_deref(), &opts) {
                 Ok(path) => {
                     if json {
                         JsonOutput::ok(
@@ -130,7 +166,7 @@ pub fn run_export(args: ExportArgs, globals: &GlobalOptions) -> i32 {
                 }
                 return ExitCode::RuntimeError.as_i32();
             }
-            match export_last_n(n, args.out_dir.as_deref()) {
+            match export_last_n(n, args.out_dir.as_deref(), &opts) {
                 Ok(paths) => {
                     if json {
                         let strs: Vec<String> =
@@ -170,7 +206,11 @@ fn infer_domain_from_skill(skill: Option<&str>) -> Option<&'static str> {
     }
 }
 
-fn export_last_n(n: usize, out_dir: Option<&Path>) -> Result<Vec<PathBuf>, String> {
+fn export_last_n(
+    n: usize,
+    out_dir: Option<&Path>,
+    opts: &ExportOptions<'_>,
+) -> Result<Vec<PathBuf>, String> {
     if n == 0 || n > EXPORT_LAST_MAX {
         return Err(format!(
             "--last N must be between 1 and {EXPORT_LAST_MAX} (got {n})"
@@ -193,12 +233,20 @@ fn export_last_n(n: usize, out_dir: Option<&Path>) -> Result<Vec<PathBuf>, Strin
     let mut paths = Vec::new();
     for listing in listings {
         let path = base.join(format!("agentcarousel-evidence-{}.tar.gz", listing.id));
-        paths.push(export_run_artifact(&listing.id, Some(&path))?);
+        paths.push(export_run_artifact_with(&listing.id, Some(&path), opts)?);
     }
     Ok(paths)
 }
 
 pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<PathBuf, String> {
+    export_run_artifact_with(run_id, out, &ExportOptions::default())
+}
+
+pub(crate) fn export_run_artifact_with(
+    run_id: &str,
+    out: Option<&Path>,
+    opts: &ExportOptions<'_>,
+) -> Result<PathBuf, String> {
     let run = fetch_run(run_id).map_err(|err| err.to_string())?;
     let root = std::env::temp_dir().join(format!("agentcarousel-evidence-{run_id}"));
     if root.exists() {
@@ -336,6 +384,7 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
         skill,
         run_id,
         &compliance_runs,
+        opts.import_ap,
     );
     let oscal_path = root.join("assessment-results.oscal.json");
     let mut f = fs::File::create(&oscal_path).map_err(|err| err.to_string())?;
@@ -345,6 +394,17 @@ pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<Pa
     let manifest_path = root.join("MANIFEST.json");
     let manifest = build_manifest(&root)?;
     write_json(&manifest_path, &manifest)?;
+    if let Some(sign) = opts.sign.as_ref() {
+        if let Err(err) = super::minisign::sign_file(
+            sign.minisign_bin,
+            sign.secret_key,
+            &manifest_path,
+            &format!("agentcarousel evidence manifest run_id:{run_id}"),
+        ) {
+            fs::remove_dir_all(&root).ok();
+            return Err(err.to_string());
+        }
+    }
 
     let out_path = out
         .map(|path| path.to_path_buf())
@@ -637,7 +697,7 @@ fn fixture_schema_sha256() -> String {
     format!("sha256:{}", hex_lower(hasher.finalize().as_ref()))
 }
 
-fn sha256_file_hex(path: &Path) -> Result<String, String> {
+pub(super) fn sha256_file_hex(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| err.to_string())?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
