@@ -145,6 +145,35 @@ data_handling: synthetic-only    # synthetic-only, no-pii, pii-reviewed
 
 These three fields appear in the compliance metrics report (`agc metrics`) and in exported evidence bundles.
 
+`certification_track` is declarative AgentCarousel metadata. It is not part of the open [assurance specification](https://github.com/agentcarousel/assurance-spec), which separates evidence status, assurance profiles, and determinations instead of using one ladder of levels.
+
+---
+
+## Agent identity and evidence
+
+A fixture can declare the agent it tests:
+
+```yaml
+agent:
+  id: "tag:example.com,2026:agent/vulnerability-remediator"
+  version: "1.4.2"
+  owner: "Security Engineering"
+  tools:
+    - name: servicenow.create_ticket
+      scopes: [write]
+  external_ids:
+    - system: cmdb
+      id: AG-17
+```
+
+Each run records its *subject*: the declared agent, the SHA-256 of every fixture file, the `prompt.md` used for cases without an inline system message, golden files, the generation mode, and judge settings. `agc export` turns this into `evidence.json`. Without an `agent` block, the evidence uses `tag:agentcarousel.com,2026:skill/<skill_or_agent>` as the agent id.
+
+Evidence also records provenance that a single score hides:
+
+- **Trace source.** Model output is `observed` (live or batch) or `mock`. Tool calls are currently always `fixture_expectation`: the runner synthesizes them from `expected.tool_sequence`.
+- **Evaluator class.** Each rubric score says whether a deterministic check, golden diff, process evaluator, or LLM judge decided it, including when the judge fell back to an `auto_check`.
+- **Not tested.** Cases filtered out of a run appear with status `not_tested` and are never counted as passed.
+
 ---
 
 ## Tags

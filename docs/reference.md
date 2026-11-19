@@ -394,7 +394,11 @@ agc export -l 1                              # latest run
 agc export <run-id> --sign-key agc.key       # also sign MANIFEST.json with minisign
 ```
 
-The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports, `assessment-results.oscal.json`, and `MANIFEST.json` with a SHA-256 hash of every file.
+The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports, `assessment-results.oscal.json`, `evidence.json` and `attestation.intoto.json` ([assurance spec](https://github.com/agentcarousel/assurance-spec) draft 0.1), and `MANIFEST.json` with a SHA-256 hash of every file.
+
+`evidence.json` and the in-toto statement are built from the run record alone: each case's status (including `not_tested`), where its trace came from, how each score was decided (`deterministic`, `golden`, `process`, `llm_judge`), and machine-readable limitations. Runs recorded by earlier versions have no recorded subject, so they export without these two files. `metrics.json` and the compliance reports summarize recent history and are labelled as derived.
+
+By default, system messages in `run.json`/`report.md` are replaced by `[system prompt withheld; sha256:…]`, prompt-audit rewrites are omitted, and `prompt.md` is not added. `--include-prompt` discloses them and records the choice in `evidence.json`.
 
 | Flag | Description |
 |---|---|
@@ -404,6 +408,7 @@ The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports,
 | `--sign-key` | minisign secret key; writes `MANIFEST.json.minisig` |
 | `--import-ap` | OSCAL Assessment Plan href for `assessment-results.oscal.json` |
 | `--minisign-bin` | minisign binary (default: `minisign`) |
+| `--include-prompt` | Keep system prompts verbatim and add `prompt.md` (if unchanged since the run) |
 
 An unsigned manifest proves the files are consistent with each other, not that they are authentic: anyone who edits a file can regenerate the hashes. Sign the manifest when the bundle leaves your hands. For CI, create a passwordless key with `minisign -G -W` and keep the secret key in your CI secret store.
 
@@ -420,10 +425,13 @@ agc verify agentcarousel-evidence-<run-id>.tar.gz --minisign-pubkey agc.pub
 
 Recomputes every hash in `MANIFEST.json` and fails on any mismatched, missing, or unlisted file. With `--minisign-pubkey`, a valid `MANIFEST.json.minisig` is also required. Accepts a `.tar.gz` or an extracted bundle directory.
 
+When the bundle carries `evidence.json` and `attestation.intoto.json`, verify also checks them against the assurance spec v0.1: JSON Schemas (resolved locally, no network), semantic rules such as "summary counts equal per-case statuses" and "synthesized tool traces carry a `tool_calls_not_observed` limitation", and cross-document digests. The JSON output reports `conformance`: `conformant`, or `not_present` for older bundles.
+
 | Result | Meaning |
 |---|---|
 | `verified` (exit 0) | Hashes match and the signature is valid for the given key |
 | `integrity_only` (exit 0) | Hashes match; no public key given, so authenticity was not checked |
+| `nonconformant` (exit 1) | Hashes (and signature) match, but `evidence.json` or the statement violates a spec rule; the rule ids are listed |
 | failure (exit 1) | Hash mismatch, missing/unlisted file, missing or invalid signature |
 
 ---
@@ -453,8 +461,9 @@ agc publish <fixture-path> [flags]
 | `--url` | Registry URL |
 | `--all-runs` | Include all historical runs |
 | `--limit <n>` | Cap number of runs to publish |
+| `--include-prompt` | Upload `prompt.md` and export evidence with system prompts included |
 
-Requires `AGENTCAROUSEL_API_TOKEN` in the environment.
+Requires `AGENTCAROUSEL_API_TOKEN` in the environment. By default only the prompt's SHA-256 is reported (`prompt_disclosure: digest_only`); nothing containing prompt text is uploaded. An evidence tarball found on disk is reused as-is, with whatever disclosure it was exported with.
 
 ---
 

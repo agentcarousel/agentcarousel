@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Assurance spec evidence (draft 0.1).** `agc export` writes `evidence.json` and an in-toto Statement v1, `attestation.intoto.json`, following the open [assurance specification](https://github.com/agentcarousel/assurance-spec). Both are built from the single run record. They carry the agent and configuration identity (fixture, prompt, and golden-file digests), each case's status including `not_tested`, trace sources, the evaluator class behind every score, critical failures, and machine-readable limitations. Both are listed in `MANIFEST.json`, so a minisign signature covers them. Export refuses to write documents that fail the spec's own checks.
+- **`agc verify` conformance checks.** Verify validates evidence bundles against the embedded spec schemas, offline, and against the semantic and cross-document rules, and reports `nonconformant` on violations. It reports `not_present` for older bundles.
+- **Agent identity in fixtures.** There is an optional `agent` block (id, version, owner, framework, runtime, risk_class, tools with scopes, external_ids).
+- **Run provenance.** Trace steps record their `source` (`observed`, `mock`, `fixture_expectation`). Rubric scores record how they were decided (`deterministic`, `golden`, `process`, `llm_judge`, `not_evaluated`). Runs record a `subject` with content digests, and cases and rubric scores carry a `critical` flag.
+- **`--include-prompt`** on `agc export` and `agc publish` (see Changed).
 - **Signed evidence manifests** — `agc export --sign-key <minisign.key>` signs `MANIFEST.json` and writes `MANIFEST.json.minisig` into the bundle (`--minisign-bin` to override the binary). Use a key generated with `minisign -G -W` for non-interactive CI signing.
 - **`--import-ap <href>`** on `agc compliance report --oscal` and `agc export` — sets the OSCAL Assessment Results `import-ap` to the assessment plan (SAP) the results answer, so GRC platforms can link them; defaults to `agentcarousel://fixture-suite`.
 - **CI: OSCAL schema conformance** — the offline smoke job validates Assessment Results for every bundled framework, and the AR inside an exported bundle, against the NIST OSCAL 1.1.2 JSON schema, and round-trips `agc export` → `agc verify`.
@@ -11,6 +16,8 @@
 
 ### Changed
 
+- **Prompt disclosure is opt-in (behavior change).** Exported `run.json`/`report.md` replace system messages with a sha256 marker and omit prompt-audit rewrites, and `agc publish` no longer uploads `prompt.md`, unless `--include-prompt` is passed. The nightly showcase publish passes it explicitly.
+- **Filtered cases are recorded as not tested (behavior change).** Cases removed by `--filter`/`--filter-tags`, or never reached, now appear in the run as `skipped` with a `skip_reason`. They stay out of pass rates, latency statistics, compliance control evidence, and the eval exit code. The terminal output folds them into one line unless `-v` is passed.
 - README, METHODOLOGY, and `agc export` help no longer describe unsigned bundles as "signed"; an unsigned SHA-256 manifest proves self-consistency, not authenticity.
 - `agc trust-check --attestation` now shares the minisign verification helper with `agc verify` (no behavior change).
 
