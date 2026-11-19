@@ -54,6 +54,7 @@ impl Evaluator for RulesEvaluator {
                 weight: 1.0,
                 rationale: Some(evaluation.failures.join("; ")),
                 source: Some(ScoreSource::Deterministic),
+                critical: false,
             });
         }
 
@@ -227,6 +228,7 @@ fn score_rubric(case: &Case, trace: &ExecutionTrace) -> Vec<RubricScore> {
                 weight: item.weight,
                 rationale,
                 source: Some(source),
+                critical: item.critical == Some(true),
             }
         })
         .collect()

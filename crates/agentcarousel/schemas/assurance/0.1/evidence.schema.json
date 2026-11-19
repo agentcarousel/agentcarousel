@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assurance-spec.invalid/schemas/0.1/evidence.schema.json",
+  "title": "Agent evaluation evidence",
+  "description": "evidence.json: the record of exactly one evaluation run of one agent configuration (spec/03-evidence.md). Semantic rules SEM-001..SEM-008 apply in addition to this schema.",
+  "type": "object",
+  "required": ["spec", "subject", "execution", "disclosure", "cases", "summary", "limitations"],
+  "properties": {
+    "spec": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "assurance-spec/evidence" },
+        "version": { "type": "string", "pattern": "^0\\.1\\.(0|[1-9][0-9]*)$" }
+      },
+      "additionalProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "required": ["agent", "configuration"],
+      "properties": {
+        "agent": { "$ref": "agent.schema.json" },
+        "configuration": { "$ref": "#/$defs/configuration" }
+      },
+      "additionalProperties": false
+    },
+    "execution": { "$ref": "#/$defs/execution" },
+    "disclosure": { "$ref": "#/$defs/disclosure" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/limitation" }
+    }
+  },
+  "patternProperties": { "^x-": {} },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "Live and batch runs MUST identify the model under test.",
+      "if": {
+        "properties": { "execution": { "properties": { "mode": { "enum": ["live", "batch"] } } } }
+      },
+      "then": {
+        "properties": { "subject": { "properties": { "configuration": { "required": ["model"] } } } }
+      }
+    },
+    {
+      "description": "A withheld system prompt MUST still be identified by digest (INV-7).",
+      "if": {
+        "properties": { "disclosure": { "properties": { "system_prompt": { "const": "digest_only" } } } }
+      },
+      "then": {
+        "properties": { "subject": { "properties": { "configuration": { "required": ["system_prompt"] } } } }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "description": "Lowercase hex SHA-256 with algorithm prefix.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "file_digest": {
+      "type": "object",
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" }
+      },
+      "additionalProperties": false
+    },
+    "implementation": {
+      "description": "Software that produced the document.",
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "uri": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "configuration": {
+      "description": "Configuration identity: exactly what was evaluated (spec/01-agent-identity.md section 3).",
+      "type": "object",
+      "required": ["test_suite"],
+      "properties": {
+        "model": {
+          "type": "object",
+          "required": ["provider", "name"],
+          "properties": {
+            "provider": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "snapshot": {
+              "description": "Provider-reported immutable model version, when available.",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "system_prompt": {
+          "type": "object",
+          "required": ["digest"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "digest": { "$ref": "#/$defs/digest" }
+          },
+          "additionalProperties": false
+        },
+        "test_suite": {
+          "type": "object",
+          "required": ["id", "case_count", "files"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 },
+            "case_count": {
+              "description": "Number of cases defined by the suite, whether or not they were executed.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/file_digest" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "golden_files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/file_digest" }
+        },
+        "judge": {
+          "description": "LLM judge configuration, present when any assertion has evaluator_class llm_judge.",
+          "type": "object",
+          "required": ["model"],
+          "properties": {
+            "provider": { "type": "string", "minLength": 1 },
+            "model": { "type": "string", "minLength": 1 },
+            "temperature": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "patternProperties": { "^x-": {} },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": ["run_id", "mode", "implementation", "started_at"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "mode": {
+          "description": "mock: no model was called. live: the model was called synchronously. batch: the model was called through a provider batch API.",
+          "enum": ["mock", "live", "batch"]
+        },
+        "implementation": { "$ref": "#/$defs/implementation" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "finished_at": { "type": "string", "format": "date-time" },
+        "repetitions": {
+          "description": "Times each case was executed. Cases whose outcome differed across repetitions are 'flaky'.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "environment": {
+          "type": "object",
+          "properties": {
+            "os": { "type": "string" },
+            "arch": { "type": "string" },
+            "source_revision": {
+              "description": "Revision of the repository that held the agent and suite, e.g. a git commit.",
+              "type": "string"
+            },
+            "ci": {
+              "type": "object",
+              "properties": {
+                "provider": { "type": "string" },
+                "run_id": { "type": "string" },
+                "ref": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "disclosure": {
+      "description": "What sensitive material the bundle carries (INV-7).",
+      "type": "object",
+      "required": ["system_prompt", "test_inputs"],
+      "properties": {
+        "system_prompt": {
+          "description": "digest_only: withheld, identified by digest. included: disclosed in the bundle. not_applicable: the configuration has no separate system prompt.",
+          "enum": ["digest_only", "included", "not_applicable"]
+        },
+        "test_inputs": {
+          "description": "included: case inputs appear verbatim. redacted: system messages and secrets are replaced by digests or markers. excluded: no case inputs appear.",
+          "enum": ["included", "redacted", "excluded"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["kind", "evaluator_class", "outcome"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "description": "Assertion kind. Registered values: contains, not_contains, equals, regex, json_path, golden_diff, tool_sequence, rubric, process. Other values MUST be prefixed 'x-'.",
+          "type": "string",
+          "pattern": "^(contains|not_contains|equals|regex|json_path|golden_diff|tool_sequence|rubric|process|x-[a-z0-9_-]+)$"
+        },
+        "evaluator_class": {
+          "description": "How the outcome was decided (INV-4).",
+          "enum": ["deterministic", "golden", "process", "llm_judge"]
+        },
+        "outcome": { "enum": ["pass", "fail", "error", "not_evaluated"] },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "critical": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "case": {
+      "type": "object",
+      "required": ["id", "status", "critical", "trace_sources", "assertions"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": {
+          "enum": ["passed", "failed", "error", "timed_out", "flaky", "not_tested"]
+        },
+        "not_tested_reason": {
+          "description": "Why the case was not executed, e.g. 'excluded_by_filter', 'provider_unavailable'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "critical": {
+          "description": "True when the case carries at least one critical assertion or is designated critical by its suite.",
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "trace_sources": {
+          "description": "Provenance of the execution trace (INV-3).",
+          "type": "object",
+          "required": ["model_output", "tool_calls"],
+          "properties": {
+            "model_output": {
+              "description": "observed: produced by the model under test. mock: supplied by a fixture or mock. none: no output was produced.",
+              "enum": ["observed", "mock", "none"]
+            },
+            "tool_calls": {
+              "description": "observed: tool calls emitted by the agent and captured. fixture_expectation: steps synthesized from the test's expected tool sequence, not emitted by the agent. none: the case involves no tool calls.",
+              "enum": ["observed", "fixture_expectation", "none"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "assertions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/assertion" }
+        },
+        "effectiveness": {
+          "description": "Producer-computed weighted score for the case, 0..1. Informative; status is authoritative.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false,
+      "if": { "properties": { "status": { "const": "not_tested" } } },
+      "then": {
+        "required": ["not_tested_reason"],
+        "properties": {
+          "assertions": { "maxItems": 0 },
+          "trace_sources": {
+            "properties": {
+              "model_output": { "const": "none" },
+              "tool_calls": { "const": "none" }
+            }
+          }
+        }
+      },
+      "else": { "not": { "required": ["not_tested_reason"] } }
+    },
+    "summary": {
+      "description": "Counts per case status. MUST equal the per-case statuses (SEM-001). not_tested is never folded into passed (INV-1).",
+      "type": "object",
+      "required": ["total", "passed", "failed", "error", "timed_out", "flaky", "not_tested", "critical_failures"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 1 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "error": { "type": "integer", "minimum": 0 },
+        "timed_out": { "type": "integer", "minimum": 0 },
+        "flaky": { "type": "integer", "minimum": 0 },
+        "not_tested": { "type": "integer", "minimum": 0 },
+        "critical_failures": {
+          "description": "Critical cases whose status is failed, error, timed_out, or flaky (INV-2, SEM-002).",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitation": {
+      "type": "object",
+      "required": ["code", "detail"],
+      "properties": {
+        "code": {
+          "description": "Registered codes: tool_calls_not_observed, mock_execution, judge_only_assertion, partial_suite. Other codes MUST be prefixed 'x-'.",
+          "type": "string",
+          "pattern": "^(tool_calls_not_observed|mock_execution|judge_only_assertion|partial_suite|x-[a-z0-9_-]+)$"
+        },
+        "detail": { "type": "string", "minLength": 1 },
+        "cases": {
+          "description": "Case ids the limitation applies to. Absent means the whole run.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

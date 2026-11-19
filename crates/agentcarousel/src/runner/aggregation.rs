@@ -6,7 +6,12 @@ use agentcarousel_evaluators::EvaluatorKind;
 use std::collections::{HashMap, HashSet};
 
 /// Not-tested placeholder for a suite case that produced no result (assurance spec INV-1).
-fn not_tested_result(case_id: CaseId, tags: Vec<String>, reason: &str) -> CaseResult {
+fn not_tested_result(
+    case_id: CaseId,
+    tags: Vec<String>,
+    critical: bool,
+    reason: &str,
+) -> CaseResult {
     CaseResult {
         case_id,
         status: CaseStatus::Skipped,
@@ -23,29 +28,54 @@ fn not_tested_result(case_id: CaseId, tags: Vec<String>, reason: &str) -> CaseRe
         discrimination_label: None,
         tags,
         skip_reason: Some(reason.to_string()),
+        critical,
     }
 }
+
+/// A case the runner was asked to execute: id, tags, and whether it is critical.
+pub(super) type PlannedCase = (CaseId, Vec<String>, bool);
 
 /// Record every suite case that has no result: planned cases never reached (e.g. after
 /// `--fail-fast`) as `not_executed`, and filtered-out cases as `excluded_by_filter`.
 pub(super) fn append_not_tested(
     results: &mut Vec<CaseResult>,
-    planned: &[(CaseId, Vec<String>)],
+    planned: &[PlannedCase],
     excluded: Vec<Case>,
 ) {
     let seen: HashSet<String> = results.iter().map(|r| r.case_id.0.clone()).collect();
-    for (case_id, tags) in planned {
+    for (case_id, tags, critical) in planned {
         if !seen.contains(&case_id.0) {
             results.push(not_tested_result(
                 case_id.clone(),
                 tags.clone(),
+                *critical,
                 "not_executed",
             ));
         }
     }
     for case in excluded {
         if !seen.contains(&case.id.0) {
-            results.push(not_tested_result(case.id, case.tags, "excluded_by_filter"));
+            let critical = case.is_critical();
+            results.push(not_tested_result(
+                case.id,
+                case.tags,
+                critical,
+                "excluded_by_filter",
+            ));
+        }
+    }
+}
+
+/// Copy each planned case's criticality onto its result.
+pub(super) fn mark_critical(results: &mut [CaseResult], planned: &[PlannedCase]) {
+    let critical: HashSet<&str> = planned
+        .iter()
+        .filter(|(_, _, critical)| *critical)
+        .map(|(id, _, _)| id.0.as_str())
+        .collect();
+    for result in results.iter_mut() {
+        if critical.contains(result.case_id.0.as_str()) {
+            result.critical = true;
         }
     }
 }
@@ -82,6 +112,7 @@ pub(super) fn aggregate_case_results(
         discrimination_label: None,
         tags: case.tags.clone(),
         skip_reason: None,
+        critical: false,
     }
 }
 
@@ -288,6 +319,7 @@ fn aggregate_eval_scores(
         u32,
         Option<String>,
         Option<agentcarousel_core::ScoreSource>,
+        bool,
     );
     let mut rubric_map: HashMap<String, RubricAccumulator> = HashMap::new();
     for scores in &collected {
@@ -298,6 +330,7 @@ fn aggregate_eval_scores(
                 0,
                 None,
                 None,
+                false,
             ));
             entry.0 += rubric.score;
             entry.2 += 1;
@@ -305,12 +338,13 @@ fn aggregate_eval_scores(
                 entry.3 = rubric.rationale.clone();
             }
             entry.4 = merge_score_source(entry.4, rubric.source);
+            entry.5 |= rubric.critical;
         }
     }
     let rubric_scores = rubric_map
         .into_iter()
         .map(
-            |(rubric_id, (sum_score, weight, count, rationale, source))| RubricScore {
+            |(rubric_id, (sum_score, weight, count, rationale, source, critical))| RubricScore {
                 rubric_id,
                 score: if count == 0 {
                     0.0
@@ -320,6 +354,7 @@ fn aggregate_eval_scores(
                 weight,
                 rationale,
                 source,
+                critical,
             },
         )
         .collect();

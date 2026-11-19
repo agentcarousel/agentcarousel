@@ -268,6 +268,7 @@ pub(crate) fn export_run_artifact_with(
 
     let run_json_path = root.join("run.json");
     write_json(&run_json_path, &run)?;
+    write_assurance_documents(&root, &run, opts.include_prompt)?;
 
     let bundle_lock_path = root.join("fixture_bundle.lock");
     let schema_hash = fixture_schema_sha256();
@@ -405,6 +406,13 @@ pub(crate) fn export_run_artifact_with(
 
     let manifest_path = root.join("MANIFEST.json");
     let manifest = build_manifest(&root)?;
+    let manifest_violations =
+        super::assurance::schema_violations(super::assurance::DocKind::Manifest, &manifest);
+    if let Some(first) = manifest_violations.first() {
+        return Err(format!(
+            "internal error: MANIFEST.json is nonconformant: {first}"
+        ));
+    }
     write_json(&manifest_path, &manifest)?;
     if let Some(sign) = opts.sign.as_ref() {
         if let Err(err) = super::minisign::sign_file(
@@ -744,8 +752,72 @@ pub(super) fn sha256_file_hex(path: &Path) -> Result<String, String> {
     Ok(format!("sha256:{}", hex_lower(hasher.finalize().as_ref())))
 }
 
+/// Write `evidence.json` and `attestation.intoto.json` (assurance spec v0.1), plus
+/// `prompt.md` when disclosure was requested and the recorded digest still matches.
+/// Runs recorded before run subjects existed get neither document; a note says why.
+fn write_assurance_documents(root: &Path, run: &Run, include_prompt: bool) -> Result<(), String> {
+    use super::assurance;
+    let recorded_prompt = run.subject.as_ref().and_then(|s| s.system_prompt.as_ref());
+    let system_prompt = match recorded_prompt {
+        None => "not_applicable",
+        Some(prompt) if include_prompt => {
+            let source = Path::new(&prompt.path);
+            match sha256_file_hex(source) {
+                Ok(digest) if digest == prompt.sha256 => {
+                    fs::copy(source, root.join("prompt.md")).map_err(|err| err.to_string())?;
+                    "included"
+                }
+                _ => {
+                    eprintln!(
+                        "note: {} changed or is missing since the run; prompt not included",
+                        prompt.path
+                    );
+                    "digest_only"
+                }
+            }
+        }
+        Some(_) => "digest_only",
+    };
+    let disclosure = assurance::Disclosure {
+        system_prompt,
+        test_inputs: if include_prompt {
+            "included"
+        } else {
+            "redacted"
+        },
+    };
+    let evidence = match assurance::build_evidence(run, disclosure) {
+        Ok(evidence) => evidence,
+        Err(reason) => {
+            eprintln!("note: {reason}");
+            return Ok(());
+        }
+    };
+    let evidence_path = root.join(assurance::EVIDENCE_FILE);
+    write_json(&evidence_path, &evidence)?;
+    let mut digests = std::collections::BTreeMap::new();
+    for name in [assurance::EVIDENCE_FILE, "run.json"] {
+        digests.insert(name.to_string(), sha256_file_hex(&root.join(name))?);
+    }
+    let documents: Vec<(String, String)> = digests
+        .iter()
+        .map(|(path, digest)| (path.clone(), digest.clone()))
+        .collect();
+    let statement = assurance::build_statement(&evidence, &documents);
+    let violations = assurance::conformance_violations(&evidence, &statement, &digests);
+    if !violations.is_empty() {
+        let list: Vec<String> = violations.iter().map(ToString::to_string).collect();
+        return Err(format!(
+            "internal error: generated assurance evidence is nonconformant: {}",
+            list.join("; ")
+        ));
+    }
+    write_json(&root.join(assurance::STATEMENT_FILE), &statement)
+}
+
 /// Integrity manifest over evidence files (excludes `MANIFEST.json` itself).
 fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
+    let optional = ["evidence.json", "attestation.intoto.json", "prompt.md"];
     let tracked = [
         "run.json",
         "fixture_bundle.lock",
@@ -759,7 +831,8 @@ fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
         "assessment-results.oscal.json",
     ];
     let mut files = Vec::new();
-    for name in tracked {
+    let present_optional = optional.into_iter().filter(|name| root.join(name).exists());
+    for name in tracked.into_iter().chain(present_optional) {
         let path = root.join(name);
         let digest = sha256_file_hex(&path)?;
         files.push(json!({

@@ -54,6 +54,7 @@ fn make_run(id: &str, skill: &str, audit: Option<PromptAudit>) -> Run {
             discrimination_label: None,
             tags: Vec::new(),
             skip_reason: None,
+            critical: false,
         }],
         summary: RunSummary {
             total: 1,

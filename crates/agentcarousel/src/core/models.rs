@@ -143,6 +143,16 @@ pub struct CaseDefaults {
 }
 
 /// Executable example: input messages, expected tool/output assertions, tags, and timeouts.
+impl Case {
+    /// True when any rubric item is marked critical.
+    pub fn is_critical(&self) -> bool {
+        self.expected
+            .rubric
+            .as_ref()
+            .is_some_and(|items| items.iter().any(|item| item.critical == Some(true)))
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Case {
     pub id: CaseId,
@@ -362,6 +372,9 @@ pub struct CaseResult {
     /// Why the case was not executed; set only when `status` is `Skipped`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_reason: Option<String>,
+    /// The case carries at least one critical rubric item (assurance spec INV-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub critical: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -508,6 +521,9 @@ pub struct RubricScore {
     /// evaluator provenance was tracked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<ScoreSource>,
+    /// Copied from the rubric item's `critical` flag.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub critical: bool,
 }
 
 /// Method that produced a [`RubricScore`].

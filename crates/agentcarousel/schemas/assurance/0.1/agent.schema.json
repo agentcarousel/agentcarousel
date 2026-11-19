@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assurance-spec.invalid/schemas/0.1/agent.schema.json",
+  "title": "Agent identity",
+  "description": "Logical identity and declared capabilities of an AI agent (spec/01-agent-identity.md). Stable across deployments; does not identify a model, prompt, or deployment instance.",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": {
+      "description": "Producer-chosen absolute URI naming the logical agent. tag: URIs (RFC 4151) are recommended when the producer has no other naming authority.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:\\S+$"
+    },
+    "version": {
+      "description": "Producer-defined version of the logical agent. Semantic Versioning is recommended.",
+      "type": "string",
+      "minLength": 1
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "owner": {
+      "description": "Accountable team or organization. Not a personal contact address.",
+      "type": "string",
+      "minLength": 1
+    },
+    "framework": {
+      "description": "Agent framework, if any (e.g. \"langgraph\", \"crewai\", \"none\").",
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime": {
+      "description": "Execution runtime or hosting environment class (e.g. \"aws-bedrock\", \"on-prem\").",
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_class": {
+      "description": "Producer-declared risk class. Values are producer-defined until assurance profiles are standardized.",
+      "type": "string",
+      "minLength": 1
+    },
+    "tools": {
+      "description": "Tools the agent is permitted to invoke, with the scopes it is granted.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool" }
+    },
+    "external_ids": {
+      "description": "Identifiers for this agent in other systems (inventories, GRC platforms, registries).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/external_id" }
+    }
+  },
+  "patternProperties": { "^x-": {} },
+  "additionalProperties": false,
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "scopes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "patternProperties": { "^x-": {} },
+      "additionalProperties": false
+    },
+    "external_id": {
+      "type": "object",
+      "required": ["system", "id"],
+      "properties": {
+        "system": {
+          "description": "Name of the external system (e.g. \"servicenow-cmdb\").",
+          "type": "string",
+          "minLength": 1
+        },
+        "id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

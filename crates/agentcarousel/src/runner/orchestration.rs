@@ -184,6 +184,7 @@ fn make_error_result(
         discrimination_label: None,
         tags,
         skip_reason: None,
+        critical: false,
     }
 }
 
@@ -343,6 +344,7 @@ fn map_batch_results(
                     discrimination_label: None,
                     tags,
                     skip_reason: None,
+                    critical: false,
                 }
             })
             .collect(),
@@ -557,6 +559,7 @@ pub(super) async fn run_eval_cases(
                     discrimination_label: None,
                     tags: case.tags.clone(),
                     skip_reason: None,
+                    critical: false,
                 });
 
             if result.status == CaseStatus::Passed {

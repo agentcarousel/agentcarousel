@@ -108,6 +108,7 @@ impl Evaluator for ProcessEvaluator {
                 weight: 1.0,
                 rationale: score.rationale,
                 source: Some(ScoreSource::Process),
+                critical: false,
             })
             .collect();
         let effectiveness_score = if rubric_scores.is_empty() {

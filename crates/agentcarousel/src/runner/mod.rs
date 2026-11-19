@@ -91,12 +91,10 @@ pub struct EvalConfig {
     pub progress: bool,
 }
 
-fn planned_case_ids(
-    cases: &[agentcarousel_core::Case],
-) -> Vec<(agentcarousel_core::CaseId, Vec<String>)> {
+fn planned_case_ids(cases: &[agentcarousel_core::Case]) -> Vec<aggregation::PlannedCase> {
     cases
         .iter()
-        .map(|case| (case.id.clone(), case.tags.clone()))
+        .map(|case| (case.id.clone(), case.tags.clone(), case.is_critical()))
         .collect()
 }
 
@@ -120,6 +118,7 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
     } else {
         orchestration::run_parallel(cases, &mock_engine, &config).await
     };
+    aggregation::mark_critical(&mut results, &planned);
     aggregation::append_not_tested(&mut results, &planned, excluded);
 
     let summary = aggregation::build_summary(&results);
@@ -177,6 +176,7 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
 
     let mut results =
         orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
+    aggregation::mark_critical(&mut results, &planned);
     aggregation::append_not_tested(&mut results, &planned, excluded);
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();

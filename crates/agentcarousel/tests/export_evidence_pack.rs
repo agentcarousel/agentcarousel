@@ -46,6 +46,7 @@ fn minimal_run(id: &str, started_at: chrono::DateTime<Utc>) -> Run {
         discrimination_label: None,
         tags: Vec::new(),
         skip_reason: None,
+        critical: false,
     };
     Run {
         id: RunId(id.to_string()),

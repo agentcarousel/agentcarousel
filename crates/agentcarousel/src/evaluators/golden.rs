@@ -81,6 +81,7 @@ impl Evaluator for GoldenEvaluator {
                     ratio, self.threshold
                 )),
                 source: Some(ScoreSource::Golden),
+                critical: false,
             }],
             effectiveness_score: ratio,
             passed,

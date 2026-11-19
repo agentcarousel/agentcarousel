@@ -45,6 +45,7 @@ fn run_with_embedded_api_error() -> Run {
         discrimination_label: None,
         tags: Vec::new(),
         skip_reason: None,
+        critical: false,
     };
     Run {
         id: RunId("test-report-show-humanize".to_string()),

@@ -210,6 +210,7 @@ impl Evaluator for JudgeEvaluator {
                             weight: item.weight,
                             rationale,
                             source: Some(source),
+                            critical: item.critical == Some(true),
                         }
                     })
                     .collect()

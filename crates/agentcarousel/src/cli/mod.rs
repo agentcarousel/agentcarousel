@@ -1,4 +1,5 @@
 mod ab;
+mod assurance;
 mod audit;
 mod batch_cmd;
 mod bundle;
