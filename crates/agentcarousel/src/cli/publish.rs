@@ -118,16 +118,16 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
 
     if args.dry_run {
         let selected_run_id = selected_run_ids.first().cloned().unwrap_or_default();
+        // A dry run reports which evidence would be used; it never exports.
         let evidence_hint = if let Some(path) = &args.evidence {
-            path.clone()
+            path.display().to_string()
         } else if selected_run_id.is_empty() {
-            PathBuf::from("<none>")
+            "<none>".to_string()
         } else {
-            locate_or_export_evidence(
-                &selected_run_id,
-                meta.skill_or_agent.as_deref(),
-                args.include_prompt,
-            )?
+            match locate_existing_evidence(&selected_run_id, meta.skill_or_agent.as_deref()) {
+                Some(path) => path.display().to_string(),
+                None => format!("<would export agentcarousel-evidence-{selected_run_id}.tar.gz>"),
+            }
         };
         return Ok(json!({
             "mode": "dry-run",
@@ -136,7 +136,7 @@ fn publish_bundle(args: PublishArgs, config: &ResolvedConfig) -> Result<Value, S
             "run_id": selected_run_id,
             "run_ids": selected_run_ids,
             "run_count": selected_run_ids.len(),
-            "evidence": evidence_hint.display().to_string(),
+            "evidence": evidence_hint,
             "prompt_disclosure": prompt_disclosure,
             "prompt_sha256": prompt_sha256,
             "bundle_id": meta.bundle_id,
@@ -325,11 +325,8 @@ fn matching_run_ids(
     Ok(ids)
 }
 
-fn locate_or_export_evidence(
-    run_id: &str,
-    skill_or_agent: Option<&str>,
-    include_prompt: bool,
-) -> Result<PathBuf, String> {
+/// An evidence tarball already on disk for this run, if any.
+fn locate_existing_evidence(run_id: &str, skill_or_agent: Option<&str>) -> Option<PathBuf> {
     let mut candidates = Vec::new();
     if let Some(skill) = skill_or_agent {
         candidates.push(PathBuf::from(format!(
@@ -342,14 +339,20 @@ fn locate_or_export_evidence(
     candidates.push(PathBuf::from(format!(
         "agentcarousel-evidence-{run_id}.tar.gz"
     )));
-    for candidate in &candidates {
-        if candidate.exists() {
-            eprintln!(
-                "note: using existing evidence {}; its prompt disclosure was fixed when it was exported",
-                candidate.display()
-            );
-            return Ok(candidate.to_path_buf());
-        }
+    candidates.into_iter().find(|candidate| candidate.exists())
+}
+
+fn locate_or_export_evidence(
+    run_id: &str,
+    skill_or_agent: Option<&str>,
+    include_prompt: bool,
+) -> Result<PathBuf, String> {
+    if let Some(existing) = locate_existing_evidence(run_id, skill_or_agent) {
+        eprintln!(
+            "note: using existing evidence {}; its prompt disclosure was fixed when it was exported",
+            existing.display()
+        );
+        return Ok(existing);
     }
     export_run_artifact_with(
         run_id,
