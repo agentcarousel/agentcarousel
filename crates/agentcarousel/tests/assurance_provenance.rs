@@ -188,3 +188,87 @@ fn filtered_out_cases_are_recorded_as_not_tested() {
     assert_eq!(run.summary.passed, 1);
     assert!((run.summary.pass_rate - 1.0).abs() < f32::EPSILON);
 }
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+#[test]
+fn runs_record_subject_digests_and_declared_agent() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("fixtures/coverage-demo")).unwrap();
+    fs::create_dir_all(dir.path().join("mocks")).unwrap();
+    let cases = TWO_CASES.replace(
+        "defaults:\n",
+        "agent:\n  id: \"tag:example.com,2026:agent/coverage-demo\"\n  version: \"2.1.0\"\n  tools:\n    - name: search\n      scopes: [read]\n  external_ids:\n    - system: inventory\n      id: AG-17\ndefaults:\n",
+    );
+    let cases_path = dir.path().join("fixtures/coverage-demo/cases.yaml");
+    fs::write(&cases_path, &cases).unwrap();
+    let prompt = "You answer pings.";
+    fs::write(dir.path().join("fixtures/coverage-demo/prompt.md"), prompt).unwrap();
+    fs::write(dir.path().join("mocks/coverage-demo.json"), TWO_MOCKS).unwrap();
+    let history = dir.path().join("history.db");
+    // `agc validate` reads schemas/ from the working directory.
+    fs::create_dir_all(dir.path().join("schemas")).unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("schemas/skill-definition.schema.json"),
+        dir.path().join("schemas/skill-definition.schema.json"),
+    )
+    .unwrap();
+
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["validate", "fixtures/coverage-demo/cases.yaml"])
+        .assert()
+        .success();
+
+    let assert = Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(dir.path())
+        .env("AGENTCAROUSEL_HISTORY_DB", &history)
+        .args([
+            "eval",
+            "fixtures/coverage-demo/cases.yaml",
+            "--execution-mode",
+            "mock",
+            "--filter",
+            "coverage-demo/kept",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).to_string();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("json envelope");
+    let run_id = envelope["data"]["id"].as_str().expect("run id").to_string();
+    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
+    let run = fetch_run(&run_id).expect("fetch run");
+    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+
+    let subject = run.subject.expect("run subject");
+    assert_eq!(subject.generation_mode.as_deref(), Some("mock"));
+    assert_eq!(subject.suite_case_count, 2, "filtered cases still count");
+    assert_eq!(subject.fixture_files.len(), 1);
+    assert_eq!(
+        subject.fixture_files[0].sha256,
+        format!("sha256:{}", sha256_hex(cases.as_bytes()))
+    );
+    let system_prompt = subject.system_prompt.expect("prompt.md digest");
+    assert_eq!(system_prompt.path, "fixtures/coverage-demo/prompt.md");
+    assert_eq!(
+        system_prompt.sha256,
+        format!("sha256:{}", sha256_hex(prompt.as_bytes()))
+    );
+    let agent = subject.agent.expect("declared agent");
+    assert_eq!(agent.id, "tag:example.com,2026:agent/coverage-demo");
+    assert_eq!(agent.tools[0].scopes, vec!["read".to_string()]);
+    assert_eq!(agent.external_ids[0].id, "AG-17");
+    assert!(subject.judge.is_none());
+}

@@ -190,6 +190,7 @@ mod tests {
             risk_tier: None,
             data_handling: None,
             excluded_cases: Vec::new(),
+            agent: None,
         };
         f = apply_tag_filter(f, Some(&["negative".into()]));
         assert_eq!(f.cases.len(), 1);
@@ -213,6 +214,7 @@ mod tests {
             risk_tier: None,
             data_handling: None,
             excluded_cases: Vec::new(),
+            agent: None,
         };
         f = apply_tag_filter(f, Some(&["smoke".into()]));
         assert_eq!(f.cases.len(), 2);

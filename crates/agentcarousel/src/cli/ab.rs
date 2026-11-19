@@ -747,6 +747,7 @@ mod tests {
             risk_tier: None,
             data_handling: None,
             excluded_cases: Vec::new(),
+            agent: None,
         }
     }
 

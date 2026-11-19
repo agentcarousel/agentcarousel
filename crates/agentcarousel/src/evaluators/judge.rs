@@ -17,6 +17,9 @@ use crate::providers::{
     OpenAiMessage, OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
 };
 
+/// Sampling temperature for every judge call; recorded in run subjects (assurance spec §1.3).
+pub const JUDGE_TEMPERATURE: f32 = 0.2;
+
 static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 
 fn shared_blocking_client() -> &'static reqwest::blocking::Client {
@@ -334,7 +337,7 @@ fn call_gemini_blocking(
             parts: vec![GeminiPart { text: user_prompt }],
         }],
         generation_config: GeminiGenerationConfig {
-            temperature: 0.2,
+            temperature: JUDGE_TEMPERATURE,
             max_output_tokens: max_tokens,
             response_mime_type: Some("application/json".to_string()),
         },
@@ -431,7 +434,7 @@ fn call_openai_blocking(
                 content: user_prompt,
             },
         ],
-        temperature: 0.2,
+        temperature: JUDGE_TEMPERATURE,
         max_tokens,
         response_format: Some(OpenAiResponseFormat {
             format_type: "json_object".to_string(),
@@ -525,7 +528,7 @@ fn call_anthropic_blocking(
             role: "user".to_string(),
             content: user_prompt,
         }],
-        temperature: 0.2,
+        temperature: JUDGE_TEMPERATURE,
     };
     let client = shared_blocking_client();
     let retry = retry_policy();
@@ -609,7 +612,7 @@ fn call_openrouter_blocking(
                 content: user_prompt,
             },
         ],
-        temperature: 0.2,
+        temperature: JUDGE_TEMPERATURE,
         max_tokens,
         response_format: Some(OpenAiResponseFormat {
             format_type: "json_object".to_string(),

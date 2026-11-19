@@ -45,10 +45,94 @@ pub struct FixtureFile {
     pub certification_track: Option<CertificationTrack>,
     pub risk_tier: Option<RiskTier>,
     pub data_handling: Option<DataHandling>,
+    /// Declared logical identity of the agent under test (assurance spec §1.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentDescriptor>,
     /// Cases removed by `--filter` / `--filter-tags`. Not part of the file format; runners
     /// record them as not tested (`CaseStatus::Skipped`) so a run never hides suite cases.
     #[serde(skip)]
     pub excluded_cases: Vec<Case>,
+}
+
+/// Logical agent identity, mirroring the assurance spec `agent.schema.json`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgentDescriptor {
+    /// Absolute URI naming the logical agent (e.g. a `tag:` URI).
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_class: Option<String>,
+    /// Tools the agent is permitted to call, with granted scopes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<AgentTool>,
+    /// Identifiers for this agent in other systems (inventories, GRC platforms).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_ids: Vec<AgentExternalId>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgentTool {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgentExternalId {
+    pub system: String,
+    pub id: String,
+}
+
+/// A file identified by path and content digest (`sha256:<hex>` of its raw bytes).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct FileDigest {
+    pub path: String,
+    pub sha256: String,
+}
+
+/// Judge settings that affect scores.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct JudgeSettings {
+    pub model: String,
+    pub temperature: f32,
+}
+
+/// What exactly a run evaluated: the configuration identity of assurance spec §1.3.
+/// Recorded at run time so evidence can be bound to content digests.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct RunSubject {
+    /// Declared agent identity, when every fixture in the run declares the same one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentDescriptor>,
+    /// `mock`, `live`, or `batch`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_mode: Option<String>,
+    /// Every fixture file in the suite, including cases later filtered out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixture_files: Vec<FileDigest>,
+    /// Number of cases the suite defines (executed or not).
+    #[serde(default)]
+    pub suite_case_count: u32,
+    /// `prompt.md` used for cases without an inline system message, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<FileDigest>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub golden_files: Vec<FileDigest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge: Option<JudgeSettings>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -198,6 +282,10 @@ pub struct Run {
     /// design, model capability, or fixture miscalibration, and emits actionable fixes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_audit: Option<PromptAudit>,
+    /// Configuration identity and content digests (assurance spec §1.3). `None` on runs
+    /// recorded before subjects were captured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<RunSubject>,
 }
 
 /// Root-cause classification produced by the prompt-audit judge pass.

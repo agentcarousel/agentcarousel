@@ -90,6 +90,7 @@ fn make_run(id: &str, skill: &str, audit: Option<PromptAudit>) -> Run {
         runner_mock_strict: false,
         runner_mock_only: true,
         prompt_audit: audit,
+        subject: None,
     }
 }
 

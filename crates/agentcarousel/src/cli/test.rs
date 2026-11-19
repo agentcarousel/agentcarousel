@@ -65,8 +65,8 @@ pub struct TestArgs {
 pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
     let fixture_paths = collect_fixture_paths(&args.paths);
     let mut fixtures = Vec::new();
-    for path in fixture_paths {
-        match load_fixture(&path) {
+    for path in &fixture_paths {
+        match load_fixture(path) {
             Ok(fixture) => {
                 let fixture = apply_case_filter(fixture, args.filter.as_deref());
                 let fixture = apply_tag_filter(fixture, args.filter_tags.as_deref());
@@ -121,7 +121,9 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
         .enable_time()
         .build()
         .expect("tokio runtime");
-    let run = runtime.block_on(run_fixtures(fixtures, runner_config));
+    let subject = super::subject::build_run_subject(&fixture_paths, &fixtures, "mock", None);
+    let mut run = runtime.block_on(run_fixtures(fixtures, runner_config));
+    run.subject = Some(subject);
 
     let _ = persist_run(&run);
 

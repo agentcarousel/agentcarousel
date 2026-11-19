@@ -29,6 +29,7 @@ mod promote;
 mod publish;
 mod registry_client;
 mod report;
+mod subject;
 mod test;
 mod trust_check;
 mod update;
