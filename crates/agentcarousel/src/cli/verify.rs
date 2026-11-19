@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use super::assurance;
 use super::exit_codes::ExitCode;
 use super::export::sha256_file_hex;
 use super::minisign::{self, MinisignError};
@@ -19,6 +20,10 @@ const MANIFEST: &str = "MANIFEST.json";
 /// unlisted files, and — with --minisign-pubkey — checks the manifest signature.
 /// Without a public key only integrity is checked: anyone who edits the files can
 /// regenerate an unsigned manifest, so treat that result as "consistent", not "authentic".
+///
+/// When the bundle carries evidence.json and attestation.intoto.json, also checks them
+/// against the assurance spec v0.1 (schemas, SEM-* and XDOC-* rules) without network access;
+/// a violation reports `nonconformant`.
 #[derive(Debug, Parser)]
 #[command(
     after_help = "Examples:\n  agc verify agentcarousel-evidence-<run-id>.tar.gz\n  agc verify agentcarousel-evidence-<run-id>.tar.gz --minisign-pubkey agc.pub\n  agc verify ./extracted-evidence-dir --minisign-pubkey agc.pub"
@@ -39,6 +44,9 @@ pub struct VerifyArgs {
 enum VerifyError {
     /// Evidence was read but failed integrity or signature checks.
     Failed(Vec<String>),
+    /// Integrity (and signature, if checked) passed, but the assurance documents violate
+    /// the spec.
+    Nonconformant(Vec<String>),
     /// Evidence could not be read or the tool could not run.
     Runtime(String),
 }
@@ -50,6 +58,15 @@ pub fn run_verify(args: VerifyArgs, globals: &GlobalOptions) -> i32 {
                 JsonOutput::ok("verify", report).print();
             } else {
                 let files = report["files_verified"].as_u64().unwrap_or(0);
+                match report["conformance"].as_str() {
+                    Some("conformant") => println!(
+                        "assurance spec {}: evidence.json and attestation.intoto.json conform",
+                        assurance::SPEC_VERSION
+                    ),
+                    _ => println!(
+                        "note: no assurance evidence (evidence.json) in this bundle; spec conformance not checked"
+                    ),
+                }
                 match report["status"].as_str() {
                     Some("verified") => {
                         println!("verified: {files} file(s) match MANIFEST.json; signature valid")
@@ -75,6 +92,23 @@ pub fn run_verify(args: VerifyArgs, globals: &GlobalOptions) -> i32 {
                 .print();
             } else {
                 eprintln!("verification FAILED:");
+                for p in &problems {
+                    eprintln!("  - {p}");
+                }
+            }
+            ExitCode::Failed.as_i32()
+        }
+        Err(VerifyError::Nonconformant(problems)) => {
+            if globals.json {
+                JsonOutput::err(
+                    "verify",
+                    JsonError::new("nonconformant", problems.join("; ")),
+                )
+                .print();
+            } else {
+                eprintln!(
+                    "nonconformant: integrity ok, but the assurance documents violate the spec:"
+                );
                 for p in &problems {
                     eprintln!("  - {p}");
                 }
@@ -150,6 +184,7 @@ fn verify(args: &VerifyArgs) -> Result<Value, VerifyError> {
     if !problems.is_empty() {
         return Err(VerifyError::Failed(problems));
     }
+    let conformance = check_conformance(&root, &listed)?;
     let status = if signature == "valid" {
         "verified"
     } else {
@@ -160,7 +195,48 @@ fn verify(args: &VerifyArgs) -> Result<Value, VerifyError> {
         "status": status,
         "signature": signature,
         "files_verified": listed.len(),
+        "conformance": conformance,
+        "spec_version": assurance::SPEC_VERSION,
     }))
+}
+
+/// Spec §5 steps 6-9 on a bundle whose integrity already checked out. Returns
+/// `conformant`, or `not_present` for bundles exported before assurance evidence existed.
+fn check_conformance(root: &Path, listed: &BTreeSet<String>) -> Result<&'static str, VerifyError> {
+    let has_evidence = listed.contains(assurance::EVIDENCE_FILE);
+    let has_statement = listed.contains(assurance::STATEMENT_FILE);
+    if !has_evidence && !has_statement {
+        return Ok("not_present");
+    }
+    if !(has_evidence && has_statement) {
+        return Err(VerifyError::Nonconformant(vec![format!(
+            "BND-005: bundle must carry both {} and {}",
+            assurance::EVIDENCE_FILE,
+            assurance::STATEMENT_FILE
+        )]));
+    }
+    let read = |name: &str| -> Result<Value, VerifyError> {
+        let raw = fs::read(root.join(name)).map_err(|e| VerifyError::Runtime(e.to_string()))?;
+        serde_json::from_slice(&raw).map_err(|e| {
+            VerifyError::Nonconformant(vec![format!("SCH-001: {name} is not valid JSON: {e}")])
+        })
+    };
+    let evidence = read(assurance::EVIDENCE_FILE)?;
+    let statement = read(assurance::STATEMENT_FILE)?;
+    let mut digests = std::collections::BTreeMap::new();
+    for path in listed {
+        let digest =
+            sha256_file_hex(&root.join(path)).map_err(|e| VerifyError::Runtime(e.to_string()))?;
+        digests.insert(path.clone(), digest);
+    }
+    let violations = assurance::conformance_violations(&evidence, &statement, &digests);
+    if violations.is_empty() {
+        Ok("conformant")
+    } else {
+        Err(VerifyError::Nonconformant(
+            violations.iter().map(ToString::to_string).collect(),
+        ))
+    }
 }
 
 /// Extract only regular files and directories; `unpack_in` refuses paths that

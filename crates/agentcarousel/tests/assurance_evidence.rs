@@ -254,3 +254,79 @@ fn export_with_include_prompt_discloses_prompt_file() {
         .iter()
         .any(|f| f["path"] == "prompt.md"));
 }
+
+fn verify_json(bundle: &Path) -> (bool, Value) {
+    let out = bin()
+        .args(["verify", bundle.to_str().unwrap(), "--json"])
+        .output()
+        .unwrap();
+    let value: Value = serde_json::from_slice(&out.stdout).expect("verify json");
+    (out.status.success(), value)
+}
+
+/// Rewrite MANIFEST.json so integrity passes again after editing files (what a forger
+/// without the signing key can always do).
+fn regenerate_manifest(bundle: &Path) {
+    let manifest_path = bundle.join("MANIFEST.json");
+    let mut manifest = read_json(&manifest_path);
+    let files: Vec<Value> = manifest["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| bundle.join(f["path"].as_str().unwrap()).exists())
+        .map(|f| {
+            let path = f["path"].as_str().unwrap();
+            serde_json::json!({ "path": path, "sha256": format!("sha256:{}", sha256(&bundle.join(path))) })
+        })
+        .collect();
+    manifest["files"] = Value::Array(files);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn verify_reports_conformant_bundle() {
+    let (_dir, bundle) = eval_and_export(&[]);
+    let (ok, v) = verify_json(&bundle);
+    assert!(ok, "{v}");
+    assert_eq!(v["data"]["status"], "integrity_only", "{v}");
+    assert_eq!(v["data"]["conformance"], "conformant", "{v}");
+}
+
+#[test]
+fn verify_flags_doctored_evidence_even_with_regenerated_manifest() {
+    let (_dir, bundle) = eval_and_export(&[]);
+    // Fold the not-tested case into passed (an INV-1 violation) and fix up the manifest.
+    let path = bundle.join("evidence.json");
+    let mut evidence = read_json(&path);
+    evidence["summary"]["passed"] = serde_json::json!(2);
+    evidence["summary"]["not_tested"] = serde_json::json!(0);
+    fs::write(&path, serde_json::to_string_pretty(&evidence).unwrap()).unwrap();
+    regenerate_manifest(&bundle);
+
+    let (ok, v) = verify_json(&bundle);
+    assert!(!ok, "doctored evidence must not verify: {v}");
+    assert_eq!(v["error"]["code"], "nonconformant", "{v}");
+    let msg = v["error"]["message"].as_str().unwrap();
+    assert!(msg.contains("SEM-001"), "{msg}");
+    assert!(
+        msg.contains("XDOC-001"),
+        "statement digest no longer matches: {msg}"
+    );
+}
+
+#[test]
+fn verify_requires_both_assurance_documents() {
+    let (_dir, bundle) = eval_and_export(&[]);
+    fs::remove_file(bundle.join("attestation.intoto.json")).unwrap();
+    regenerate_manifest(&bundle);
+    let (ok, v) = verify_json(&bundle);
+    assert!(!ok, "{v}");
+    assert!(
+        v["error"]["message"].as_str().unwrap().contains("BND-005"),
+        "{v}"
+    );
+}
