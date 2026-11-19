@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assurance-spec.invalid/schemas/0.1/evidence-manifest.schema.json",
+  "$id": "https://agentcarousel.com/spec/schemas/0.1/evidence-manifest.schema.json",
   "title": "Evidence bundle manifest",
   "description": "MANIFEST.json: the integrity index of an evidence bundle (spec/04-attestation.md). Lists every file in the bundle except MANIFEST.json and its detached signature.",
   "type": "object",

@@ -1,5 +1,5 @@
-//! Assurance spec v0.1 documents: build `evidence.json` and its in-toto statement from a
-//! single [`Run`], and check documents against the embedded schemas, the semantic rules
+//! AgentCarousel Specification v0.1 documents: build `evidence.json` and its in-toto statement
+//! from a single [`Run`], and check documents against the embedded schemas, the semantic rules
 //! (SEM-001..SEM-008) and the cross-document rules (XDOC-001..XDOC-003).
 //!
 //! Every value in the evidence is derived from the run record alone (spec INV-5); nothing is
@@ -8,12 +8,16 @@ use agentcarousel_core::{CaseResult, CaseStatus, Run, ScoreSource, StepKind, Tra
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-pub(crate) const SPEC_NAME: &str = "assurance-spec/evidence";
+pub(crate) const SPEC_NAME: &str = "agentcarousel-spec/evidence";
 pub(crate) const SPEC_VERSION: &str = "0.1.0";
 pub(crate) const STATEMENT_TYPE: &str = "https://in-toto.io/Statement/v1";
 pub(crate) const PREDICATE_TYPE: &str =
-    "https://assurance-spec.invalid/predicates/agent-evaluation/v0.1";
-const SCHEMA_BASE: &str = "https://assurance-spec.invalid/schemas/0.1/";
+    "https://agentcarousel.com/spec/predicates/agent-evaluation/v0.1";
+const SCHEMA_BASE: &str = "https://agentcarousel.com/spec/schemas/0.1/";
+/// Provisional identifiers emitted only by agc 0.9.0, before the spec was named. The spec
+/// retired them (VERSIONING.md): documents that use them are an unsupported draft.
+const LEGACY_SPEC_NAME: &str = "assurance-spec/evidence";
+const LEGACY_BASE: &str = "https://assurance-spec.invalid/";
 const IMPLEMENTATION_NAME: &str = "agentcarousel";
 const IMPLEMENTATION_URI: &str = "https://github.com/agentcarousel/agentcarousel";
 /// Naming authority for fallback agent ids when a fixture declares no `agent` block.
@@ -819,6 +823,16 @@ pub(crate) fn conformance_violations(
     statement: &Value,
     file_digests: &BTreeMap<String, String>,
 ) -> Vec<Violation> {
+    if uses_legacy_identifiers(evidence, statement) {
+        return vec![Violation::new(
+            "SCH-001",
+            format!(
+                "bundle uses the provisional identifiers of agc 0.9.0 ({LEGACY_BASE}), an \
+                 unsupported draft; re-export the run with agc 0.9.1 or later \
+                 (`agc export <run-id>`)"
+            ),
+        )];
+    }
     let mut out = schema_violations(DocKind::Evidence, evidence);
     out.extend(schema_violations(DocKind::Statement, statement));
     if out.is_empty() {
@@ -826,6 +840,14 @@ pub(crate) fn conformance_violations(
         out.extend(cross_document_violations(evidence, statement, file_digests));
     }
     out
+}
+
+fn uses_legacy_identifiers(evidence: &Value, statement: &Value) -> bool {
+    evidence.pointer("/spec/name").and_then(Value::as_str) == Some(LEGACY_SPEC_NAME)
+        || statement
+            .get("predicateType")
+            .and_then(Value::as_str)
+            .is_some_and(|t| t.starts_with(LEGACY_BASE))
 }
 
 #[cfg(test)]

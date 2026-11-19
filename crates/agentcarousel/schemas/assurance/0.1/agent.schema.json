@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assurance-spec.invalid/schemas/0.1/agent.schema.json",
+  "$id": "https://agentcarousel.com/spec/schemas/0.1/agent.schema.json",
   "title": "Agent identity",
   "description": "Logical identity and declared capabilities of an AI agent (spec/01-agent-identity.md). Stable across deployments; does not identify a model, prompt, or deployment instance.",
   "type": "object",

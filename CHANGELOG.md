@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1 — 2026-11-19
+
+### Changed
+
+- **The spec is named the [AgentCarousel Specification](https://github.com/agentcarousel/assurance-spec), and its identifiers moved (behavior change for draft evidence).** `evidence.json` and `attestation.intoto.json` now use the base `https://agentcarousel.com/spec/`: `spec.name` is `agentcarousel-spec/evidence` and the in-toto `predicateType` is `https://agentcarousel.com/spec/predicates/agent-evaluation/v0.1`. The provisional `https://assurance-spec.invalid/` identifiers written by 0.9.0 are retired by the spec. `agc verify` reports such bundles as nonconformant with a hint; run `agc export <run-id>` again to re-create them from local history. Manifest hashes and signatures are unaffected.
+
 ## 0.9.0 — 2026-11-18
 
 ### Added
