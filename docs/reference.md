@@ -398,6 +398,8 @@ The bundle includes `run.json`, `report.md`, `metrics.json`, compliance reports,
 
 `evidence.json` and the in-toto statement are built from the run record alone: each case's status (including `not_tested`), where its trace came from, how each score was decided (`deterministic`, `golden`, `process`, `llm_judge`), and machine-readable limitations. Runs recorded by earlier versions have no recorded subject, so they export without these two files. `metrics.json` and the compliance reports summarize recent history and are labelled as derived.
 
+Assertion outcomes in `evidence.json` are conservative. A rubric item counts as `pass` only at a score of 0.9 or higher (the ✅ threshold in `report.md`), while case status follows the effectiveness threshold (default 0.7). A case can therefore be `passed` while some of its judge-scored assertions show `fail`; every assertion also carries its raw `score`.
+
 By default, system messages in `run.json`/`report.md` are replaced by `[system prompt withheld; sha256:…]`, prompt-audit rewrites are omitted, and `prompt.md` is not added. `--include-prompt` discloses them and records the choice in `evidence.json`.
 
 | Flag | Description |
