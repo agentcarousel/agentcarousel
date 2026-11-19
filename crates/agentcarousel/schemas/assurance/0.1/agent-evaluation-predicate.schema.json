@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assurance-spec.invalid/schemas/0.1/agent-evaluation-predicate.schema.json",
+  "title": "Agent evaluation predicate",
+  "description": "in-toto predicate for predicateType https://assurance-spec.invalid/predicates/agent-evaluation/v0.1 (spec/04-attestation.md). MUST NOT reference MANIFEST.json, which itself lists the statement.",
+  "type": "object",
+  "required": ["run_id", "evaluated_at", "producer", "agent", "configuration", "summary", "limitations", "evidence_documents"],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "producer": { "$ref": "evidence.schema.json#/$defs/implementation" },
+    "agent": { "$ref": "agent.schema.json" },
+    "configuration": { "$ref": "evidence.schema.json#/$defs/configuration" },
+    "summary": { "$ref": "evidence.schema.json#/$defs/summary" },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "evidence.schema.json#/$defs/limitation" }
+    },
+    "evidence_documents": {
+      "description": "Digests of the evidence documents this statement summarizes. MUST include evidence.json.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "evidence.schema.json#/$defs/file_digest" },
+      "contains": {
+        "type": "object",
+        "properties": { "path": { "const": "evidence.json" } },
+        "required": ["path"]
+      }
+    }
+  },
+  "additionalProperties": false
+}

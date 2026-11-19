@@ -45,6 +45,94 @@ pub struct FixtureFile {
     pub certification_track: Option<CertificationTrack>,
     pub risk_tier: Option<RiskTier>,
     pub data_handling: Option<DataHandling>,
+    /// Declared logical identity of the agent under test (assurance spec §1.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentDescriptor>,
+    /// Cases removed by `--filter` / `--filter-tags`. Not part of the file format; runners
+    /// record them as not tested (`CaseStatus::Skipped`) so a run never hides suite cases.
+    #[serde(skip)]
+    pub excluded_cases: Vec<Case>,
+}
+
+/// Logical agent identity, mirroring the assurance spec `agent.schema.json`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgentDescriptor {
+    /// Absolute URI naming the logical agent (e.g. a `tag:` URI).
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_class: Option<String>,
+    /// Tools the agent is permitted to call, with granted scopes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<AgentTool>,
+    /// Identifiers for this agent in other systems (inventories, GRC platforms).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_ids: Vec<AgentExternalId>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgentTool {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgentExternalId {
+    pub system: String,
+    pub id: String,
+}
+
+/// A file identified by path and content digest (`sha256:<hex>` of its raw bytes).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct FileDigest {
+    pub path: String,
+    pub sha256: String,
+}
+
+/// Judge settings that affect scores.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct JudgeSettings {
+    pub model: String,
+    pub temperature: f32,
+}
+
+/// What exactly a run evaluated: the configuration identity of assurance spec §1.3.
+/// Recorded at run time so evidence can be bound to content digests.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct RunSubject {
+    /// Declared agent identity, when every fixture in the run declares the same one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentDescriptor>,
+    /// `mock`, `live`, or `batch`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_mode: Option<String>,
+    /// Every fixture file in the suite, including cases later filtered out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixture_files: Vec<FileDigest>,
+    /// Number of cases the suite defines (executed or not).
+    #[serde(default)]
+    pub suite_case_count: u32,
+    /// `prompt.md` used for cases without an inline system message, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<FileDigest>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub golden_files: Vec<FileDigest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge: Option<JudgeSettings>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -55,6 +143,16 @@ pub struct CaseDefaults {
 }
 
 /// Executable example: input messages, expected tool/output assertions, tags, and timeouts.
+impl Case {
+    /// True when any rubric item is marked critical.
+    pub fn is_critical(&self) -> bool {
+        self.expected
+            .rubric
+            .as_ref()
+            .is_some_and(|items| items.iter().any(|item| item.critical == Some(true)))
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Case {
     pub id: CaseId,
@@ -194,6 +292,10 @@ pub struct Run {
     /// design, model capability, or fixture miscalibration, and emits actionable fixes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_audit: Option<PromptAudit>,
+    /// Configuration identity and content digests (assurance spec §1.3). `None` on runs
+    /// recorded before subjects were captured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<RunSubject>,
 }
 
 /// Root-cause classification produced by the prompt-audit judge pass.
@@ -267,6 +369,12 @@ pub struct CaseResult {
     pub discrimination_label: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// Why the case was not executed; set only when `status` is `Skipped`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
+    /// The case carries at least one critical rubric item (assurance spec INV-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub critical: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -274,6 +382,8 @@ pub struct CaseResult {
 pub enum CaseStatus {
     Passed,
     Failed,
+    /// Defined by the suite but not executed (see [`CaseResult::skip_reason`]). Never counted
+    /// as passed; excluded from pass-rate denominators.
     Skipped,
     Flaky,
     TimedOut,
@@ -304,6 +414,23 @@ pub struct TraceStep {
     pub tokens_in: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u32>,
+    /// Provenance of this step (assurance spec INV-3). `None` on runs recorded before
+    /// provenance was tracked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<TraceSource>,
+}
+
+/// Where a [`TraceStep`] came from.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TraceSource {
+    /// Emitted by the model or agent under test and captured by the runner.
+    Observed,
+    /// Supplied by a fixture mock rather than a real tool or model.
+    Mock,
+    /// Synthesized by the runner from the case's own `expected.tool_sequence`; shows nothing
+    /// about what the agent would actually call.
+    FixtureExpectation,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -390,6 +517,29 @@ pub struct RubricScore {
     pub weight: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rationale: Option<String>,
+    /// How the score was decided (assurance spec INV-4). `None` on runs recorded before
+    /// evaluator provenance was tracked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ScoreSource>,
+    /// Copied from the rubric item's `critical` flag.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub critical: bool,
+}
+
+/// Method that produced a [`RubricScore`].
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScoreSource {
+    /// A rule or pattern check (`auto_check`, output assertions, tool-sequence checks).
+    Deterministic,
+    /// Similarity against a golden reference output.
+    Golden,
+    /// An external process evaluator.
+    Process,
+    /// An LLM judge.
+    LlmJudge,
+    /// Nothing scored this item (e.g. no auto_check and no judge score); its 0.0 is a placeholder.
+    NotEvaluated,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

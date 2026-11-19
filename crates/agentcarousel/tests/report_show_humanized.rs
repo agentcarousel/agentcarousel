@@ -44,6 +44,8 @@ fn run_with_embedded_api_error() -> Run {
         discrimination_score: None,
         discrimination_label: None,
         tags: Vec::new(),
+        skip_reason: None,
+        critical: false,
     };
     Run {
         id: RunId("test-report-show-humanize".to_string()),
@@ -90,6 +92,7 @@ fn run_with_embedded_api_error() -> Run {
         runner_mock_strict: false,
         runner_mock_only: true,
         prompt_audit: None,
+        subject: None,
     }
 }
 

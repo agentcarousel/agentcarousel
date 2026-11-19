@@ -33,7 +33,9 @@ A satisfied control means *behavioral test evidence exists for the scenarios tes
 
 ## What the signed bundle proves — and what it doesn't
 
-`agc export` produces a self-contained evidence tarball: fixtures, per-case results, judge rationales, metrics, OSCAL assessment results, and a `MANIFEST.json` with a SHA-256 hash of every file. With `agc export --sign-key`, the manifest is also signed with minisign, and `agc verify --minisign-pubkey` checks both hashes and signature offline. Registry attestations are signed and can be verified offline against the issuer's public key with `agc trust-check` — no account required.
+`agc export` produces a self-contained evidence tarball. It holds per-case results, judge rationales, metrics, OSCAL assessment results, an `evidence.json` and an in-toto `attestation.intoto.json` that follow the open [agent assurance specification](https://github.com/agentcarousel/assurance-spec) (draft 0.1), and a `MANIFEST.json` with a SHA-256 hash of every file. Fixture files are not included; `evidence.json` identifies them, the system prompt, and any golden files by SHA-256 digest, so a holder of the suite can confirm what was tested. With `agc export --sign-key`, the manifest is also signed with minisign. `agc verify --minisign-pubkey` checks the hashes, the signature, and the spec conformance of the evidence, all offline. `agc trust-check` is different: it queries the registry for a bundle's trust state, so it needs network access.
+
+System prompts are withheld by default: exported runs replace system messages with their digest, and `agc publish` uploads `prompt.md` only with `--include-prompt`.
 
 **This proves (for a signed bundle verified against a key you trust):** the bundle is exactly what was produced at export time. Nothing was edited, added, or removed afterward. Anyone you hand it to can verify that independently. An unsigned manifest only shows the files are self-consistent — whoever edits them can regenerate the hashes.
 
@@ -43,4 +45,6 @@ A satisfied control means *behavioral test evidence exists for the scenarios tes
 
 - Judge scores carry variance; treat absolute numbers with skepticism and trends with confidence.
 - Fixture coverage is only as good as the scenarios you (or `agc generate`) wrote. Coverage metrics measure breadth against your own suite, not against the real world.
-- Behavioral evidence is point-in-time: it describes a specific system prompt and model version on a specific date. Model or prompt changes invalidate it — re-run the suite.
+- Behavioral evidence is point-in-time: it describes a specific system prompt and model version on a specific date. Model or prompt changes invalidate it — re-run the suite. `evidence.json` records the prompt, fixture, and golden-file digests so a consumer can tell when evidence no longer matches a configuration.
+- **Tool calls are not observed.** The runner builds tool-call steps from each case's own `expected.tool_sequence` and answers them from mocks; it does not yet capture tool calls the agent actually makes. `tool_sequence` assertions therefore check the fixture, not the agent. Evidence marks these traces `fixture_expectation` and carries a `tool_calls_not_observed` limitation; do not cite them as proof of tool-use behavior.
+- Cases removed by `--filter`/`--filter-tags` are recorded as not tested (`skipped`) rather than dropped, so a filtered run never looks like a full one.

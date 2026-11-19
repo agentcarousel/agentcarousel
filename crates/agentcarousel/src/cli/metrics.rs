@@ -852,7 +852,7 @@ fn compute_phi_leakage_rate(runs: &[agentcarousel_core::Run]) -> MetricResult {
             })
             .unwrap_or(false);
 
-        for case in &run.cases {
+        for case in run.cases.iter().filter(|c| c.status != CaseStatus::Skipped) {
             let case_lo = case.case_id.0.to_lowercase();
             let is_phi_case = run_is_phi || case_lo.contains("phi");
 
@@ -877,7 +877,7 @@ fn compute_phi_leakage_rate(runs: &[agentcarousel_core::Run]) -> MetricResult {
             })
             .unwrap_or(false);
 
-        for case in &run.cases {
+        for case in run.cases.iter().filter(|c| c.status != CaseStatus::Skipped) {
             let case_lo = case.case_id.0.to_lowercase();
             let already_counted = run_is_phi || case_lo.contains("phi");
             if already_counted {

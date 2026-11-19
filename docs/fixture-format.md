@@ -16,6 +16,7 @@ Use **`bundle_id`** and **`bundle_version`** (semver recommended) at the top lev
 - `certification_track` (string, optional): `none`, `candidate`, `stable`, `trusted`.
 - `risk_tier` (string, optional): `low`, `medium`, `high`.
 - `data_handling` (string, optional): `synthetic-only`, `no-pii`, `pii-reviewed`.
+- `agent` (object, optional): declared identity of the agent under test, recorded in run subjects and `evidence.json`. Fields: `id` (required, absolute URI such as a `tag:` URI), `version`, `name`, `description`, `owner`, `framework`, `runtime`, `risk_class`, `tools` (list of `{name, description, scopes}`), `external_ids` (list of `{system, id}`). Mirrors the assurance spec `agent.schema.json`.
 - `cases` (array, required): one or more case definitions.
 
 ## defaults
@@ -71,6 +72,8 @@ Prefer tags in all new fixtures and examples.
 - `args_match` (object): partial JSON match for tool args.
 - `order` (string): `strict`, `subsequence`, or `unordered`.
 
+Note: the runner does not yet observe the agent's real tool calls. It emits each expected call as a trace step (source `fixture_expectation`) and answers it from mocks, so these assertions validate the fixture rather than the agent. Exported evidence carries a `tool_calls_not_observed` limitation for such cases.
+
 ### output assertions
 
 - `kind` (string): `contains`, `not_contains`, `equals`, `regex`, `json_path`,
@@ -100,5 +103,4 @@ Prefer tags in all new fixtures and examples.
 - Template: `templates/fixture-skeleton.yaml`
 - Bundle manifest template: `templates/bundle-manifest-skeleton.json`
 - Intake: open a GitHub issue using the checklist in [CONTRIBUTING.md](https://github.com/agentcarousel/agentcarousel/blob/main/CONTRIBUTING.md) before large additions
-- Tag examples: [`docs/fixture-tag-examples.md`](fixture-tag-examples.md)
-- Example fixtures: [`fixtures/regex-builder/`](../fixtures/regex-builder/)
+- Example fixtures: [`fixtures/ambient-scribe/`](../fixtures/ambient-scribe/), [`fixtures/github-actions-generator/`](../fixtures/github-actions-generator/)

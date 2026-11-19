@@ -108,8 +108,8 @@ pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &Globa
 
     let fixture_paths = collect_fixture_paths(&args.paths);
     let mut fixtures = Vec::new();
-    for path in fixture_paths {
-        match load_fixture(&path) {
+    for path in &fixture_paths {
+        match load_fixture(path) {
             Ok(fixture) => {
                 let fixture = apply_case_filter(fixture, args.filter.as_deref());
                 let fixture = apply_tag_filter(fixture, args.filter_tags.as_deref());
@@ -351,7 +351,18 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         .enable_time()
         .build()
         .expect("tokio runtime");
+    let subject = super::subject::build_run_subject(
+        &fixture_paths,
+        &fixtures,
+        match args.execution_mode {
+            EvalExecutionMode::Mock => "mock",
+            EvalExecutionMode::Live => "live",
+            EvalExecutionMode::Batch => "batch",
+        },
+        judge_enabled.then_some(judge_model.as_str()),
+    );
     let mut run = runtime.block_on(run_eval(fixtures, eval_config));
+    run.subject = Some(subject);
 
     // Discrimination pass: run blank/degraded variants and attach scores to cases.
     if let (Some(disc_fixtures), Some(disc_runner)) =
@@ -528,16 +539,20 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
 }
 
 fn has_eval_failures(run: &agentcarousel_core::Run, threshold: f32) -> bool {
-    run.cases.iter().any(|case| {
-        matches!(
-            case.status,
-            CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
-        ) || case
-            .eval_scores
-            .as_ref()
-            .map(|scores| scores.effectiveness_score < threshold)
-            .unwrap_or(true)
-    })
+    // Not-tested cases carry no scores; they are reported, not failed.
+    run.cases
+        .iter()
+        .filter(|case| case.status != CaseStatus::Skipped)
+        .any(|case| {
+            matches!(
+                case.status,
+                CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
+            ) || case
+                .eval_scores
+                .as_ref()
+                .map(|scores| scores.effectiveness_score < threshold)
+                .unwrap_or(true)
+        })
 }
 
 fn cli_invocation_name() -> String {

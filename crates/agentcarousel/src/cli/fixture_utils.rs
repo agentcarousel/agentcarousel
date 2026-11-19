@@ -37,15 +37,16 @@ pub fn apply_case_filter(mut fixture: FixtureFile, filter: Option<&str>) -> Fixt
     let id_matcher = Glob::new(filter)
         .ok()
         .map(|pattern| pattern.compile_matcher());
-    let cases: Vec<Case> = fixture
-        .cases
-        .into_iter()
-        .filter(|case| match &id_matcher {
-            Some(matcher) => matcher.is_match(&case.id.0),
-            None => true,
-        })
-        .collect();
-    fixture.cases = cases;
+    let (kept, excluded): (Vec<Case>, Vec<Case>) =
+        fixture
+            .cases
+            .into_iter()
+            .partition(|case| match &id_matcher {
+                Some(matcher) => matcher.is_match(&case.id.0),
+                None => true,
+            });
+    fixture.cases = kept;
+    fixture.excluded_cases.extend(excluded);
     fixture
 }
 
@@ -55,11 +56,13 @@ pub fn apply_tag_filter(mut fixture: FixtureFile, tags: Option<&[String]>) -> Fi
         return fixture;
     };
     let normalized_needles: Vec<String> = tag_list.iter().map(|t| normalize_tag(t)).collect();
-    fixture.cases.retain(|case| {
+    let (kept, excluded): (Vec<Case>, Vec<Case>) = fixture.cases.into_iter().partition(|case| {
         normalized_needles
             .iter()
             .any(|needle| case.tags.iter().any(|tag| normalize_tag(tag) == *needle))
     });
+    fixture.cases = kept;
+    fixture.excluded_cases.extend(excluded);
     fixture
 }
 
@@ -186,6 +189,8 @@ mod tests {
             certification_track: None,
             risk_tier: None,
             data_handling: None,
+            excluded_cases: Vec::new(),
+            agent: None,
         };
         f = apply_tag_filter(f, Some(&["negative".into()]));
         assert_eq!(f.cases.len(), 1);
@@ -208,11 +213,19 @@ mod tests {
             certification_track: None,
             risk_tier: None,
             data_handling: None,
+            excluded_cases: Vec::new(),
+            agent: None,
         };
         f = apply_tag_filter(f, Some(&["smoke".into()]));
         assert_eq!(f.cases.len(), 2);
         assert_eq!(f.cases[0].id.0, "demo/a");
         assert_eq!(f.cases[1].id.0, "demo/b");
+        assert_eq!(
+            f.excluded_cases.len(),
+            1,
+            "filtered cases are kept for not_tested"
+        );
+        assert_eq!(f.excluded_cases[0].id.0, "demo/c");
     }
 
     #[test]

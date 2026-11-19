@@ -353,7 +353,15 @@ pub fn print_terminal(run: &Run, verbose: bool) {
         .unwrap_or(0)
         .max(40);
 
+    let not_tested = run
+        .cases
+        .iter()
+        .filter(|c| c.status == CaseStatus::Skipped)
+        .count();
     for case in &run.cases {
+        if case.status == CaseStatus::Skipped && !verbose {
+            continue;
+        }
         let label = case_label(&case.case_id.0);
         let secs = case_duration_secs(case);
         let pad = col_w.saturating_sub(label.chars().count());
@@ -433,6 +441,13 @@ pub fn print_terminal(run: &Run, verbose: bool) {
                 );
             }
         }
+    }
+    if not_tested > 0 && !verbose {
+        println!(
+            "    {}  {} case(s) not tested (filtered out or not reached; -v to list)",
+            style("\u{23ed}").yellow(),
+            not_tested
+        );
     }
 
     let s = &run.summary;

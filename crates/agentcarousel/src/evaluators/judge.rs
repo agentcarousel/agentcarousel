@@ -1,7 +1,7 @@
 use agentcarousel_core::{
     compute_backoff_ms, is_retryable_status, judge_key_candidates, judge_provider_from_model,
     retry_policy, AuditFinding, Case, CaseResult, CaseStatus, EvalScores, JudgeProvider,
-    PromptAudit, PromptAuditFailureMode, RubricScore,
+    PromptAudit, PromptAuditFailureMode, RubricScore, ScoreSource,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -16,6 +16,9 @@ use crate::providers::{
     GeminiGenerationConfig, GeminiPart, GeminiRequest, GeminiResponse, GeminiSystemInstruction,
     OpenAiMessage, OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
 };
+
+/// Sampling temperature for every judge call; recorded in run subjects (assurance spec §1.3).
+pub const JUDGE_TEMPERATURE: f32 = 0.2;
 
 static BLOCKING_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 
@@ -182,20 +185,23 @@ impl Evaluator for JudgeEvaluator {
                     .iter()
                     .map(|item| {
                         let mut rationale = None;
-                        let score = if let Some(judge_score) = judge_scores.get(&item.id) {
+                        let (score, source) = if let Some(judge_score) = judge_scores.get(&item.id)
+                        {
                             rationale = judge_score.rationale.clone();
-                            judge_score.score.clamp(0.0, 1.0)
+                            (judge_score.score.clamp(0.0, 1.0), ScoreSource::LlmJudge)
                         } else if let Some(auto_check) = item.auto_check.as_ref() {
-                            match check_output(auto_check, &result.trace) {
+                            // Judge omitted this item; the deterministic auto_check decides it.
+                            let score = match check_output(auto_check, &result.trace) {
                                 Ok(()) => 1.0,
                                 Err(err) => {
                                     rationale = Some(err);
                                     0.0
                                 }
-                            }
+                            };
+                            (score, ScoreSource::Deterministic)
                         } else {
                             rationale = Some("judge missing rubric score".to_string());
-                            0.0
+                            (0.0, ScoreSource::NotEvaluated)
                         };
 
                         RubricScore {
@@ -203,6 +209,8 @@ impl Evaluator for JudgeEvaluator {
                             score,
                             weight: item.weight,
                             rationale,
+                            source: Some(source),
+                            critical: item.critical == Some(true),
                         }
                     })
                     .collect()
@@ -330,7 +338,7 @@ fn call_gemini_blocking(
             parts: vec![GeminiPart { text: user_prompt }],
         }],
         generation_config: GeminiGenerationConfig {
-            temperature: 0.2,
+            temperature: JUDGE_TEMPERATURE,
             max_output_tokens: max_tokens,
             response_mime_type: Some("application/json".to_string()),
         },
@@ -427,7 +435,7 @@ fn call_openai_blocking(
                 content: user_prompt,
             },
         ],
-        temperature: 0.2,
+        temperature: JUDGE_TEMPERATURE,
         max_tokens,
         response_format: Some(OpenAiResponseFormat {
             format_type: "json_object".to_string(),
@@ -521,7 +529,7 @@ fn call_anthropic_blocking(
             role: "user".to_string(),
             content: user_prompt,
         }],
-        temperature: 0.2,
+        temperature: JUDGE_TEMPERATURE,
     };
     let client = shared_blocking_client();
     let retry = retry_policy();
@@ -605,7 +613,7 @@ fn call_openrouter_blocking(
                 content: user_prompt,
             },
         ],
-        temperature: 0.2,
+        temperature: JUDGE_TEMPERATURE,
         max_tokens,
         response_format: Some(OpenAiResponseFormat {
             format_type: "json_object".to_string(),

@@ -226,9 +226,10 @@ jobs:
               [ "$IMPROVED" = "true" ] && SHOULD_TAG=true
             fi
 
-            # Publish run to registry (non-fatal)
+            # Publish run to registry (non-fatal). --include-prompt is a deliberate
+            # disclosure: these public showcase bundles display their prompt on the site.
             if [ -n "$AGENTCAROUSEL_REGISTRY_URL" ] && [ -n "$AGENTCAROUSEL_API_TOKEN" ]; then
-              ./target/release/agentcarousel publish "fixtures/${skill}/" --json \
+              ./target/release/agentcarousel publish "fixtures/${skill}/" --include-prompt --json \
                 > "eval-results/${skill}.publish.json" 2>&1 \
                 || echo "::notice::Registry publish skipped for ${skill}"
             fi

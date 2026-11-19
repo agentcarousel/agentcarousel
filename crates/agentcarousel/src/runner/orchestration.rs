@@ -83,6 +83,19 @@ pub(super) fn bundle_metadata(fixtures: &[FixtureFile]) -> (Option<String>, Opti
     (bundle_id, bundle_version)
 }
 
+/// Cases removed by filters, with fixture defaults applied (so their tags are recorded).
+pub fn excluded_cases(fixtures: &[FixtureFile]) -> Vec<Case> {
+    let mut cases = Vec::new();
+    for fixture in fixtures {
+        for case in &fixture.excluded_cases {
+            let mut case = case.clone();
+            apply_defaults(&mut case, &fixture.defaults);
+            cases.push(case);
+        }
+    }
+    cases
+}
+
 pub fn flatten_cases(fixtures: Vec<FixtureFile>) -> Vec<Case> {
     let mut cases = Vec::new();
     for fixture in fixtures {
@@ -170,6 +183,8 @@ fn make_error_result(
         discrimination_score: None,
         discrimination_label: None,
         tags,
+        skip_reason: None,
+        critical: false,
     }
 }
 
@@ -328,6 +343,8 @@ fn map_batch_results(
                     discrimination_score: None,
                     discrimination_label: None,
                     tags,
+                    skip_reason: None,
+                    critical: false,
                 }
             })
             .collect(),
@@ -541,6 +558,8 @@ pub(super) async fn run_eval_cases(
                     discrimination_score: None,
                     discrimination_label: None,
                     tags: case.tags.clone(),
+                    skip_reason: None,
+                    critical: false,
                 });
 
             if result.status == CaseStatus::Passed {

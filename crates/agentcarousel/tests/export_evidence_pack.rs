@@ -45,6 +45,8 @@ fn minimal_run(id: &str, started_at: chrono::DateTime<Utc>) -> Run {
         discrimination_score: None,
         discrimination_label: None,
         tags: Vec::new(),
+        skip_reason: None,
+        critical: false,
     };
     Run {
         id: RunId(id.to_string()),
@@ -91,6 +93,7 @@ fn minimal_run(id: &str, started_at: chrono::DateTime<Utc>) -> Run {
         runner_mock_strict: false,
         runner_mock_only: true,
         prompt_audit: None,
+        subject: None,
     }
 }
 
@@ -500,5 +503,107 @@ fn export_signs_with_password_protected_key_and_keeps_json_stdout_clean() {
 fn persist_run_with_db(history_path: &std::path::Path, run_id: &str) {
     std::env::set_var("AGENTCAROUSEL_HISTORY_DB", history_path);
     persist_run(&minimal_run(run_id, Utc::now())).expect("persist run");
+    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+}
+
+const PROMPT_SENTINEL: &str = "SENTINEL-SYSTEM-PROMPT-7f3a";
+
+fn run_with_prompt_material(id: &str) -> Run {
+    let mut run = minimal_run(id, Utc::now());
+    run.cases[0].input = vec![
+        agentcarousel::Message {
+            role: agentcarousel::Role::System,
+            content: format!("You are a careful agent. {PROMPT_SENTINEL}"),
+        },
+        agentcarousel::Message {
+            role: agentcarousel::Role::User,
+            content: "hello".to_string(),
+        },
+    ];
+    run.prompt_audit = Some(agentcarousel::PromptAudit {
+        failure_mode: agentcarousel::PromptAuditFailureMode::Prompt,
+        confidence: 0.5,
+        findings: Vec::new(),
+        suggested_fixes: vec!["Tighten the instructions.".to_string()],
+        suggested_implementations: vec![format!("## Instructions\n{PROMPT_SENTINEL}")],
+        suggested_locations: vec![format!("## Rules {PROMPT_SENTINEL}")],
+        overall_rationale: "test".to_string(),
+        judge_tokens_in: None,
+        judge_tokens_out: None,
+    });
+    run
+}
+
+/// Extracts the tarball and returns the concatenated contents of every file in it.
+fn tarball_text(root: &std::path::Path, tarball: &std::path::Path) -> String {
+    let dir = tempfile::tempdir().expect("extract dir");
+    let status = Command::new("tar")
+        .current_dir(root)
+        .args(["-xzf", tarball.to_str().unwrap(), "-C"])
+        .arg(dir.path())
+        .output()
+        .expect("tar extract");
+    assert!(status.status.success());
+    let mut text = String::new();
+    let mut stack = vec![dir.path().to_path_buf()];
+    while let Some(path) = stack.pop() {
+        for entry in fs::read_dir(&path).expect("read dir") {
+            let entry = entry.expect("entry");
+            let p = entry.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                text.push_str(&String::from_utf8_lossy(&fs::read(&p).expect("read file")));
+            }
+        }
+    }
+    text
+}
+
+#[test]
+fn export_withholds_prompt_material_by_default_and_discloses_on_request() {
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let (history_path, _config_path) = temp_paths();
+    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
+    let run_id = "export-prompt-disclosure";
+    persist_run(&run_with_prompt_material(run_id)).expect("persist run");
+
+    let root = workspace_root();
+    let default_out = root.join("target/export-prompt-default.tar.gz");
+    let disclosed_out = root.join("target/export-prompt-disclosed.tar.gz");
+    for (out, extra) in [
+        (&default_out, None),
+        (&disclosed_out, Some("--include-prompt")),
+    ] {
+        let _ = fs::remove_file(out);
+        let mut cmd = Command::cargo_bin("agentcarousel").unwrap();
+        cmd.current_dir(&root)
+            .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
+            .args(["export", run_id, "--out", out.to_str().expect("out")]);
+        if let Some(flag) = extra {
+            cmd.arg(flag);
+        }
+        cmd.assert().success();
+    }
+
+    let withheld = tarball_text(&root, &default_out);
+    assert!(
+        !withheld.contains(PROMPT_SENTINEL),
+        "default export leaked prompt text"
+    );
+    assert!(
+        withheld.contains("[system prompt withheld; sha256:"),
+        "default export should mark the withheld system prompt"
+    );
+    assert!(withheld.contains("Tighten the instructions."));
+
+    let disclosed = tarball_text(&root, &disclosed_out);
+    assert!(
+        disclosed.contains(PROMPT_SENTINEL),
+        "--include-prompt export should carry the prompt"
+    );
+
+    let _ = fs::remove_file(&default_out);
+    let _ = fs::remove_file(&disclosed_out);
     std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
 }
