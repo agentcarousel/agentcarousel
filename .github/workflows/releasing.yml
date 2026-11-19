@@ -126,7 +126,7 @@ jobs:
             linker: ""
           # macOS Apple Silicon (native)
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-15
             archive: tar.gz
             name: darwin_arm64
             can_run: true
