@@ -1,4 +1,4 @@
-use agentcarousel_core::{Case, CaseResult, EvalScores, RubricItem, RubricScore};
+use agentcarousel_core::{Case, CaseResult, EvalScores, RubricItem, RubricScore, ScoreSource};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use similar::TextDiff;
@@ -80,6 +80,7 @@ impl Evaluator for GoldenEvaluator {
                     "similarity {:.2} (threshold {:.2})",
                     ratio, self.threshold
                 )),
+                source: Some(ScoreSource::Golden),
             }],
             effectiveness_score: ratio,
             passed,

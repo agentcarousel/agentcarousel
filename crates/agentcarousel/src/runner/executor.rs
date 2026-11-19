@@ -2,7 +2,7 @@ use super::sandbox::Sandbox;
 use super::tracer::{SecretScrubber, Tracer};
 use super::{generator, GenerationMode, RunnerConfig};
 use agentcarousel_core::{
-    Case, CaseResult, CaseStatus, ExecutionTrace, Metrics, StepKind, TraceStep,
+    Case, CaseResult, CaseStatus, ExecutionTrace, Metrics, StepKind, TraceSource, TraceStep,
 };
 use agentcarousel_evaluators::evaluate_case;
 use agentcarousel_fixtures::MockEngine;
@@ -70,6 +70,7 @@ async fn run_case_inner(
                 latency_ms: 0,
                 tokens_in: None,
                 tokens_out: None,
+                source: Some(TraceSource::FixtureExpectation),
             });
             metrics.tool_calls += 1;
 
@@ -85,6 +86,7 @@ async fn run_case_inner(
                         latency_ms: 0,
                         tokens_in: None,
                         tokens_out: None,
+                        source: Some(TraceSource::Mock),
                     });
                 }
                 None if config.mock_strict => {
@@ -107,6 +109,7 @@ async fn run_case_inner(
                         latency_ms: 0,
                         tokens_in: None,
                         tokens_out: None,
+                        source: Some(TraceSource::FixtureExpectation),
                     });
                 }
             }
@@ -156,6 +159,7 @@ async fn run_case_inner(
                                 tokens_out: generated
                                     .tokens_out
                                     .and_then(|value| u32::try_from(value).ok()),
+                                source: Some(TraceSource::Observed),
                             });
                             metrics.llm_calls += 1;
                             metrics.tokens_in = generated.tokens_in;

@@ -236,24 +236,35 @@ fn aggregate_eval_scores(
         .sum::<f32>()
         / collected.len() as f32;
 
-    let mut rubric_map: HashMap<String, (f32, f32, u32, Option<String>)> = HashMap::new();
+    type RubricAccumulator = (
+        f32,
+        f32,
+        u32,
+        Option<String>,
+        Option<agentcarousel_core::ScoreSource>,
+    );
+    let mut rubric_map: HashMap<String, RubricAccumulator> = HashMap::new();
     for scores in &collected {
         for rubric in &scores.rubric_scores {
-            let entry =
-                rubric_map
-                    .entry(rubric.rubric_id.clone())
-                    .or_insert((0.0, rubric.weight, 0, None));
+            let entry = rubric_map.entry(rubric.rubric_id.clone()).or_insert((
+                0.0,
+                rubric.weight,
+                0,
+                None,
+                None,
+            ));
             entry.0 += rubric.score;
             entry.2 += 1;
             if entry.3.is_none() {
                 entry.3 = rubric.rationale.clone();
             }
+            entry.4 = merge_score_source(entry.4, rubric.source);
         }
     }
     let rubric_scores = rubric_map
         .into_iter()
         .map(
-            |(rubric_id, (sum_score, weight, count, rationale))| RubricScore {
+            |(rubric_id, (sum_score, weight, count, rationale, source))| RubricScore {
                 rubric_id,
                 score: if count == 0 {
                     0.0
@@ -262,6 +273,7 @@ fn aggregate_eval_scores(
                 },
                 weight,
                 rationale,
+                source,
             },
         )
         .collect();
@@ -439,4 +451,55 @@ fn percentile(sorted: &[f64], p: f64) -> Option<f64> {
     }
     let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
     Some(sorted[idx.min(sorted.len() - 1)])
+}
+
+/// Combine the score provenance of one rubric item across repetitions. When methods differ,
+/// an LLM judge anywhere makes the averaged score judge-derived (assurance spec INV-4).
+fn merge_score_source(
+    current: Option<agentcarousel_core::ScoreSource>,
+    next: Option<agentcarousel_core::ScoreSource>,
+) -> Option<agentcarousel_core::ScoreSource> {
+    use agentcarousel_core::ScoreSource;
+    match (current, next) {
+        (None, other) | (other, None) => other,
+        (Some(a), Some(b)) if a == b => Some(a),
+        (Some(ScoreSource::LlmJudge), _) | (_, Some(ScoreSource::LlmJudge)) => {
+            Some(ScoreSource::LlmJudge)
+        }
+        (Some(ScoreSource::NotEvaluated), other) | (other, Some(ScoreSource::NotEvaluated)) => {
+            other
+        }
+        (Some(a), Some(_)) => Some(a),
+    }
+}
+
+#[cfg(test)]
+mod score_source_tests {
+    use super::merge_score_source;
+    use agentcarousel_core::ScoreSource::*;
+
+    #[test]
+    fn judge_anywhere_dominates_mixed_sources() {
+        assert_eq!(
+            merge_score_source(Some(Deterministic), Some(LlmJudge)),
+            Some(LlmJudge)
+        );
+        assert_eq!(
+            merge_score_source(Some(LlmJudge), Some(Deterministic)),
+            Some(LlmJudge)
+        );
+    }
+
+    #[test]
+    fn not_evaluated_yields_to_an_evaluated_source() {
+        assert_eq!(
+            merge_score_source(Some(NotEvaluated), Some(Deterministic)),
+            Some(Deterministic)
+        );
+        assert_eq!(merge_score_source(None, Some(Golden)), Some(Golden));
+        assert_eq!(
+            merge_score_source(Some(Process), Some(Process)),
+            Some(Process)
+        );
+    }
 }

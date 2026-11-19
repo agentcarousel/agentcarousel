@@ -1,5 +1,5 @@
 use agentcarousel_core::{
-    Case, CaseResult, EvalScores, ExecutionTrace, RubricScore, StepKind, ToolOrder,
+    Case, CaseResult, EvalScores, ExecutionTrace, RubricScore, ScoreSource, StepKind, ToolOrder,
 };
 use serde_json::Value;
 
@@ -53,6 +53,7 @@ impl Evaluator for RulesEvaluator {
                 score: 0.0,
                 weight: 1.0,
                 rationale: Some(evaluation.failures.join("; ")),
+                source: Some(ScoreSource::Deterministic),
             });
         }
 
@@ -207,23 +208,25 @@ fn score_rubric(case: &Case, trace: &ExecutionTrace) -> Vec<RubricScore> {
         .iter()
         .map(|item| {
             let mut rationale = None;
-            let score = if let Some(auto_check) = item.auto_check.as_ref() {
-                match check_output(auto_check, trace) {
+            let (score, source) = if let Some(auto_check) = item.auto_check.as_ref() {
+                let score = match check_output(auto_check, trace) {
                     Ok(()) => 1.0,
                     Err(err) => {
                         rationale = Some(err);
                         0.0
                     }
-                }
+                };
+                (score, ScoreSource::Deterministic)
             } else {
                 rationale = Some("requires judge or manual review".to_string());
-                0.0
+                (0.0, ScoreSource::NotEvaluated)
             };
             RubricScore {
                 rubric_id: item.id.clone(),
                 score,
                 weight: item.weight,
                 rationale,
+                source: Some(source),
             }
         })
         .collect()

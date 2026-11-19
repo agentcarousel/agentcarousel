@@ -1,4 +1,4 @@
-use agentcarousel_core::{Case, CaseResult, EvalScores, RubricScore};
+use agentcarousel_core::{Case, CaseResult, EvalScores, RubricScore, ScoreSource};
 use serde::Deserialize;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -107,6 +107,7 @@ impl Evaluator for ProcessEvaluator {
                 score: score.score,
                 weight: 1.0,
                 rationale: score.rationale,
+                source: Some(ScoreSource::Process),
             })
             .collect();
         let effectiveness_score = if rubric_scores.is_empty() {

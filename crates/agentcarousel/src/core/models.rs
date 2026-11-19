@@ -304,6 +304,23 @@ pub struct TraceStep {
     pub tokens_in: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u32>,
+    /// Provenance of this step (assurance spec INV-3). `None` on runs recorded before
+    /// provenance was tracked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<TraceSource>,
+}
+
+/// Where a [`TraceStep`] came from.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TraceSource {
+    /// Emitted by the model or agent under test and captured by the runner.
+    Observed,
+    /// Supplied by a fixture mock rather than a real tool or model.
+    Mock,
+    /// Synthesized by the runner from the case's own `expected.tool_sequence`; shows nothing
+    /// about what the agent would actually call.
+    FixtureExpectation,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -390,6 +407,26 @@ pub struct RubricScore {
     pub weight: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rationale: Option<String>,
+    /// How the score was decided (assurance spec INV-4). `None` on runs recorded before
+    /// evaluator provenance was tracked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ScoreSource>,
+}
+
+/// Method that produced a [`RubricScore`].
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScoreSource {
+    /// A rule or pattern check (`auto_check`, output assertions, tool-sequence checks).
+    Deterministic,
+    /// Similarity against a golden reference output.
+    Golden,
+    /// An external process evaluator.
+    Process,
+    /// An LLM judge.
+    LlmJudge,
+    /// Nothing scored this item (e.g. no auto_check and no judge score); its 0.0 is a placeholder.
+    NotEvaluated,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -1,7 +1,7 @@
 use agentcarousel_core::{
     compute_backoff_ms, is_retryable_status, judge_key_candidates, judge_provider_from_model,
     retry_policy, AuditFinding, Case, CaseResult, CaseStatus, EvalScores, JudgeProvider,
-    PromptAudit, PromptAuditFailureMode, RubricScore,
+    PromptAudit, PromptAuditFailureMode, RubricScore, ScoreSource,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -182,20 +182,23 @@ impl Evaluator for JudgeEvaluator {
                     .iter()
                     .map(|item| {
                         let mut rationale = None;
-                        let score = if let Some(judge_score) = judge_scores.get(&item.id) {
+                        let (score, source) = if let Some(judge_score) = judge_scores.get(&item.id)
+                        {
                             rationale = judge_score.rationale.clone();
-                            judge_score.score.clamp(0.0, 1.0)
+                            (judge_score.score.clamp(0.0, 1.0), ScoreSource::LlmJudge)
                         } else if let Some(auto_check) = item.auto_check.as_ref() {
-                            match check_output(auto_check, &result.trace) {
+                            // Judge omitted this item; the deterministic auto_check decides it.
+                            let score = match check_output(auto_check, &result.trace) {
                                 Ok(()) => 1.0,
                                 Err(err) => {
                                     rationale = Some(err);
                                     0.0
                                 }
-                            }
+                            };
+                            (score, ScoreSource::Deterministic)
                         } else {
                             rationale = Some("judge missing rubric score".to_string());
-                            0.0
+                            (0.0, ScoreSource::NotEvaluated)
                         };
 
                         RubricScore {
@@ -203,6 +206,7 @@ impl Evaluator for JudgeEvaluator {
                             score,
                             weight: item.weight,
                             rationale,
+                            source: Some(source),
                         }
                     })
                     .collect()
