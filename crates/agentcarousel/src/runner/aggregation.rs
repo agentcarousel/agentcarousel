@@ -1,9 +1,54 @@
 use agentcarousel_core::{
-    Case, CaseResult, CaseStatus, EvalScores, Metrics, OverallStatus, ProviderErrorMetrics,
-    RubricScore, RunSummary,
+    Case, CaseId, CaseResult, CaseStatus, EvalScores, ExecutionTrace, Metrics, OverallStatus,
+    ProviderErrorMetrics, RubricScore, RunSummary,
 };
 use agentcarousel_evaluators::EvaluatorKind;
 use std::collections::{HashMap, HashSet};
+
+/// Not-tested placeholder for a suite case that produced no result (assurance spec INV-1).
+fn not_tested_result(case_id: CaseId, tags: Vec<String>, reason: &str) -> CaseResult {
+    CaseResult {
+        case_id,
+        status: CaseStatus::Skipped,
+        error: None,
+        trace: ExecutionTrace {
+            steps: Vec::new(),
+            final_output: None,
+            redacted: false,
+        },
+        metrics: Metrics::default(),
+        eval_scores: None,
+        input: Vec::new(),
+        discrimination_score: None,
+        discrimination_label: None,
+        tags,
+        skip_reason: Some(reason.to_string()),
+    }
+}
+
+/// Record every suite case that has no result: planned cases never reached (e.g. after
+/// `--fail-fast`) as `not_executed`, and filtered-out cases as `excluded_by_filter`.
+pub(super) fn append_not_tested(
+    results: &mut Vec<CaseResult>,
+    planned: &[(CaseId, Vec<String>)],
+    excluded: Vec<Case>,
+) {
+    let seen: HashSet<String> = results.iter().map(|r| r.case_id.0.clone()).collect();
+    for (case_id, tags) in planned {
+        if !seen.contains(&case_id.0) {
+            results.push(not_tested_result(
+                case_id.clone(),
+                tags.clone(),
+                "not_executed",
+            ));
+        }
+    }
+    for case in excluded {
+        if !seen.contains(&case.id.0) {
+            results.push(not_tested_result(case.id, case.tags, "excluded_by_filter"));
+        }
+    }
+}
 
 pub(super) fn aggregate_case_results(
     case: &Case,
@@ -36,6 +81,7 @@ pub(super) fn aggregate_case_results(
         discrimination_score: None,
         discrimination_label: None,
         tags: case.tags.clone(),
+        skip_reason: None,
     }
 }
 
@@ -377,10 +423,12 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
     } else {
         passed as f32 / effective_total as f32
     };
-    let mean_latency_ms = if total == 0 {
+    // Latency describes executed cases only; not-tested placeholders have none.
+    let executed = total.saturating_sub(skipped);
+    let mean_latency_ms = if executed == 0 {
         0.0
     } else {
-        latency_sum as f64 / total as f64
+        latency_sum as f64 / executed as f64
     };
     let mean_effectiveness_score = if effectiveness_count == 0 {
         None
@@ -402,6 +450,7 @@ pub(super) fn build_summary(results: &[CaseResult]) -> RunSummary {
 
     let mut latencies: Vec<f64> = results
         .iter()
+        .filter(|r| r.status != CaseStatus::Skipped)
         .map(|r| r.metrics.total_latency_ms as f64)
         .collect();
     latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));

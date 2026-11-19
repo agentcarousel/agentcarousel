@@ -91,6 +91,15 @@ pub struct EvalConfig {
     pub progress: bool,
 }
 
+fn planned_case_ids(
+    cases: &[agentcarousel_core::Case],
+) -> Vec<(agentcarousel_core::CaseId, Vec<String>)> {
+    cases
+        .iter()
+        .map(|case| (case.id.clone(), case.tags.clone()))
+        .collect()
+}
+
 /// Execute all cases from the given fixtures using [`RunnerConfig`] and return a completed [`Run`].
 pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> Run {
     let started_at = Utc::now();
@@ -102,13 +111,16 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
         .unwrap_or_else(new_run_id);
     let mock_engine = MockEngine::load_dir(&config.mock_dir).unwrap_or_default();
     let skill_or_agent = orchestration::skill_display_label(&fixtures);
+    let excluded = orchestration::excluded_cases(&fixtures);
     let cases = orchestration::flatten_cases(fixtures);
+    let planned = planned_case_ids(&cases);
 
-    let results = if config.fail_fast {
+    let mut results = if config.fail_fast {
         orchestration::run_sequential(cases, &mock_engine, &config).await
     } else {
         orchestration::run_parallel(cases, &mock_engine, &config).await
     };
+    aggregation::append_not_tested(&mut results, &planned, excluded);
 
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
@@ -157,11 +169,14 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         .unwrap_or_else(new_run_id);
     let mock_engine = MockEngine::load_dir(&config.runner.mock_dir).unwrap_or_default();
     let skill_or_agent = orchestration::skill_display_label(&fixtures);
+    let excluded = orchestration::excluded_cases(&fixtures);
     let cases = orchestration::flatten_cases(fixtures);
+    let planned = planned_case_ids(&cases);
     let judge_cache = Arc::new(Mutex::new(orchestration::BoundedCache::new(1000)));
 
-    let results =
+    let mut results =
         orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
+    aggregation::append_not_tested(&mut results, &planned, excluded);
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
 

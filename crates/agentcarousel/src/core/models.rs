@@ -45,6 +45,10 @@ pub struct FixtureFile {
     pub certification_track: Option<CertificationTrack>,
     pub risk_tier: Option<RiskTier>,
     pub data_handling: Option<DataHandling>,
+    /// Cases removed by `--filter` / `--filter-tags`. Not part of the file format; runners
+    /// record them as not tested (`CaseStatus::Skipped`) so a run never hides suite cases.
+    #[serde(skip)]
+    pub excluded_cases: Vec<Case>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -267,6 +271,9 @@ pub struct CaseResult {
     pub discrimination_label: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// Why the case was not executed; set only when `status` is `Skipped`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -274,6 +281,8 @@ pub struct CaseResult {
 pub enum CaseStatus {
     Passed,
     Failed,
+    /// Defined by the suite but not executed (see [`CaseResult::skip_reason`]). Never counted
+    /// as passed; excluded from pass-rate denominators.
     Skipped,
     Flaky,
     TimedOut,

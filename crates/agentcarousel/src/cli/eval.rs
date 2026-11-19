@@ -528,16 +528,20 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
 }
 
 fn has_eval_failures(run: &agentcarousel_core::Run, threshold: f32) -> bool {
-    run.cases.iter().any(|case| {
-        matches!(
-            case.status,
-            CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
-        ) || case
-            .eval_scores
-            .as_ref()
-            .map(|scores| scores.effectiveness_score < threshold)
-            .unwrap_or(true)
-    })
+    // Not-tested cases carry no scores; they are reported, not failed.
+    run.cases
+        .iter()
+        .filter(|case| case.status != CaseStatus::Skipped)
+        .any(|case| {
+            matches!(
+                case.status,
+                CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
+            ) || case
+                .eval_scores
+                .as_ref()
+                .map(|scores| scores.effectiveness_score < threshold)
+                .unwrap_or(true)
+        })
 }
 
 fn cli_invocation_name() -> String {

@@ -746,6 +746,7 @@ mod tests {
             certification_track: None,
             risk_tier: None,
             data_handling: None,
+            excluded_cases: Vec::new(),
         }
     }
 

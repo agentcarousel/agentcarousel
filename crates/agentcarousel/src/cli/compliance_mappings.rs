@@ -157,7 +157,12 @@ pub fn compute_control_scores_with_registry(
     > = HashMap::new();
     for (model, cases) in &model_cases {
         let index = model_tag_index.entry(model.clone()).or_default();
-        for case in cases.iter().copied() {
+        // Not-tested cases are not evidence for any control (assurance spec INV-1).
+        for case in cases
+            .iter()
+            .copied()
+            .filter(|case| case.status != CaseStatus::Skipped)
+        {
             for tag in &case.tags {
                 index.entry(tag.clone()).or_default().push(case);
             }

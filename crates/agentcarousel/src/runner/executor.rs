@@ -222,6 +222,7 @@ async fn run_case_inner(
         discrimination_score: None,
         discrimination_label: None,
         tags: case.tags,
+        skip_reason: None,
     }
 }
 
@@ -245,6 +246,7 @@ pub fn timeout_result(
         discrimination_score: None,
         discrimination_label: None,
         tags,
+        skip_reason: None,
     }
 }
 
