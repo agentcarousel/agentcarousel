@@ -46,6 +46,12 @@ jobs:
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: cargo-machete
+      - name: Unused dependencies
+        run: cargo machete
       - name: Shellcheck
         run: shellcheck --severity=warning packaging/*.sh scripts/*.sh
       - name: Workflow audit (zizmor)
