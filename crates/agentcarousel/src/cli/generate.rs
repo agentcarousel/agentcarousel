@@ -1358,6 +1358,28 @@ mod attack_tag_tests {
     }
 
     #[test]
+    fn help_and_reference_docs_list_every_attack_category() {
+        use clap::CommandFactory;
+        let cmd = GenerateArgs::command();
+        let help = cmd
+            .get_arguments()
+            .find(|a| a.get_id() == "attack_categories")
+            .and_then(|a| a.get_help())
+            .expect("--attack-categories has help")
+            .to_string();
+        let docs = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/reference.md"),
+        )
+        .expect("read docs/reference.md");
+        for c in super::super::attack_categories::all() {
+            assert!(help.contains(&c.key), "--help omits {}", c.key);
+            let tags: Vec<String> = c.tags.iter().map(|t| format!("`{t}`")).collect();
+            let row = format!("| `{}` | {} |", c.key, tags.join(", "));
+            assert!(docs.contains(&row), "docs/reference.md lacks row: {row}");
+        }
+    }
+
+    #[test]
     fn adversarial_prompt_names_the_attack_category() {
         let cats =
             super::super::attack_categories::select(&["false-scenario".to_string()]).unwrap();
