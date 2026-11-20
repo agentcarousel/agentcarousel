@@ -759,3 +759,113 @@ cases:
         .success();
     let _ = fs::remove_file(&out_path);
 }
+
+#[test]
+fn export_includes_attested_scope_profile_and_verify_detects_tampering() {
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let dir = tempfile::tempdir().expect("temp dir");
+    let history = dir.path().join("history.db");
+    let fixture_dir = dir.path().join("scoped");
+    fs::create_dir_all(&fixture_dir).expect("fixture dir");
+    fs::write(
+        fixture_dir.join("cases.yaml"),
+        r#"schema_version: 1
+skill_or_agent: scoped
+cases:
+  - id: scoped/one
+    tags: [grounding]
+    input:
+      messages:
+        - role: user
+          content: "hello"
+    expected:
+      output:
+        - kind: contains
+          value: "does-not-exist"
+"#,
+    )
+    .expect("write fixture");
+    fs::write(
+        fixture_dir.join("scope.yaml"),
+        r#"schema_version: 1
+skill_or_agent: scoped
+use_cases: [answer questions]
+instance_under_test:
+  environment: test harness
+  matches_production: false
+  data: synthetic
+risk_distribution:
+  - category: Grounding
+    share_pct: 100
+    rationale: only risk tested
+    tags: [grounding]
+tool_calls_observed: false
+"#,
+    )
+    .expect("write scope");
+
+    let root = workspace_root();
+    let out = Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(&root)
+        .env("AGENTCAROUSEL_HISTORY_DB", &history)
+        .args([
+            "test",
+            fixture_dir.to_str().unwrap(),
+            "--mock-dir",
+            "mocks",
+            "--json",
+        ])
+        .output()
+        .expect("agc test");
+    let envelope: Value = serde_json::from_slice(&out.stdout).expect("test json");
+    let run_id = envelope["data"]["id"].as_str().expect("run id").to_string();
+    assert_eq!(
+        envelope["data"]["summary"]["total"], 1,
+        "scope.yaml is not a fixture"
+    );
+
+    let out_path = root.join("target/export-scope-test.tar.gz");
+    let _ = fs::remove_file(&out_path);
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(&root)
+        .env("AGENTCAROUSEL_HISTORY_DB", &history)
+        .args(["export", &run_id, "--out", out_path.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let extract = dir.path().join("extract");
+    fs::create_dir_all(&extract).expect("extract dir");
+    let status = Command::new("tar")
+        .args([
+            "-xzf",
+            out_path.to_str().unwrap(),
+            "-C",
+            extract.to_str().unwrap(),
+        ])
+        .output()
+        .expect("tar extract");
+    assert!(status.status.success());
+    let bundle = extract.join(format!("agentcarousel-evidence-{run_id}"));
+    let scope: Value =
+        serde_json::from_str(&fs::read_to_string(bundle.join("scope.json")).expect("scope.json"))
+            .expect("scope json");
+    assert_eq!(scope["risk_distribution"][0]["category"], "Grounding");
+    let statement = fs::read_to_string(bundle.join("attestation.intoto.json")).expect("statement");
+    assert!(statement.contains("scope.json"), "scope.json is attested");
+
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .args(["verify", bundle.to_str().unwrap()])
+        .assert()
+        .success();
+
+    fs::write(bundle.join("scope.json"), "{\"tampered\": true}").expect("tamper");
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .args(["verify", bundle.to_str().unwrap()])
+        .assert()
+        .failure();
+    let _ = fs::remove_file(&out_path);
+}

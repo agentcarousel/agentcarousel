@@ -268,6 +268,7 @@ pub(crate) fn export_run_artifact_with(
 
     let run_json_path = root.join("run.json");
     write_json(&run_json_path, &run)?;
+    write_scope_profile(&root, &run)?;
     write_assurance_documents(&root, &run, opts.include_prompt)?;
 
     let bundle_lock_path = root.join("fixture_bundle.lock");
@@ -783,6 +784,45 @@ pub(super) fn sha256_file_hex(path: &Path) -> Result<String, String> {
 /// Write `evidence.json` and `attestation.intoto.json` (assurance spec v0.1), plus
 /// `prompt.md` when disclosure was requested and the recorded digest still matches.
 /// Runs recorded before run subjects existed get neither document; a note says why.
+/// Copy the fixture's scope profile (`scope.yaml` next to the fixture) into the
+/// bundle as `scope.json`. The profile is read at export time. A profile with
+/// errors is left out, with a note, rather than exported as evidence.
+fn write_scope_profile(root: &Path, run: &Run) -> Result<(), String> {
+    let Some(subject) = run.subject.as_ref() else {
+        return Ok(());
+    };
+    let mut dirs: Vec<PathBuf> = subject
+        .fixture_files
+        .iter()
+        .filter_map(|f| Path::new(&f.path).parent().map(Path::to_path_buf))
+        .collect();
+    dirs.sort();
+    dirs.dedup();
+    let Some(scope_path) = dirs
+        .iter()
+        .find_map(|dir| super::scope::find_scope_file(dir))
+    else {
+        return Ok(());
+    };
+    let profile = match super::scope::load_scope(&scope_path) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("note: scope profile not exported: {err}");
+            return Ok(());
+        }
+    };
+    let issues = super::scope::check_profile(&profile, None);
+    if !issues.errors.is_empty() {
+        eprintln!(
+            "note: scope profile not exported ({}): {}",
+            scope_path.display(),
+            issues.errors.join("; ")
+        );
+        return Ok(());
+    }
+    write_json(&root.join(super::scope::SCOPE_BUNDLE_FILE), &profile)
+}
+
 fn write_assurance_documents(root: &Path, run: &Run, include_prompt: bool) -> Result<(), String> {
     use super::assurance;
     let recorded_prompt = run.subject.as_ref().and_then(|s| s.system_prompt.as_ref());
@@ -827,6 +867,14 @@ fn write_assurance_documents(root: &Path, run: &Run, include_prompt: bool) -> Re
     for name in [assurance::EVIDENCE_FILE, "run.json"] {
         digests.insert(name.to_string(), sha256_file_hex(&root.join(name))?);
     }
+    // The scope profile is attested alongside the evidence when present.
+    let scope = root.join(super::scope::SCOPE_BUNDLE_FILE);
+    if scope.exists() {
+        digests.insert(
+            super::scope::SCOPE_BUNDLE_FILE.to_string(),
+            sha256_file_hex(&scope)?,
+        );
+    }
     let documents: Vec<(String, String)> = digests
         .iter()
         .map(|(path, digest)| (path.clone(), digest.clone()))
@@ -850,6 +898,7 @@ fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
         "attestation.intoto.json",
         "prompt.md",
         "compliance_aiuc-1.md",
+        "scope.json",
     ];
     let tracked = [
         "run.json",
