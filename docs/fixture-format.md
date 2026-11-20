@@ -19,6 +19,8 @@ Use **`bundle_id`** and **`bundle_version`** (semver recommended) at the top lev
 - `agent` (object, optional): declared identity of the agent under test, recorded in run subjects and `evidence.json`. Fields: `id` (required, absolute URI such as a `tag:` URI), `version`, `name`, `description`, `owner`, `framework`, `runtime`, `risk_class`, `tools` (list of `{name, description, scopes}`), `external_ids` (list of `{system, id}`). Mirrors the AgentCarousel Specification `agent.schema.json`.
 - `cases` (array, required): one or more case definitions.
 
+A fixture directory can also hold a `scope.yaml` scope profile describing what the evaluation covers; see [scope-profile.md](scope-profile.md).
+
 ## defaults
 
 - `timeout_secs` (integer): per-case timeout fallback.

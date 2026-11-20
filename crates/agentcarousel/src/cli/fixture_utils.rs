@@ -118,7 +118,7 @@ fn is_fixture_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|ext| ext.to_str()),
         Some("yaml") | Some("yml") | Some("toml")
-    )
+    ) && !super::scope::is_scope_file(path)
 }
 
 fn normalize_tag(value: &str) -> String {

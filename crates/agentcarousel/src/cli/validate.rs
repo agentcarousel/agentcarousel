@@ -94,7 +94,15 @@ pub fn run_validate(args: ValidateArgs, config: &ResolvedConfig, globals: &Globa
         .then_some(Path::new(AGENTCAROUSEL_IGNORE));
 
     let mut atf_rows = Vec::new();
+    // Directories whose scope.yaml (if any) is checked after the fixtures.
+    let mut scope_dirs = std::collections::BTreeSet::new();
     for path in collect_fixture_paths_with_ignore(&inputs, ignore_file) {
+        if let Some(dir) = path.parent() {
+            scope_dirs.insert(dir.to_path_buf());
+        }
+        if super::scope::is_scope_file(&path) {
+            continue;
+        }
         match validate_path(&path, args.schema.as_deref(), config) {
             Ok((report, hints)) => {
                 has_errors |= !report.errors.is_empty();
@@ -110,6 +118,14 @@ pub fn run_validate(args: ValidateArgs, config: &ResolvedConfig, globals: &Globa
                     warnings: vec![],
                 });
             }
+        }
+    }
+
+    for dir in &scope_dirs {
+        if let Some(report) = validate_scope_in(dir) {
+            has_errors |= !report.errors.is_empty();
+            has_warnings |= !report.warnings.is_empty();
+            reports.push(report);
         }
     }
 
@@ -145,6 +161,33 @@ pub fn run_validate(args: ValidateArgs, config: &ResolvedConfig, globals: &Globa
     }
 
     ExitCode::Ok.as_i32()
+}
+
+/// Check the scope profile in `dir`, if there is one, against the fixture beside it.
+fn validate_scope_in(dir: &Path) -> Option<ValidationReport> {
+    let scope_path = super::scope::find_scope_file(dir)?;
+    let path = scope_path.display().to_string();
+    let profile = match super::scope::load_scope(&scope_path) {
+        Ok(p) => p,
+        Err(err) => {
+            return Some(ValidationReport {
+                path,
+                errors: vec![err],
+                warnings: vec![],
+            })
+        }
+    };
+    let fixture = ["cases.yaml", "cases.yml"]
+        .iter()
+        .map(|name| dir.join(name))
+        .find(|p| p.is_file())
+        .and_then(|p| agentcarousel_fixtures::load_fixture(&p).ok());
+    let issues = super::scope::check_profile(&profile, fixture.as_ref());
+    Some(ValidationReport {
+        path,
+        errors: issues.errors,
+        warnings: issues.warnings,
+    })
 }
 
 fn fixture_scan_roots(paths: &[PathBuf]) -> Vec<PathBuf> {

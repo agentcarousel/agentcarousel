@@ -30,6 +30,7 @@ mod promote;
 mod publish;
 mod registry_client;
 mod report;
+mod scope;
 mod severity;
 mod subject;
 mod test;
@@ -134,6 +135,8 @@ enum Command {
     Metrics(metrics::MetricsArgs),
     /// Generate per-control compliance attestation reports and gap advisories.
     Compliance(compliance::ComplianceArgs),
+    /// Create or check a fixture's agent-under-test scope profile (scope.yaml).
+    Scope(scope::ScopeArgs),
     /// Compare two eval runs and gate on regressions.
     Compare(compare::CompareArgs),
     /// Run tests automatically whenever you save a fixture file.
@@ -190,6 +193,7 @@ fn help_template() -> String {
     let generate = c("generate");
     let audit = c("audit");
     let compliance = c("compliance");
+    let scope = c("scope");
     let report = c("report");
     let metrics = c("metrics");
     let compare = c("compare");
@@ -245,6 +249,7 @@ Usage:
   {audit}        Prompt-audit a saved run (audit run) or apply its suggestions (audit suggest)
   {metrics}      Compliance metrics: injection resistance, drift, coverage, calibration
   {compliance}   Per-control compliance attestation reports and gap advisories
+  {scope}        Create or check a fixture's scope profile (what the evaluation covers)
   {compare}      Compare two eval runs and gate on regressions (CI regression gate)
   {export}       Export run(s) as evidence tarballs (--sign-key to sign)
   {verify}       Verify an evidence tarball's hashes and signature
@@ -362,6 +367,7 @@ pub fn run() -> i32 {
         Command::Doctor(args) => doctor::run_doctor(args, &config),
         Command::Metrics(args) => metrics::run_metrics(args, &globals),
         Command::Compliance(args) => compliance::run_compliance(args, &globals, &config),
+        Command::Scope(args) => scope::run_scope(args, &globals),
         Command::Compare(args) => compare::run_compare(args, &globals),
         #[cfg(feature = "watch")]
         Command::Watch(args) => watch::run_watch(args, &config, &globals),
@@ -380,13 +386,13 @@ fn print_compact_help() {
         env!("CARGO_PKG_VERSION")
     );
     #[cfg(all(feature = "dashboard", feature = "watch"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics compliance scope export verify bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(all(feature = "dashboard", not(feature = "watch")))]
-    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare dashboard doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics compliance scope export verify bundle publish promote trust-check compare dashboard doctor completions update\n");
     #[cfg(all(not(feature = "dashboard"), feature = "watch"))]
-    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab watch generate optimize pipeline candidates report audit metrics compliance scope export verify bundle publish promote trust-check compare doctor completions update\n");
     #[cfg(all(not(feature = "dashboard"), not(feature = "watch")))]
-    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics export verify bundle publish promote trust-check compare doctor completions update\n");
+    println!("COMMANDS: validate test eval carousel ab generate optimize pipeline candidates report audit metrics compliance scope export verify bundle publish promote trust-check compare doctor completions update\n");
     println!("QUICK START:");
     println!("  agc generate --from-prompt fixtures/my-skill/prompt.md");
     println!("  agc test fixtures/my-skill/");

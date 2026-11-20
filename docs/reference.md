@@ -344,6 +344,20 @@ agc compliance generate-cases \
 
 ---
 
+## agc scope
+
+Create or check a fixture's agent-under-test scope profile. See [scope-profile.md](scope-profile.md).
+
+```bash
+agc scope init --skill my-agent     # writes fixtures/my-agent/scope.yaml
+agc scope check --skill my-agent    # validates it; planned vs actual coverage per risk category
+agc scope check fixtures/my-agent   # same, by directory
+```
+
+Exit codes: `0` valid, `2` validation errors, `5` no profile or directory found.
+
+---
+
 ## agc report
 
 Inspect run history.
