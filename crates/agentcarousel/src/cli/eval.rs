@@ -99,6 +99,11 @@ pub struct EvalArgs {
     /// be noise. Requires --execution-mode live or batch.
     #[arg(long = "measure-discrimination", short = 'D')]
     measure_discrimination: bool,
+    /// Exit 1 only when a failing case's severity is at or above this level
+    /// (P0 most severe). Failures below it are reported but don't fail the run;
+    /// failures in cases without a severity still fail it. Default: any failure fails.
+    #[arg(long = "fail-on-severity", value_name = "P0|P1|P2|P3")]
+    fail_on_severity: Option<agentcarousel_core::Severity>,
 }
 
 pub fn run_eval_command(args: EvalArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -531,7 +536,24 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         }
     }
 
-    if has_eval_failures(&run, config.eval.effectiveness_threshold) {
+    let threshold = config.eval.effectiveness_threshold;
+    let failed = match args.fail_on_severity {
+        None => has_eval_failures(&run, threshold),
+        Some(gate) => {
+            let tally = super::severity::tally(&run.cases, |case| case_fails_eval(case, threshold));
+            // Summary goes to stderr so it never mixes with JSON on stdout.
+            eprintln!("{}", tally.summary_line());
+            if tally.unrated > 0 {
+                eprintln!(
+                    "{} {} failure(s) without severity counted as failing",
+                    style("note:").yellow().bold(),
+                    tally.unrated
+                );
+            }
+            tally.fails_gate(gate)
+        }
+    };
+    if failed {
         ExitCode::Failed.as_i32()
     } else {
         ExitCode::Ok.as_i32()
@@ -543,16 +565,17 @@ fn has_eval_failures(run: &agentcarousel_core::Run, threshold: f32) -> bool {
     run.cases
         .iter()
         .filter(|case| case.status != CaseStatus::Skipped)
-        .any(|case| {
-            matches!(
-                case.status,
-                CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
-            ) || case
-                .eval_scores
-                .as_ref()
-                .map(|scores| scores.effectiveness_score < threshold)
-                .unwrap_or(true)
-        })
+        .any(|case| case_fails_eval(case, threshold))
+}
+
+/// A case fails eval when its status is a failure or its effectiveness is below threshold.
+fn case_fails_eval(case: &agentcarousel_core::CaseResult, threshold: f32) -> bool {
+    super::severity::is_failed_status(case)
+        || case
+            .eval_scores
+            .as_ref()
+            .map(|scores| scores.effectiveness_score < threshold)
+            .unwrap_or(true)
 }
 
 fn cli_invocation_name() -> String {

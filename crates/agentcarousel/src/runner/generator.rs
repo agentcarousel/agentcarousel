@@ -980,6 +980,7 @@ mod tests {
             evaluator_config: None,
             timeout_secs: None,
             seed: None,
+            severity: None,
         }
     }
 
@@ -1186,6 +1187,7 @@ mod tests {
             evaluator_config: None,
             timeout_secs: None,
             seed: None,
+            severity: None,
         };
 
         let result = call_custom_endpoint(endpoint, Some("test-model"), &case, 5, None).await;

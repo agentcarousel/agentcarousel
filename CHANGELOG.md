@@ -4,8 +4,13 @@
 
 ### Added
 
+- **Case severity and `--fail-on-severity`.** Cases can carry `severity: P0|P1|P2|P3` (AgentCarousel severity scale: critical, major, significant, minor). `agc test` and `agc eval` take `--fail-on-severity <level>` to exit 1 only for failures at or above that level; failures in cases without a severity still fail the run, and a tally goes to stderr. Without the flag nothing changes. `agc report show`, `report.md` and `evidence.json` (top-level `x-agentcarousel-severity`, only when the suite uses severities) report failed cases by severity.
 - **AIUC-1 crosswalk (`--framework aiuc-1`).** A bundled crosswalk of the 50 active AIUC-1 requirements (2026-Q4): control IDs, short labels in AgentCarousel's own words, links to standard.aiuc-1.com, and whether each control is behavioral or procedural, with the reason. No AIUC requirement text is copied. Tag cases `aiuc-1:<id>` and score them with `agc compliance report`/`gaps`. `agc export` adds `compliance_aiuc-1.md` only when the scored runs carry `aiuc-1:` tags (behavior change for bundles that use them). See [docs/frameworks/aiuc-1.md](docs/frameworks/aiuc-1.md).
 - **Framework entries can carry `url`, `framework_version` and `notes`.** Compliance reports link control IDs, show notes on procedural rows, and add a version and attribution footer when set. User framework files in `./frameworks/` or `~/.agentcarousel/frameworks/` now replace a bundled or embedded control with the same tag instead of counting it twice.
+
+### Changed
+
+- **`severity: P0` designates a case critical (behavior change for suites that use it).** P0 failures count in `summary.critical_failures` in `evidence.json`, like cases with a critical rubric item. `agc promote` is unchanged: it still gates on critical rubric items.
 
 ### Fixed
 

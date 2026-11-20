@@ -35,6 +35,7 @@ Use **`bundle_id`** and **`bundle_version`** (semver recommended) at the top lev
 - `evaluator_config` (object, optional): per-case evaluator settings.
 - `timeout_secs` (integer): override timeout for this case.
 - `seed` (integer): RNG seed for eval runs.
+- `severity` (string, optional): how serious a failure of this case would be, on the AgentCarousel severity scale: `P0` critical, `P1` major, `P2` significant, `P3` minor (uppercase). Set it when you write the case, not after a run. `severity: P0` designates the case critical: its failures count in `summary.critical_failures` in `evidence.json`, the same as a case with a critical rubric item. Failed cases are tallied by severity in `agc report show`, `report.md`, and a top-level `x-agentcarousel-severity` object in `evidence.json`. See `--fail-on-severity` on `agc test` and `agc eval`.
 
 ## Canonical tags
 
@@ -87,6 +88,7 @@ Note: the runner does not yet observe the agent's real tool calls. It emits each
 - `description` (string): what the rubric measures.
 - `weight` (number): relative weight in effectiveness score. Weights across all items in a case **must sum to exactly 1.0** (±0.001); `agc validate` reports an error if they do not.
 - `auto_check` (object): optional output assertion to score automatically. Values must be domain-specific — single generic words (`sorry`, `help`, `work`) will match nearly any response and are flagged as warnings by `agc validate`.
+- `critical` (boolean, optional): marks the item critical. A case with any critical item is a critical case: its failures count in `summary.critical_failures` in `evidence.json`, and `agc promote` blocks promotion when a critical item scores below the promote threshold.
 
 ## evaluator_config
 

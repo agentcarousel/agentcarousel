@@ -177,7 +177,7 @@ pub(crate) fn build_evidence(run: &Run, disclosure: Disclosure) -> Result<Value,
         }));
     }
 
-    Ok(json!({
+    let mut evidence = json!({
         "spec": { "name": SPEC_NAME, "version": SPEC_VERSION },
         "subject": {
             "agent": agent_json(run),
@@ -191,8 +191,28 @@ pub(crate) fn build_evidence(run: &Run, disclosure: Disclosure) -> Result<Value,
         "cases": cases,
         "summary": summary,
         "limitations": limitations,
-    }))
+    });
+    // Severity is not part of spec 0.1 cases; carry the tally as a top-level
+    // extension, only when the suite assigns severities.
+    if run.cases.iter().any(|c| c.severity.is_some()) {
+        let tally = super::severity::tally(&run.cases, super::severity::is_failed_status);
+        evidence[SEVERITY_EXTENSION] = json!({
+            "scale": "agentcarousel",
+            "failed": {
+                "P0": tally.p0,
+                "P1": tally.p1,
+                "P2": tally.p2,
+                "P3": tally.p3,
+                "unrated": tally.unrated,
+            },
+            "open_p0_p1": tally.open_p0_p1(),
+        });
+    }
+    Ok(evidence)
 }
+
+/// Top-level `evidence.json` extension key carrying failed-case counts by severity.
+pub(crate) const SEVERITY_EXTENSION: &str = "x-agentcarousel-severity";
 
 /// Build the in-toto statement. `documents` are `(path, "sha256:<hex>")` pairs for the
 /// evidence documents it covers, which MUST include `evidence.json` and MUST NOT include

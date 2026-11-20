@@ -416,6 +416,7 @@ mod tests {
             tags: tags.iter().map(|t| t.to_string()).collect(),
             skip_reason: None,
             critical: false,
+            severity: None,
         }
     }
 

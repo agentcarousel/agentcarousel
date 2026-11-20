@@ -47,6 +47,7 @@ fn minimal_run(id: &str, started_at: chrono::DateTime<Utc>) -> Run {
         tags: Vec::new(),
         skip_reason: None,
         critical: false,
+        severity: None,
     };
     Run {
         id: RunId(id.to_string()),
@@ -684,4 +685,77 @@ fn export_writes_aiuc1_crosswalk_only_when_cases_carry_aiuc1_tags() {
 
     let _ = fs::remove_file(&out_path);
     std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+}
+
+#[test]
+fn export_carries_severity_extension_when_cases_have_severity() {
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+    let dir = tempfile::tempdir().expect("temp dir");
+    let history = dir.path().join("history.db");
+    let fixture = dir.path().join("sev.yaml");
+    fs::write(
+        &fixture,
+        r#"schema_version: 1
+skill_or_agent: sev-skill
+cases:
+  - id: sev-skill/major
+    severity: P1
+    input:
+      messages:
+        - role: user
+          content: "hello"
+    expected:
+      output:
+        - kind: contains
+          value: "does-not-exist"
+"#,
+    )
+    .expect("write fixture");
+
+    let root = workspace_root();
+    let out = Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(&root)
+        .env("AGENTCAROUSEL_HISTORY_DB", &history)
+        .args([
+            "test",
+            fixture.to_str().unwrap(),
+            "--mock-dir",
+            "mocks",
+            "--json",
+        ])
+        .output()
+        .expect("agc test");
+    let envelope: Value = serde_json::from_slice(&out.stdout).expect("test json");
+    let run_id = envelope["data"]["id"].as_str().expect("run id").to_string();
+
+    let out_path = root.join("target/export-severity-test.tar.gz");
+    let _ = fs::remove_file(&out_path);
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(&root)
+        .env("AGENTCAROUSEL_HISTORY_DB", &history)
+        .args(["export", &run_id, "--out", out_path.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let evidence = Command::new("tar")
+        .args([
+            "-xOzf",
+            out_path.to_str().unwrap(),
+            &format!("agentcarousel-evidence-{run_id}/evidence.json"),
+        ])
+        .output()
+        .expect("tar read evidence");
+    let evidence: Value = serde_json::from_slice(&evidence.stdout).expect("evidence json");
+    let ext = &evidence["x-agentcarousel-severity"];
+    assert_eq!(ext["failed"]["P1"], 1, "{evidence}");
+    assert_eq!(ext["open_p0_p1"], true, "{evidence}");
+
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .args(["verify", out_path.to_str().unwrap()])
+        .assert()
+        .success();
+    let _ = fs::remove_file(&out_path);
 }

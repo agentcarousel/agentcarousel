@@ -602,6 +602,22 @@ fn render_markdown_report(run: &Run, metrics_section: &str) -> String {
         let _ = writeln!(md);
     }
 
+    if run.cases.iter().any(|c| c.severity.is_some()) {
+        let tally = super::severity::tally(&run.cases, super::severity::is_failed_status);
+        let _ = writeln!(md, "### Open findings by severity");
+        let _ = writeln!(md);
+        let _ = writeln!(md, "AgentCarousel severity scale, set per case by the suite author: P0 critical, P1 major, P2 significant, P3 minor.");
+        let _ = writeln!(md);
+        let _ = writeln!(md, "| P0 | P1 | P2 | P3 | Unrated |");
+        let _ = writeln!(md, "|----|----|----|----|---------|");
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} | {} | {} |",
+            tally.p0, tally.p1, tally.p2, tally.p3, tally.unrated
+        );
+        let _ = writeln!(md);
+    }
+
     let _ = writeln!(md, "---");
     let _ = writeln!(md);
     let _ = writeln!(md, "## Certification Scope and Limitations");

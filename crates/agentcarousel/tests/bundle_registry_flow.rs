@@ -65,6 +65,7 @@ fn minimal_run(id: &str, bundle_id: &str, bundle_version: &str) -> Run {
         tags: Vec::new(),
         skip_reason: None,
         critical: false,
+        severity: None,
     };
     let started_at = Utc::now();
     Run {

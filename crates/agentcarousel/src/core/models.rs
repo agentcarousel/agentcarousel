@@ -144,12 +144,64 @@ pub struct CaseDefaults {
 
 /// Executable example: input messages, expected tool/output assertions, tags, and timeouts.
 impl Case {
-    /// True when any rubric item is marked critical.
+    /// True when any rubric item is marked critical, or the case's severity is `P0`.
+    ///
+    /// `severity: P0` is the suite author designating the case critical, so P0
+    /// failures count as critical failures in evidence. (`promote` gates on
+    /// critical rubric items only.)
     pub fn is_critical(&self) -> bool {
-        self.expected
-            .rubric
-            .as_ref()
-            .is_some_and(|items| items.iter().any(|item| item.critical == Some(true)))
+        self.severity == Some(Severity::P0)
+            || self
+                .expected
+                .rubric
+                .as_ref()
+                .is_some_and(|items| items.iter().any(|item| item.critical == Some(true)))
+    }
+}
+
+/// AgentCarousel severity scale for a case's failure: `P0` critical, `P1` major,
+/// `P2` significant, `P3` minor. Set by the suite author; it describes how bad a
+/// failure of this case would be, not whether it failed.
+///
+/// Ordering runs from most to least severe (`P0 < P1 < P2 < P3`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Severity {
+    P0,
+    P1,
+    P2,
+    P3,
+}
+
+impl Severity {
+    pub const ALL: [Severity; 4] = [Severity::P0, Severity::P1, Severity::P2, Severity::P3];
+
+    /// True when `self` is as severe as `threshold` or more (e.g. P0 and P1 meet P1).
+    pub fn meets(self, threshold: Severity) -> bool {
+        self <= threshold
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Severity::P0 => "P0",
+            Severity::P1 => "P1",
+            Severity::P2 => "P2",
+            Severity::P3 => "P3",
+        }
+    }
+}
+
+impl std::str::FromStr for Severity {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "P0" => Ok(Severity::P0),
+            "P1" => Ok(Severity::P1),
+            "P2" => Ok(Severity::P2),
+            "P3" => Ok(Severity::P3),
+            other => Err(format!(
+                "unknown severity `{other}` (expected P0, P1, P2 or P3)"
+            )),
+        }
     }
 }
 
@@ -164,6 +216,9 @@ pub struct Case {
     pub evaluator_config: Option<EvaluatorConfig>,
     pub timeout_secs: Option<u64>,
     pub seed: Option<u64>,
+    /// How severe a failure of this case is (see [`Severity`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<Severity>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -375,6 +430,9 @@ pub struct CaseResult {
     /// The case carries at least one critical rubric item (assurance spec INV-2).
     #[serde(default, skip_serializing_if = "is_false")]
     pub critical: bool,
+    /// Severity the suite assigns to a failure of this case, copied from the fixture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<Severity>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

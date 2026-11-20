@@ -94,7 +94,14 @@ pub struct EvalConfig {
 fn planned_case_ids(cases: &[agentcarousel_core::Case]) -> Vec<aggregation::PlannedCase> {
     cases
         .iter()
-        .map(|case| (case.id.clone(), case.tags.clone(), case.is_critical()))
+        .map(|case| {
+            (
+                case.id.clone(),
+                case.tags.clone(),
+                case.is_critical(),
+                case.severity,
+            )
+        })
         .collect()
 }
 

@@ -1,6 +1,6 @@
 use agentcarousel_core::{
     Case, CaseId, CaseResult, CaseStatus, EvalScores, ExecutionTrace, Metrics, OverallStatus,
-    ProviderErrorMetrics, RubricScore, RunSummary,
+    ProviderErrorMetrics, RubricScore, RunSummary, Severity,
 };
 use agentcarousel_evaluators::EvaluatorKind;
 use std::collections::{HashMap, HashSet};
@@ -10,6 +10,7 @@ fn not_tested_result(
     case_id: CaseId,
     tags: Vec<String>,
     critical: bool,
+    severity: Option<Severity>,
     reason: &str,
 ) -> CaseResult {
     CaseResult {
@@ -29,11 +30,12 @@ fn not_tested_result(
         tags,
         skip_reason: Some(reason.to_string()),
         critical,
+        severity,
     }
 }
 
-/// A case the runner was asked to execute: id, tags, and whether it is critical.
-pub(super) type PlannedCase = (CaseId, Vec<String>, bool);
+/// A case the runner was asked to execute: id, tags, whether it is critical, and its severity.
+pub(super) type PlannedCase = (CaseId, Vec<String>, bool, Option<Severity>);
 
 /// Record every suite case that has no result: planned cases never reached (e.g. after
 /// `--fail-fast`) as `not_executed`, and filtered-out cases as `excluded_by_filter`.
@@ -43,12 +45,13 @@ pub(super) fn append_not_tested(
     excluded: Vec<Case>,
 ) {
     let seen: HashSet<String> = results.iter().map(|r| r.case_id.0.clone()).collect();
-    for (case_id, tags, critical) in planned {
+    for (case_id, tags, critical, severity) in planned {
         if !seen.contains(&case_id.0) {
             results.push(not_tested_result(
                 case_id.clone(),
                 tags.clone(),
                 *critical,
+                *severity,
                 "not_executed",
             ));
         }
@@ -56,26 +59,35 @@ pub(super) fn append_not_tested(
     for case in excluded {
         if !seen.contains(&case.id.0) {
             let critical = case.is_critical();
+            let severity = case.severity;
             results.push(not_tested_result(
                 case.id,
                 case.tags,
                 critical,
+                severity,
                 "excluded_by_filter",
             ));
         }
     }
 }
 
-/// Copy each planned case's criticality onto its result.
+/// Copy each planned case's criticality and severity onto its result.
 pub(super) fn mark_critical(results: &mut [CaseResult], planned: &[PlannedCase]) {
     let critical: HashSet<&str> = planned
         .iter()
-        .filter(|(_, _, critical)| *critical)
-        .map(|(id, _, _)| id.0.as_str())
+        .filter(|(_, _, critical, _)| *critical)
+        .map(|(id, _, _, _)| id.0.as_str())
+        .collect();
+    let severity: HashMap<&str, Severity> = planned
+        .iter()
+        .filter_map(|(id, _, _, sev)| sev.map(|s| (id.0.as_str(), s)))
         .collect();
     for result in results.iter_mut() {
         if critical.contains(result.case_id.0.as_str()) {
             result.critical = true;
+        }
+        if let Some(sev) = severity.get(result.case_id.0.as_str()) {
+            result.severity = Some(*sev);
         }
     }
 }
@@ -113,6 +125,7 @@ pub(super) fn aggregate_case_results(
         tags: case.tags.clone(),
         skip_reason: None,
         critical: false,
+        severity: case.severity,
     }
 }
 
