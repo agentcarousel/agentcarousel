@@ -249,7 +249,7 @@ agc metrics --skill my-skill --framework nist-ai-rmf --json > metrics.json
 
 ## agc compliance
 
-Map fixture evidence to OSCAL compliance frameworks. Requires cases tagged with control IDs (e.g. `nist-ai-rmf:GOVERN-1.1`).
+Map fixture evidence to OSCAL compliance frameworks. Requires cases tagged `<framework>:<control-id>` using the catalog's control IDs (e.g. `nist-ai-rmf:nist-ai-rmf-govern-1.1`, `aiuc-1:D001`).
 
 ### agc compliance report
 
@@ -259,7 +259,7 @@ agc compliance report [flags]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--framework <id>` | required | Framework to report on: `nist-ai-rmf`, `nist-800-171`, `nist-800-172`, `nist-800-207`, `eu-ai-act`, `iso-42001`, `hipaa`, `fda-samd`, or `all` |
+| `--framework <id>` | required | Framework to report on: `nist-ai-rmf`, `nist-800-171`, `nist-800-172`, `nist-800-207`, `eu-ai-act`, `iso-42001`, `hipaa`, `fda-samd`, `aiuc-1`, or `all` |
 | `--skill <name>` | all skills | Scope scoring to cases from this skill |
 | `--model <model>` | configured model | Scope scoring to this generator model |
 | `--all-models` | off | Include results from all models (disables model filter) |
@@ -284,7 +284,9 @@ agc compliance report --framework eu-ai-act --oscal --out ./evidence/
 
 **Satisfaction threshold:** A control reaches `Satisfied` when pass rate ≥ 0.80 across a minimum of three tagged cases. Controls with fewer than three cases receive `PartialEvidence` regardless of pass rate.
 
-**Frameworks:** `nist-ai-rmf` · `nist-800-171` · `nist-800-172` · `nist-800-207` · `eu-ai-act` · `iso-42001` · `hipaa` · `fda-samd`
+**Frameworks:** `nist-ai-rmf` · `nist-800-171` · `nist-800-172` · `nist-800-207` · `eu-ai-act` · `iso-42001` · `hipaa` · `fda-samd` · [`aiuc-1`](frameworks/aiuc-1.md) (crosswalk of IDs, our own labels and links; `agc export` writes `compliance_aiuc-1.md` only when cases carry `aiuc-1:` tags)
+
+**Procedural controls:** controls a catalog marks `evidence-type: procedural`, and crosswalk controls that are policy or process requirements, are reported as `Procedural`. Tagged cases never count as evidence for them.
 
 ---
 
@@ -329,12 +331,12 @@ agc compliance generate-cases [flags]
 | `--json` | off | Emit structured JSON envelope |
 
 ```bash
-# Generate 3 cases for NIST AI RMF GOVERN-1.1 and MAP-1.1
+# Generate 3 cases for NIST AI RMF GOVERN 1.1 and MAP 1.1
 agc compliance generate-cases \
   --skill my-skill \
   --framework nist-ai-rmf \
-  --tag nist-ai-rmf:GOVERN-1.1 \
-  --tag nist-ai-rmf:MAP-1.1 \
+  --tag nist-ai-rmf:nist-ai-rmf-govern-1.1 \
+  --tag nist-ai-rmf:nist-ai-rmf-map-1.1 \
   --count 3 \
   --out fixtures/my-skill/cases.yaml
 ```

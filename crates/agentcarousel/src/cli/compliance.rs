@@ -34,6 +34,7 @@ const ALL_FRAMEWORKS: &[&str] = &[
     "nist-800-171",
     "nist-800-172",
     "nist-800-207",
+    "aiuc-1",
 ];
 
 /// Generate compliance attestation reports and gap advisories from run history.
@@ -91,7 +92,8 @@ struct GenerateComplianceArgs {
 struct ReportArgs {
     /// Framework to report on. Use "all" to run all embedded frameworks.
     /// Available: nist-ai-rmf, eu-ai-act, iso-42001, hipaa, fda-samd,
-    ///            nist-800-171, nist-800-172, nist-800-207
+    ///            nist-800-171, nist-800-172, nist-800-207, aiuc-1
+    /// (aiuc-1 carries control IDs, AgentCarousel's own labels and links only)
     #[arg(long, default_value = "nist-ai-rmf")]
     framework: String,
 
@@ -601,6 +603,9 @@ fn run_gaps(args: GapsArgs, globals: &GlobalOptions, model_filter: Option<&str>)
         // Print the full requirement, word-wrapped at 70 chars
         for line in wrap_text(&s.control.requirement, 66) {
             println!("     {line}");
+        }
+        if let Some(url) = &s.control.url {
+            println!("     {}", style(url).dim());
         }
         println!(
             "     {}",

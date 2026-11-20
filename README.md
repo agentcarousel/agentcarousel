@@ -83,7 +83,7 @@ For details on rubric scoring, judge reliability, and what the signed bundle doe
 
 ## Compliance reports (new in 0.8.0)
 
-Tag fixture cases with control IDs and `agc` scores your eval history against bundled OSCAL catalogs: NIST AI RMF, EU AI Act, ISO 42001, HIPAA, FDA SaMD, and NIST SP 800-171/172/207.
+Tag fixture cases with control IDs and `agc` scores your eval history against bundled OSCAL catalogs: NIST AI RMF, EU AI Act, ISO 42001, HIPAA, FDA SaMD, and NIST SP 800-171/172/207. An [AIUC-1 crosswalk](docs/frameworks/aiuc-1.md) (control IDs, our own labels and links) is bundled too.
 
 ```yaml
 tags:
@@ -96,7 +96,7 @@ agc compliance report --framework fda-samd          # per-control attestation re
 agc compliance report --framework hipaa --oscal     # OSCAL Assessment Results JSON
 agc compliance gaps --framework eu-ai-act           # uncovered controls + remediation advisories
 agc compliance generate --skill my-skill \
-  --tag nist-ai-rmf:measure-1.1                     # generate pre-tagged fixture cases
+  --tag nist-ai-rmf:nist-ai-rmf-measure-1.1         # generate pre-tagged fixture cases
 ```
 
 A control is reported `satisfied` only with three or more cases and effectiveness ≥ 0.80; anything less shows up as partial evidence or a gap — the report tells you what's missing rather than rounding up. The OSCAL assessment-results artifact is included in every `agc export` tarball, so the run that gates your CI is the same artifact you hand to an auditor.

@@ -368,9 +368,33 @@ pub(crate) fn export_run_artifact_with(
         None => list_full_runs(20).unwrap_or_default(),
     };
     const COMPLIANCE_FRAMEWORKS: &[&str] = &["nist-ai-rmf", "eu-ai-act", "iso-42001"];
+    const OPT_IN_COMPLIANCE_FRAMEWORKS: &[&str] = &["aiuc-1"];
     // Load registry once for all framework scoring in this loop.
     let registry = super::compliance_mappings::load_framework_registry();
     for fw in COMPLIANCE_FRAMEWORKS {
+        let scores = super::compliance_mappings::compute_control_scores_with_registry(
+            &registry,
+            &compliance_runs,
+            fw,
+            skill,
+            None,
+        );
+        let md = super::metrics::render_framework_compliance_report(&scores, fw, skill);
+        let md_path = root.join(format!("compliance_{fw}.md"));
+        let mut f = fs::File::create(&md_path).map_err(|err| err.to_string())?;
+        f.write_all(md.as_bytes()).map_err(|err| err.to_string())?;
+    }
+    // Opt-in crosswalks: only written when the scored runs carry the framework's
+    // tags, so bundles that never use a crosswalk don't mention it.
+    for fw in OPT_IN_COMPLIANCE_FRAMEWORKS {
+        let prefix = format!("{fw}:");
+        let tagged = compliance_runs
+            .iter()
+            .flat_map(|r| r.cases.iter())
+            .any(|c| c.tags.iter().any(|t| t.starts_with(&prefix)));
+        if !tagged {
+            continue;
+        }
         let scores = super::compliance_mappings::compute_control_scores_with_registry(
             &registry,
             &compliance_runs,
@@ -817,7 +841,12 @@ fn write_assurance_documents(root: &Path, run: &Run, include_prompt: bool) -> Re
 
 /// Integrity manifest over evidence files (excludes `MANIFEST.json` itself).
 fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
-    let optional = ["evidence.json", "attestation.intoto.json", "prompt.md"];
+    let optional = [
+        "evidence.json",
+        "attestation.intoto.json",
+        "prompt.md",
+        "compliance_aiuc-1.md",
+    ];
     let tracked = [
         "run.json",
         "fixture_bundle.lock",
