@@ -1413,7 +1413,7 @@ pub(crate) fn render_framework_compliance_report(
 /// Finding status follows the OSCAL 1.1.2 schema: `satisfied` or
 /// `not-satisfied` (gaps and partial evidence are not-satisfied, with the
 /// detail in `reason`). Procedural controls are not assessable by behavioral
-/// tests, so they get an observation but no finding.
+/// tests, so they are omitted: no observation, finding, or risk.
 pub(crate) fn serialize_assessment_results(
     scores: &[ControlScore],
     framework: &str,
