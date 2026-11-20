@@ -197,8 +197,9 @@ fn pull_manifest_entries(
         let Some(path_value) = entry.get("path").and_then(|value| value.as_str()) else {
             return Err(format!("{field} entry missing path"));
         };
-        let bytes = client.get_bundle_file(registry_bundle_id, path_value)?;
         let dest = resolve_bundle_artifact_path(bundle_root, path_value)?;
+        ensure_no_symlinks_below_root(bundle_root, &dest)?;
+        let bytes = client.get_bundle_file(registry_bundle_id, path_value)?;
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
         }
@@ -212,21 +213,32 @@ fn pull_manifest_entries(
     Ok(())
 }
 
-/// Resolve a manifest `path` relative to the bundle directory (supports `..` like checked-in bundles).
+/// Resolve a manifest `path` strictly inside `bundle_root`.
+///
+/// Manifest paths come from untrusted places (registry manifests, downloaded
+/// archives), so only plain relative components are accepted. `..`, absolute
+/// paths, Windows prefixes and backslash separators are rejected instead of
+/// being normalized, so a manifest can never name a file outside the bundle.
 fn resolve_bundle_artifact_path(bundle_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    if relative.contains('\\') || relative.contains('\0') {
+        return Err(format!(
+            "manifest path `{relative}` must use `/` separators and no NUL bytes"
+        ));
+    }
     let mut out = bundle_root.to_path_buf();
+    let mut named = false;
     for component in Path::new(relative).components() {
         match component {
-            Component::Normal(part) => out.push(part),
-            Component::ParentDir => {
-                if !out.pop() {
-                    return Err(format!(
-                        "manifest path `{relative}` has too many `..` segments for output root {}",
-                        bundle_root.display()
-                    ));
-                }
+            Component::Normal(part) => {
+                out.push(part);
+                named = true;
             }
             Component::CurDir => {}
+            Component::ParentDir => {
+                return Err(format!(
+                    "manifest path `{relative}` must not contain `..` (paths stay inside the bundle)"
+                ));
+            }
             Component::RootDir | Component::Prefix(_) => {
                 return Err(format!(
                     "manifest path `{relative}` must be relative (no root or prefix components)"
@@ -234,12 +246,35 @@ fn resolve_bundle_artifact_path(bundle_root: &Path, relative: &str) -> Result<Pa
             }
         }
     }
-    if out.as_os_str().is_empty() {
-        return Err(format!(
-            "manifest path `{relative}` resolved to an empty path"
-        ));
+    if !named {
+        return Err(format!("manifest path `{relative}` does not name a file"));
     }
     Ok(out)
+}
+
+/// Refuse to write through a symlink that already exists between `bundle_root`
+/// and `dest` (for example one checked into a cloned repository).
+fn ensure_no_symlinks_below_root(bundle_root: &Path, dest: &Path) -> Result<(), String> {
+    let Ok(relative) = dest.strip_prefix(bundle_root) else {
+        return Err(format!(
+            "refusing to write {}: outside bundle root {}",
+            dest.display(),
+            bundle_root.display()
+        ));
+    };
+    let mut current = bundle_root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        if let Ok(meta) = fs::symlink_metadata(&current) {
+            if meta.file_type().is_symlink() {
+                return Err(format!(
+                    "refusing to write through symlink {}",
+                    current.display()
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn pack_bundle(dir: &Path, out: Option<&Path>) -> Result<PathBuf, String> {
@@ -337,7 +372,7 @@ fn update_entries(manifest: &mut Value, field: &str, root: &Path) -> Result<(), 
         let Some(path_value) = entry.get("path").and_then(|value| value.as_str()) else {
             return Err(format!("{field} entry missing path"));
         };
-        let file_path = root.join(path_value);
+        let file_path = resolve_bundle_artifact_path(root, path_value)?;
         let hash = sha256_file(&file_path)?;
         entry["sha256"] = Value::String(hash);
     }
@@ -366,7 +401,7 @@ fn verify_entries(manifest: &Value, field: &str, root: &Path) -> Result<(), Stri
         let Some(expected) = entry.get("sha256").and_then(|value| value.as_str()) else {
             return Err(format!("{field} entry missing sha256 for {path_value}"));
         };
-        let file_path = root.join(path_value);
+        let file_path = resolve_bundle_artifact_path(root, path_value)?;
         let actual = sha256_file(&file_path)?;
         if actual != expected {
             return Err(format!(
@@ -382,4 +417,77 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     let mut hasher = Sha256::new();
     hasher.update(contents);
     Ok(hex_lower(hasher.finalize().as_ref()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_paths_resolve_inside_root() {
+        let root = Path::new("pulled-bundles/demo");
+        assert_eq!(
+            resolve_bundle_artifact_path(root, "cases.yaml").unwrap(),
+            root.join("cases.yaml")
+        );
+        assert_eq!(
+            resolve_bundle_artifact_path(root, "./golden/x.txt").unwrap(),
+            root.join("golden").join("x.txt")
+        );
+    }
+
+    #[test]
+    fn manifest_paths_that_escape_are_rejected() {
+        let root = Path::new("pulled-bundles/demo");
+        for bad in [
+            "../x",
+            "a/../../b",
+            "../../.git/hooks/pre-commit",
+            "/etc/passwd",
+            "C:\\x",
+            "..\\..\\x",
+            "",
+            ".",
+            "a\0b",
+        ] {
+            assert!(
+                resolve_bundle_artifact_path(root, bad).is_err(),
+                "expected `{bad}` to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn verify_rejects_manifest_path_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("bundle");
+        fs::create_dir_all(&bundle).unwrap();
+        fs::write(dir.path().join("outside.txt"), b"secret").unwrap();
+        fs::write(
+            bundle.join("bundle.manifest.json"),
+            serde_json::json!({
+                "fixtures": [{ "path": "../outside.txt", "sha256": "00" }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let err = verify_bundle(Some(&bundle)).unwrap_err();
+        assert!(err.contains("must not contain `..`"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pull_refuses_to_write_through_existing_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("bundle");
+        let target = dir.path().join("elsewhere");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&target).unwrap();
+        std::os::unix::fs::symlink(&target, root.join("fixtures")).unwrap();
+        let dest = resolve_bundle_artifact_path(&root, "fixtures/cases.yaml").unwrap();
+        let err = ensure_no_symlinks_below_root(&root, &dest).unwrap_err();
+        assert!(err.contains("symlink"), "{err}");
+        let ok = resolve_bundle_artifact_path(&root, "cases.yaml").unwrap();
+        ensure_no_symlinks_below_root(&root, &ok).unwrap();
+    }
 }
