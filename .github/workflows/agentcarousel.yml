@@ -14,11 +14,13 @@ jobs:
     name: Rust CI (PR gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup show active-toolchain || rustup toolchain install --profile minimal
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Format check
         run: cargo fmt --check
       - name: Clippy
@@ -31,11 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: rust-ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup show active-toolchain || rustup toolchain install --profile minimal
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Build agentcarousel (release)
         run: cargo build --release -p agentcarousel
       - name: Validate
@@ -44,7 +48,7 @@ jobs:
       - name: Optional jq smoke on ATF summary
         run: jq -e '.data.atf_summary.fixture_files_loaded > 0' validate-report.json
       - name: Upload validate report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: validate-report
           path: validate-report.json
@@ -59,7 +63,7 @@ jobs:
           ./target/release/agentcarousel bundle verify fixtures/prompt-injection-detector
           ./target/release/agentcarousel bundle verify fixtures/prompt-injection-detector/bundle.manifest.json
       - name: Upload release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: agentcarousel-linux
           path: target/release/agentcarousel
@@ -70,9 +74,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-ci, validate]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: agentcarousel-linux
           path: target/release
@@ -105,7 +111,7 @@ jobs:
             pipx run --spec check-jsonschema==0.38.2 check-jsonschema --schemafile oscal-check/schema-ar.json oscal-check/ar-export.json
           done
       - name: Upload test results (JSON)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-results-smoke
           path: test-results-smoke.json
@@ -124,10 +130,12 @@ jobs:
       HAS_CAROUSEL_KEY: ${{ secrets.AGENTCAROUSEL_CAROUSEL_KEY != '' }}
       HAS_CAROUSEL_MODELS: ${{ secrets.AGENTCAROUSEL_CAROUSEL_MODELS != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: agentcarousel-linux
           path: target/release
@@ -136,7 +144,7 @@ jobs:
         run: chmod +x target/release/agentcarousel
 
       - name: Restore eval history (for regression diff)
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/agentcarousel
           key: eval-history-${{ github.run_id }}
@@ -454,7 +462,7 @@ jobs:
 
       - name: Upload eval results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: eval-results-${{ github.run_id }}
           path: eval-results/*.json
@@ -462,7 +470,7 @@ jobs:
 
       - name: Upload KPI summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kpi-summary
           path: kpi-summary.json
@@ -470,7 +478,7 @@ jobs:
 
       - name: Upload doctor report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: doctor-report
           path: doctor-report.json
@@ -479,7 +487,7 @@ jobs:
 
       - name: Upload export manifest
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: export-manifest
           path: export-manifest.json
@@ -488,7 +496,7 @@ jobs:
 
       - name: Upload carousel results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: carousel-results-${{ github.run_id }}
           path: carousel-results/*.json
@@ -502,7 +510,7 @@ jobs:
     needs: [validate]
     steps:
       - name: Download KPI summary from last nightly
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kpi-summary
           path: .
