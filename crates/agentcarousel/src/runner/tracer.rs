@@ -159,21 +159,32 @@ mod tests {
         SecretScrubber.scrub_string(value).0
     }
 
+    /// Synthetic credential: a real provider prefix plus filler. Built at run
+    /// time so the source never contains a string that secret scanners
+    /// (gitleaks, TruffleHog, GitHub push protection) match as a credential.
+    fn fake(prefix: &str, filler: char, len: usize) -> String {
+        format!("{prefix}{}", filler.to_string().repeat(len))
+    }
+
+    fn fake_google_key() -> String {
+        fake("AIza", 'x', 35)
+    }
+
     #[test]
     fn provider_keys_are_redacted() {
         let secrets = [
-            "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
-            "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
-            "sk-or-v1-0123456789abcdef0123456789abcdef",
-            "sk-AbCdEfGhIjKlMnOpQrSt",
-            "AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q",
-            "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-            "github_pat_11ABCDEFG0123456789_abcdefghijklmnop",
-            "AKIAIOSFODNN7EXAMPLE",
+            fake("sk-ant-api03-", 'x', 40),
+            fake("sk-proj-", 'x', 40),
+            fake("sk-or-v1-", '0', 32),
+            fake("sk-", 'x', 20),
+            fake_google_key(),
+            fake("ghp_", 'x', 36),
+            fake("github_pat_", 'x', 40),
+            fake("AKIA", 'Z', 16),
         ];
-        for secret in secrets {
+        for secret in &secrets {
             let out = scrub(&format!("request failed: {secret} (retrying)"));
-            assert!(!out.contains(secret), "{secret} survived: {out}");
+            assert!(!out.contains(secret.as_str()), "{secret} survived: {out}");
             assert!(out.contains("[REDACTED]"), "{out}");
         }
     }
@@ -215,14 +226,14 @@ mod tests {
             Vec::new(),
             Vec::new(),
         )];
-        results[0].error = Some(
+        let key = fake_google_key();
+        results[0].error = Some(format!(
             "live generation failed: error sending request for url \
-             (https://generativelanguage.googleapis.com/v1beta/models/m:generateContent?key=AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q)"
-                .to_string(),
-        );
+             (https://generativelanguage.googleapis.com/v1beta/models/m:generateContent?key={key})"
+        ));
         scrub_case_results(&mut results);
         let error = results[0].error.as_deref().unwrap();
-        assert!(!error.contains("AIzaSy"), "{error}");
+        assert!(!error.contains(key.as_str()), "{error}");
         assert!(results[0].trace.redacted);
     }
 
@@ -230,7 +241,7 @@ mod tests {
     fn reqwest_errors_without_url_drop_query_keys() {
         // Port 1 on localhost refuses the connection; the error must not echo the URL.
         let err = reqwest::blocking::Client::new()
-            .get("http://127.0.0.1:1/v1?key=AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q")
+            .get(format!("http://127.0.0.1:1/v1?key={}", fake_google_key()))
             .send()
             .unwrap_err();
         assert!(err.to_string().contains("key="), "precondition: {err}");
