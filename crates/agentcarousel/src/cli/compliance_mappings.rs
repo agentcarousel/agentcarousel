@@ -620,6 +620,31 @@ mod tests {
     }
 
     #[test]
+    fn aiuc1_docs_table_matches_the_bundled_crosswalk() {
+        let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/frameworks/aiuc-1.md");
+        let docs = std::fs::read_to_string(docs).expect("read docs/frameworks/aiuc-1.md");
+        // Rows look like: | [A001](url) | label | behavioral | notes |
+        let documented: std::collections::BTreeMap<String, bool> = docs
+            .lines()
+            .filter_map(|line| line.strip_prefix("| ["))
+            .map(|row| {
+                let id = row.split(']').next().unwrap().to_string();
+                let evidence = row.split('|').nth(2).unwrap().trim();
+                (id, evidence == "behavioral")
+            })
+            .collect();
+        let mut reg = FrameworkRegistry::new();
+        load_bundled_frameworks(&mut reg);
+        let bundled: std::collections::BTreeMap<String, bool> =
+            controls_for_framework(&reg, "aiuc-1")
+                .iter()
+                .map(|c| (c.control_id.clone(), c.behavioral))
+                .collect();
+        assert_eq!(documented, bundled, "docs table and aiuc-1.json disagree");
+    }
+
+    #[test]
     fn later_sources_replace_controls_with_the_same_tag() {
         let mut reg = FrameworkRegistry::new();
         load_bundled_frameworks(&mut reg);
