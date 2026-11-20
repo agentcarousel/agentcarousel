@@ -22,6 +22,41 @@ pub struct FrameworkControl {
     pub behavioral: bool,
     /// Relative importance weight for scoring (default 1.0).
     pub importance: f32,
+    /// Link to the control's definition at its publisher, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Version of the framework this control entry is pinned to (e.g. `"2026-Q4"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_version: Option<String>,
+    /// Why the control is (or is not) treated as behavioral, and evidence limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
+/// Framework crosswalks bundled with the binary as `Vec<FrameworkControl>` JSON.
+///
+/// These are frameworks whose control text is not redistributable, so the
+/// bundle carries only control IDs, AgentCarousel's own short labels, and
+/// links to the publisher. See `docs/frameworks/`.
+const BUNDLED_FRAMEWORKS: &[(&str, &str)] = &[(
+    "aiuc-1",
+    include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/frameworks/aiuc-1.json"
+    )),
+)];
+
+/// Attribution line shown under a framework's compliance report, when the
+/// framework's control labels are AgentCarousel's own wording.
+pub fn framework_attribution(framework: &str) -> Option<&'static str> {
+    match framework {
+        "aiuc-1" => Some(
+            "AIUC-1 control IDs and links refer to the standard published by the Artificial \
+             Intelligence Underwriting Company (AIUC). Control labels are AgentCarousel's own \
+             wording. AgentCarousel is not affiliated with or endorsed by AIUC.",
+        ),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,17 +94,40 @@ pub type FrameworkRegistry = HashMap<String, Vec<FrameworkControl>>;
 /// 2. `./frameworks/*.json` in the working directory
 /// 3. `~/.agentcarousel/frameworks/*.json`
 ///
-/// Later sources can extend (but not remove) controls from earlier ones.
+/// Bundled crosswalks (see [`BUNDLED_FRAMEWORKS`]) load after the embedded
+/// catalogs. Later sources can add controls; a control whose `tag` already
+/// exists replaces the earlier entry instead of being counted twice.
 pub fn load_framework_registry() -> FrameworkRegistry {
     let mut registry: FrameworkRegistry = HashMap::new();
 
     load_embedded_catalogs(&mut registry);
+    load_bundled_frameworks(&mut registry);
     load_directory_catalogs(&mut registry, std::path::Path::new("frameworks"));
     if let Some(home) = home_frameworks_dir() {
         load_directory_catalogs(&mut registry, &home);
     }
 
     registry
+}
+
+/// Add `controls` to `registry`, replacing any existing control with the same tag.
+fn merge_controls(registry: &mut FrameworkRegistry, controls: Vec<FrameworkControl>) {
+    for control in controls {
+        let entry = registry.entry(control.framework.clone()).or_default();
+        match entry.iter_mut().find(|c| c.tag == control.tag) {
+            Some(existing) => *existing = control,
+            None => entry.push(control),
+        }
+    }
+}
+
+fn load_bundled_frameworks(registry: &mut FrameworkRegistry) {
+    for (name, raw) in BUNDLED_FRAMEWORKS {
+        match serde_json::from_str::<Vec<FrameworkControl>>(raw) {
+            Ok(controls) => merge_controls(registry, controls),
+            Err(err) => debug_assert!(false, "bundled framework {name} is invalid: {err}"),
+        }
+    }
 }
 
 /// Return all `FrameworkControl` entries for the named framework, or an empty slice.
@@ -297,6 +355,9 @@ fn load_embedded_catalogs(registry: &mut FrameworkRegistry) {
                     .iter()
                     .any(|p| p.name == "evidence-type" && p.value == "procedural"),
                 importance: 1.0,
+                url: None,
+                framework_version: None,
+                notes: None,
             });
         }
     }
@@ -320,9 +381,7 @@ fn load_directory_catalogs(registry: &mut FrameworkRegistry, dir: &std::path::Pa
             Ok(v) => v,
             Err(_) => continue,
         };
-        if let Some(framework) = controls.first().map(|c| c.framework.clone()) {
-            registry.entry(framework).or_default().extend(controls);
-        }
+        merge_controls(registry, controls);
     }
 }
 
@@ -419,6 +478,9 @@ mod tests {
             tag: format!("fw:{id}"),
             behavioral,
             importance: 1.0,
+            url: None,
+            framework_version: None,
+            notes: None,
         }
     }
 
@@ -523,5 +585,104 @@ mod tests {
                 "{framework}: controls marked evidence-type=procedural"
             );
         }
+    }
+
+    #[test]
+    fn bundled_aiuc1_crosswalk_is_complete_and_well_formed() {
+        let mut reg = FrameworkRegistry::new();
+        load_bundled_frameworks(&mut reg);
+        let controls = controls_for_framework(&reg, "aiuc-1");
+        assert_eq!(
+            controls.len(),
+            50,
+            "AIUC-1 2026-Q4 has 50 active requirements"
+        );
+        let tags: std::collections::HashSet<_> = controls.iter().map(|c| &c.tag).collect();
+        assert_eq!(tags.len(), 50, "tags are unique");
+        for c in controls {
+            assert_eq!(c.tag, format!("aiuc-1:{}", c.control_id));
+            assert!(
+                c.url
+                    .as_deref()
+                    .is_some_and(|u| u.starts_with("https://standard.aiuc-1.com/")),
+                "{} has a standard.aiuc-1.com link",
+                c.control_id
+            );
+            assert_eq!(c.framework_version.as_deref(), Some("2026-Q4"));
+            assert!(!c.requirement.is_empty(), "{} has a label", c.control_id);
+        }
+        let behavioral = controls.iter().filter(|c| c.behavioral).count();
+        assert_eq!(behavioral, 15, "behavioral/procedural split is deliberate");
+        for tool_dependent in ["aiuc-1:B006", "aiuc-1:D003"] {
+            let c = controls.iter().find(|c| c.tag == tool_dependent).unwrap();
+            assert!(!c.behavioral, "{tool_dependent} needs observed tool calls");
+        }
+    }
+
+    #[test]
+    fn aiuc1_docs_table_matches_the_bundled_crosswalk() {
+        let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/frameworks/aiuc-1.md");
+        let docs = std::fs::read_to_string(docs).expect("read docs/frameworks/aiuc-1.md");
+        // Rows look like: | [A001](url) | label | behavioral | notes |
+        let documented: std::collections::BTreeMap<String, bool> = docs
+            .lines()
+            .filter_map(|line| line.strip_prefix("| ["))
+            .map(|row| {
+                let id = row.split(']').next().unwrap().to_string();
+                let evidence = row.split('|').nth(2).unwrap().trim();
+                (id, evidence == "behavioral")
+            })
+            .collect();
+        let mut reg = FrameworkRegistry::new();
+        load_bundled_frameworks(&mut reg);
+        let bundled: std::collections::BTreeMap<String, bool> =
+            controls_for_framework(&reg, "aiuc-1")
+                .iter()
+                .map(|c| (c.control_id.clone(), c.behavioral))
+                .collect();
+        assert_eq!(documented, bundled, "docs table and aiuc-1.json disagree");
+    }
+
+    #[test]
+    fn later_sources_replace_controls_with_the_same_tag() {
+        let mut reg = FrameworkRegistry::new();
+        load_bundled_frameworks(&mut reg);
+        let mut override_d001 = controls_for_framework(&reg, "aiuc-1")
+            .iter()
+            .find(|c| c.control_id == "D001")
+            .cloned()
+            .unwrap();
+        override_d001.requirement = "custom label".to_string();
+        merge_controls(&mut reg, vec![override_d001]);
+        let controls = controls_for_framework(&reg, "aiuc-1");
+        assert_eq!(controls.len(), 50, "no duplicate after override");
+        assert_eq!(
+            controls
+                .iter()
+                .find(|c| c.control_id == "D001")
+                .unwrap()
+                .requirement,
+            "custom label"
+        );
+    }
+
+    #[test]
+    fn aiuc1_tagged_cases_score_against_the_crosswalk() {
+        let mut reg = FrameworkRegistry::new();
+        load_bundled_frameworks(&mut reg);
+        let cases = vec![
+            case("a", CaseStatus::Passed, &["aiuc-1:D001"]),
+            case("b", CaseStatus::Passed, &["aiuc-1:D001"]),
+            case("c", CaseStatus::Passed, &["aiuc-1:D001", "aiuc-1:B006"]),
+        ];
+        let runs = vec![run_with(cases, "m")];
+        let scores = compute_control_scores_with_registry(&reg, &runs, "aiuc-1", None, None);
+        assert_eq!(status_of(&scores, "D001"), ControlCoverageStatus::Satisfied);
+        assert_eq!(
+            status_of(&scores, "B006"),
+            ControlCoverageStatus::Procedural
+        );
+        assert_eq!(status_of(&scores, "A006"), ControlCoverageStatus::Gap);
     }
 }

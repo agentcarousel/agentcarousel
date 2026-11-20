@@ -203,4 +203,4 @@ agc pipeline improve my-support-bot --target-score 0.90
 - [Concepts](concepts.md) — understand fixtures, rubrics, evaluators, baselines, and the pipeline loop in depth
 - [Reference](reference.md) — every `agc` command and flag
 - Add `agc compare -l --threshold 0.05` to your CI pipeline as a regression gate
-- Tag cases with control IDs (e.g. `tags: [smoke, nist-ai-rmf:GOVERN-1.1]`) and run `agc compliance report --framework nist-ai-rmf` to generate OSCAL attestation evidence
+- Tag cases with control IDs (e.g. `tags: [smoke, nist-ai-rmf:nist-ai-rmf-govern-1.1]`) and run `agc compliance report --framework nist-ai-rmf` to generate OSCAL attestation evidence

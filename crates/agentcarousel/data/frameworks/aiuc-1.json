@@ -1,0 +1,515 @@
+[
+  {
+    "framework": "aiuc-1",
+    "control_id": "A001",
+    "requirement": "Rules for how customer inputs may be used",
+    "tag": "aiuc-1:A001",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/establish-data-use-policy",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A002",
+    "requirement": "Ownership and permitted use of agent outputs",
+    "tag": "aiuc-1:A002",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/define-output-rights",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A003",
+    "requirement": "Least-privilege data access for the agent",
+    "tag": "aiuc-1:A003",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/implement-contextual-data-safeguards",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A004",
+    "requirement": "Safeguarding confidential business information",
+    "tag": "aiuc-1:A004",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/protect-ip-trade-secrets",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A005",
+    "requirement": "Isolation between different customers' data",
+    "tag": "aiuc-1:A005",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/prevent-cross-customer-data-exposure",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A006",
+    "requirement": "Personal data does not leak in outputs",
+    "tag": "aiuc-1:A006",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/prevent-pii-leakage",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A007",
+    "requirement": "Outputs avoid infringing others' IP",
+    "tag": "aiuc-1:A007",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/prevent-ip-violations",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A008",
+    "requirement": "Credentials and secrets stay private",
+    "tag": "aiuc-1:A008",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/prevent-secrets-leakage",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "A009",
+    "requirement": "Independent data and privacy testing, quarterly",
+    "tag": "aiuc-1:A009",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/data-and-privacy/3rd-party-testing-for-data-and-privacy-risk",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: the control is appointing an independent tester and keeping the quarterly cadence. An evidence bundle produced by an independent party with agc is evidence for this control."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B001",
+    "requirement": "Independent adversarial security testing, quarterly",
+    "tag": "aiuc-1:B001",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/test-adversarial-robustness",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: the control is appointing an independent tester and keeping the quarterly cadence. An evidence bundle produced by an independent party with agc is evidence for this control."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B002",
+    "requirement": "Adversarial inputs are detected",
+    "tag": "aiuc-1:B002",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/detect-adversarial-input",
+    "framework_version": "2026-Q4",
+    "notes": "Output-level evidence only: cases can show the agent refuses or flags adversarial input in its responses."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B003",
+    "requirement": "Limits on disclosing system internals",
+    "tag": "aiuc-1:B003",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/limit-technical-over-disclosure",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B004",
+    "requirement": "Protection against endpoint scraping",
+    "tag": "aiuc-1:B004",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/prevent-ai-endpoint-scraping",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B005",
+    "requirement": "Runtime filtering of inputs",
+    "tag": "aiuc-1:B005",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/implement-real-time-input-filtering",
+    "framework_version": "2026-Q4",
+    "notes": "Output-level evidence only: cases show the effect of filtering on responses, not the filter component itself."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B006",
+    "requirement": "Agent acts only within its authorized scope",
+    "tag": "aiuc-1:B006",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/enforce-contextual-access-controls",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural for now: needs observed tool calls, which agc does not yet record (tool calls are synthesized from fixture expectations). Not claimable from current agc evidence."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B007",
+    "requirement": "User access rights to the AI system",
+    "tag": "aiuc-1:B007",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/enforce-ai-access-privileges",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B008",
+    "requirement": "Securing the deployment environment",
+    "tag": "aiuc-1:B008",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/protect-model-deployment-environment",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B009",
+    "requirement": "Outputs reveal no more than necessary",
+    "tag": "aiuc-1:B009",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/limit-output-over-exposure",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "B010",
+    "requirement": "Generated code follows secure patterns",
+    "tag": "aiuc-1:B010",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/security/promote-secure-code-patterns",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C001",
+    "requirement": "Documented AI risk categories",
+    "tag": "aiuc-1:C001",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/define-ai-risk-taxonomy",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C002",
+    "requirement": "Testing before deployment",
+    "tag": "aiuc-1:C002",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/conduct-pre-deployment-testing",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: pre-deployment testing is a process. An agc evidence bundle is evidence for it; the control is the process itself."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C003",
+    "requirement": "Outputs contain no harmful content",
+    "tag": "aiuc-1:C003",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/prevent-harmful-outputs",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C004",
+    "requirement": "Agent stays within its intended task",
+    "tag": "aiuc-1:C004",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/prevent-out-of-scope-outputs",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C005",
+    "requirement": "High-risk outputs specific to the agent's domain are prevented",
+    "tag": "aiuc-1:C005",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/prevent-other-high-risk-outputs",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C006",
+    "requirement": "Outputs are safe for downstream systems",
+    "tag": "aiuc-1:C006",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/prevent-output-vulnerabilities",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C007",
+    "requirement": "High-risk outputs are routed to human review",
+    "tag": "aiuc-1:C007",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/flag-high-risk-recommendations",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: routing to human review is a workflow design; cases can show the agent flags high-risk content, which supports but does not satisfy this control."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C008",
+    "requirement": "Ongoing monitoring of risk categories",
+    "tag": "aiuc-1:C008",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/monitor-ai-risk-categories",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C009",
+    "requirement": "Live user feedback and intervention",
+    "tag": "aiuc-1:C009",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/collect-real-time-feedback",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: feedback and intervention are product capabilities, not agent outputs."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "C010",
+    "requirement": "Independent safety testing, quarterly",
+    "tag": "aiuc-1:C010",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/safety/3rd-party-testing-for-harmful-outputs",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: the control is appointing an independent tester and keeping the quarterly cadence. An evidence bundle produced by an independent party with agc is evidence for this control."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "D001",
+    "requirement": "Hallucinated content is prevented",
+    "tag": "aiuc-1:D001",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/reliability/prevent-hallucinated-outputs",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "D003",
+    "requirement": "Unsafe tool calls are restricted",
+    "tag": "aiuc-1:D003",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/reliability/restrict-unsafe-tool-calls",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural for now: needs observed tool calls, which agc does not yet record (tool calls are synthesized from fixture expectations). Not claimable from current agc evidence."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "D004",
+    "requirement": "Independent reliability testing, quarterly",
+    "tag": "aiuc-1:D004",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/reliability/3rd-party-testing-of-tool-calls",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: the control is appointing an independent tester and keeping the quarterly cadence. An evidence bundle produced by an independent party with agc is evidence for this control."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E001",
+    "requirement": "Incident plan for security breaches",
+    "tag": "aiuc-1:E001",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/ai-failure-plan-for-security-breaches",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E002",
+    "requirement": "Incident plan for harmful outputs",
+    "tag": "aiuc-1:E002",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/ai-failure-plan-for-harmful-outputs",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E003",
+    "requirement": "Incident plan for hallucinations",
+    "tag": "aiuc-1:E003",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/ai-failure-plan-for-hallucinations",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E004",
+    "requirement": "Named owners accountable for the AI system",
+    "tag": "aiuc-1:E004",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/assign-accountability",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E005",
+    "requirement": "Documented security of data storage",
+    "tag": "aiuc-1:E005",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/assess-cloud-vs-on-prem-processing",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E006",
+    "requirement": "Due diligence on vendors and models",
+    "tag": "aiuc-1:E006",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/conduct-vendor-due-diligence",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E008",
+    "requirement": "Periodic review of internal processes",
+    "tag": "aiuc-1:E008",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/review-internal-processes",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E009",
+    "requirement": "Oversight of third-party access",
+    "tag": "aiuc-1:E009",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/monitor-3rd-party-access",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E010",
+    "requirement": "Acceptable use policy for the AI system",
+    "tag": "aiuc-1:E010",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/establish-ai-acceptable-use-policy",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E011",
+    "requirement": "Records of where processing happens",
+    "tag": "aiuc-1:E011",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/record-processing-locations",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E012",
+    "requirement": "Documentation of regulatory compliance",
+    "tag": "aiuc-1:E012",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/document-regulatory-compliance",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E013",
+    "requirement": "Quality management system",
+    "tag": "aiuc-1:E013",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/implement-quality-management-system",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E015",
+    "requirement": "Activity logging for the AI system",
+    "tag": "aiuc-1:E015",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/log-model-activity",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E016",
+    "requirement": "Users are told they are interacting with AI",
+    "tag": "aiuc-1:E016",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/implement-ai-disclosure-mechanisms",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: a case can show the agent says it is an AI when asked, but the disclosure mechanism is product design."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E017",
+    "requirement": "Transparency policy for the system",
+    "tag": "aiuc-1:E017",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/document-system-transparency-policy",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "E018",
+    "requirement": "Independent accountability testing, quarterly",
+    "tag": "aiuc-1:E018",
+    "behavioral": false,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/accountability/3rd-party-testing-for-accountability-risk",
+    "framework_version": "2026-Q4",
+    "notes": "Procedural: the control is appointing an independent tester and keeping the quarterly cadence. An evidence bundle produced by an independent party with agc is evidence for this control."
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "F001",
+    "requirement": "No assistance with cyberattacks",
+    "tag": "aiuc-1:F001",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/society/prevent-ai-cyber-misuse",
+    "framework_version": "2026-Q4"
+  },
+  {
+    "framework": "aiuc-1",
+    "control_id": "F002",
+    "requirement": "No assistance with catastrophic misuse",
+    "tag": "aiuc-1:F002",
+    "behavioral": true,
+    "importance": 1.0,
+    "url": "https://standard.aiuc-1.com/society/prevent-catastrophic-misuse",
+    "framework_version": "2026-Q4"
+  }
+]

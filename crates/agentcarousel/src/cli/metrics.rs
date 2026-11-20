@@ -1354,15 +1354,26 @@ pub(crate) fn render_framework_compliance_report(
             let _ = writeln!(
                 md,
                 "| {} | {} | {} | {} | {} |",
-                s.control.control_id, score_str, s.case_count, status_cell, req
+                control_ref(&s.control),
+                score_str,
+                s.case_count,
+                status_cell,
+                req
             );
         }
         for s in &procedural_list {
-            let req = s.control.requirement.replace('\n', " ").replace('|', "\\|");
+            let mut req = s.control.requirement.replace('\n', " ").replace('|', "\\|");
+            if let Some(notes) = &s.control.notes {
+                req.push_str(&format!(
+                    " — _{}_",
+                    notes.replace('\n', " ").replace('|', "\\|")
+                ));
+            }
             let _ = writeln!(
                 md,
                 "| {} | n/a | — | 📋 Procedural | {} |",
-                s.control.control_id, req
+                control_ref(&s.control),
+                req
             );
         }
         let _ = writeln!(md);
@@ -1379,20 +1390,50 @@ pub(crate) fn render_framework_compliance_report(
         let _ = writeln!(
             md,
             "No fixture cases are tagged for these controls. \
-             Add cases or run `agc compliance scaffold --tag <tag>` to generate them."
+             Add cases or run `agc compliance generate --skill <skill> --tag <tag>` to generate them."
         );
         let _ = writeln!(md);
         for s in &gaps {
+            let link = s
+                .control
+                .url
+                .as_deref()
+                .map(|u| format!(" ([definition]({u}))"))
+                .unwrap_or_default();
             let _ = writeln!(
                 md,
-                "- **`{}`** — {}",
+                "- **`{}`** — {}{link}",
                 s.control.control_id, s.control.requirement
             );
         }
         let _ = writeln!(md);
     }
 
+    let version = collapsed
+        .iter()
+        .find_map(|s| s.control.framework_version.as_deref());
+    let attribution = super::compliance_mappings::framework_attribution(framework);
+    if version.is_some() || attribution.is_some() {
+        let _ = writeln!(md, "---");
+        let _ = writeln!(md);
+        if let Some(v) = version {
+            let _ = writeln!(md, "_Framework version: {framework} {v}._");
+        }
+        if let Some(a) = attribution {
+            let _ = writeln!(md, "_{a}_");
+        }
+        let _ = writeln!(md);
+    }
+
     md
+}
+
+/// Control ID cell for Markdown tables: a link when the control has a URL.
+fn control_ref(control: &super::compliance_mappings::FrameworkControl) -> String {
+    match &control.url {
+        Some(url) => format!("[{}]({url})", control.control_id),
+        None => control.control_id.clone(),
+    }
 }
 
 // ── B-6: OSCAL Assessment Results Serializer ──────────────────────────────────

@@ -607,3 +607,81 @@ fn export_withholds_prompt_material_by_default_and_discloses_on_request() {
     let _ = fs::remove_file(&disclosed_out);
     std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
 }
+
+/// Export a run and return the list of entries in the tarball, plus the tarball path.
+fn export_and_list(run: &Run, out_name: &str) -> (Vec<String>, PathBuf) {
+    let (history_path, _config_path) = temp_paths();
+    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history_path);
+    persist_run(run).expect("persist run");
+
+    let root = workspace_root();
+    let out_path = root.join(format!("target/{out_name}.tar.gz"));
+    let _ = fs::remove_file(&out_path);
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .current_dir(&root)
+        .env("AGENTCAROUSEL_HISTORY_DB", &history_path)
+        .args([
+            "export",
+            &run.id.0,
+            "--out",
+            out_path.to_str().expect("out"),
+        ])
+        .assert()
+        .success();
+    let listing = Command::new("tar")
+        .args(["-tzf", out_path.to_str().unwrap()])
+        .output()
+        .expect("tar list");
+    assert!(listing.status.success());
+    let entries = String::from_utf8_lossy(&listing.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    (entries, out_path)
+}
+
+#[test]
+fn export_writes_aiuc1_crosswalk_only_when_cases_carry_aiuc1_tags() {
+    let _lock = EXPORT_HISTORY_LOCK.lock().expect("export tests lock");
+
+    let untagged = minimal_run("export-aiuc1-untagged", Utc::now());
+    let (entries, out_path) = export_and_list(&untagged, "export-aiuc1-untagged");
+    assert!(
+        !entries.iter().any(|e| e.ends_with("compliance_aiuc-1.md")),
+        "untagged runs must not mention AIUC-1: {entries:?}"
+    );
+    let _ = fs::remove_file(&out_path);
+
+    let mut tagged = minimal_run("export-aiuc1-tagged", Utc::now());
+    tagged.cases[0].tags = vec!["aiuc-1:D001".to_string()];
+    let (entries, out_path) = export_and_list(&tagged, "export-aiuc1-tagged");
+    assert!(
+        entries.iter().any(|e| e.ends_with("compliance_aiuc-1.md")),
+        "tagged runs get the AIUC-1 crosswalk report: {entries:?}"
+    );
+
+    let md = Command::new("tar")
+        .args([
+            "-xOzf",
+            out_path.to_str().unwrap(),
+            "agentcarousel-evidence-export-aiuc1-tagged/compliance_aiuc-1.md",
+        ])
+        .output()
+        .expect("tar read report");
+    let md = String::from_utf8_lossy(&md.stdout);
+    assert!(
+        md.contains("not affiliated with or endorsed by AIUC"),
+        "{md}"
+    );
+    assert!(md.contains("https://standard.aiuc-1.com/"), "{md}");
+
+    Command::cargo_bin("agentcarousel")
+        .unwrap()
+        .args(["verify", out_path.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let _ = fs::remove_file(&out_path);
+    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+}

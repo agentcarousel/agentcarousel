@@ -368,9 +368,24 @@ pub(crate) fn export_run_artifact_with(
         None => list_full_runs(20).unwrap_or_default(),
     };
     const COMPLIANCE_FRAMEWORKS: &[&str] = &["nist-ai-rmf", "eu-ai-act", "iso-42001"];
+    const OPT_IN_COMPLIANCE_FRAMEWORKS: &[&str] = &["aiuc-1"];
     // Load registry once for all framework scoring in this loop.
     let registry = super::compliance_mappings::load_framework_registry();
-    for fw in COMPLIANCE_FRAMEWORKS {
+    // Opt-in crosswalks are only written when the scored runs carry the
+    // framework's tags, so bundles that never use a crosswalk don't mention it.
+    let uses_framework = |fw: &str| {
+        let prefix = format!("{fw}:");
+        compliance_runs
+            .iter()
+            .flat_map(|r| &r.cases)
+            .any(|c| c.tags.iter().any(|t| t.starts_with(&prefix)))
+    };
+    let frameworks = COMPLIANCE_FRAMEWORKS.iter().chain(
+        OPT_IN_COMPLIANCE_FRAMEWORKS
+            .iter()
+            .filter(|fw| uses_framework(fw)),
+    );
+    for fw in frameworks {
         let scores = super::compliance_mappings::compute_control_scores_with_registry(
             &registry,
             &compliance_runs,
@@ -379,9 +394,7 @@ pub(crate) fn export_run_artifact_with(
             None,
         );
         let md = super::metrics::render_framework_compliance_report(&scores, fw, skill);
-        let md_path = root.join(format!("compliance_{fw}.md"));
-        let mut f = fs::File::create(&md_path).map_err(|err| err.to_string())?;
-        f.write_all(md.as_bytes()).map_err(|err| err.to_string())?;
+        fs::write(root.join(format!("compliance_{fw}.md")), md).map_err(|err| err.to_string())?;
     }
     // OSCAL Assessment Results — use the first framework's scores as the primary artifact.
     let oscal_scores = super::compliance_mappings::compute_control_scores_with_registry(
@@ -817,7 +830,12 @@ fn write_assurance_documents(root: &Path, run: &Run, include_prompt: bool) -> Re
 
 /// Integrity manifest over evidence files (excludes `MANIFEST.json` itself).
 fn build_manifest(root: &Path) -> Result<serde_json::Value, String> {
-    let optional = ["evidence.json", "attestation.intoto.json", "prompt.md"];
+    let optional = [
+        "evidence.json",
+        "attestation.intoto.json",
+        "prompt.md",
+        "compliance_aiuc-1.md",
+    ];
     let tracked = [
         "run.json",
         "fixture_bundle.lock",
