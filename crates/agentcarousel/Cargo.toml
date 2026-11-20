@@ -70,6 +70,4 @@ rusqlite = { version = "0.43", features = ["bundled"] }
 
 [dev-dependencies]
 assert_cmd = "2"
-chrono = "0.4"
 mockito = "1"
-serde_json = "1"
