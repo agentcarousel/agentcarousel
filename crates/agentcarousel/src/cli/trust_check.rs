@@ -245,8 +245,16 @@ fn resolve_pubkey_path(input: &str) -> Result<PubkeyHandle, TrustCheckError> {
             "minisign public key path cannot be empty".to_string(),
         ));
     }
-    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+    if trimmed.starts_with("http://") {
+        // A key fetched over plain HTTP can be swapped in transit, which would let
+        // a forged attestation verify. Require TLS (or a local file).
+        return Err(TrustCheckError::Runtime(
+            "refusing to fetch the minisign public key over http://; use an https:// URL or a local file".to_string(),
+        ));
+    }
+    if trimmed.starts_with("https://") {
         let body = reqwest::blocking::get(trimmed)
+            .and_then(|response| response.error_for_status())
             .map_err(|err| TrustCheckError::Runtime(format!("failed to fetch pubkey URL: {err}")))?
             .text()
             .map_err(|err| {
@@ -285,5 +293,27 @@ fn verify_attestation(
         }
         Err(MinisignError::Invalid(msg)) => Err(TrustCheckError::SignatureInvalid(msg)),
         Err(MinisignError::Runtime(msg)) => Err(TrustCheckError::Runtime(msg)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_http_pubkey_urls_are_refused() {
+        match resolve_pubkey_path("http://keys.example.test/agc.pub") {
+            Err(TrustCheckError::Runtime(msg)) => assert!(msg.contains("https://"), "{msg}"),
+            Err(_) => panic!("unexpected error kind"),
+            Ok(_) => panic!("http:// pubkey must be refused"),
+        }
+    }
+
+    #[test]
+    fn local_pubkey_paths_are_kept() {
+        assert_eq!(
+            resolve_pubkey_path("./keys/agc.pub").unwrap().path(),
+            Path::new("./keys/agc.pub")
+        );
     }
 }

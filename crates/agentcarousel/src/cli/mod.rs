@@ -31,6 +31,7 @@ mod promote;
 mod publish;
 mod registry_client;
 mod report;
+mod safe_extract;
 mod scope;
 mod severity;
 mod subject;

@@ -92,9 +92,7 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     println!("downloading {asset}...");
     let tarball = http_get_bytes(&tarball_url)?;
 
-    if let Ok(sums) = http_get_string(&sums_url) {
-        verify_checksum(&tarball, &asset, &sums)?;
-    }
+    require_checksum(&tarball, &asset, http_get_string(&sums_url))?;
 
     let binary = extract_binary_from_tarball(&tarball)?;
 
@@ -135,13 +133,18 @@ fn fetch_latest_tag() -> Result<String, String> {
         .ok_or_else(|| "GitHub API response missing tag_name".to_string())
 }
 
+/// Release asset triple for this binary. Linux keeps the C library it was
+/// built for, so a static musl install (Alpine, older glibc) updates to musl.
 fn target_triple() -> Result<&'static str, String> {
-    match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => Ok("x86_64-unknown-linux-gnu"),
-        ("linux", "aarch64") => Ok("aarch64-unknown-linux-gnu"),
-        ("macos", "x86_64") => Ok("x86_64-apple-darwin"),
-        ("macos", "aarch64") => Ok("aarch64-apple-darwin"),
-        (os, arch) => Err(format!("unsupported platform: {os}/{arch}")),
+    let musl = cfg!(target_env = "musl");
+    match (std::env::consts::OS, std::env::consts::ARCH, musl) {
+        ("linux", "x86_64", false) => Ok("x86_64-unknown-linux-gnu"),
+        ("linux", "x86_64", true) => Ok("x86_64-unknown-linux-musl"),
+        ("linux", "aarch64", false) => Ok("aarch64-unknown-linux-gnu"),
+        ("linux", "aarch64", true) => Ok("aarch64-unknown-linux-musl"),
+        ("macos", "x86_64", _) => Ok("x86_64-apple-darwin"),
+        ("macos", "aarch64", _) => Ok("aarch64-apple-darwin"),
+        (os, arch, _) => Err(format!("unsupported platform: {os}/{arch}")),
     }
 }
 
@@ -174,6 +177,19 @@ fn http_get_string(url: &str) -> Result<String, String> {
         .map_err(|e| format!("HTTP error ({url}): {e}"))?
         .text()
         .map_err(|e| format!("failed to read response body: {e}"))
+}
+
+/// Fail closed: an update is installed only when SHA256SUMS was fetched and
+/// lists a matching digest for the downloaded asset.
+fn require_checksum(
+    data: &[u8],
+    asset_name: &str,
+    sums: Result<String, String>,
+) -> Result<(), String> {
+    let sums = sums.map_err(|err| {
+        format!("refusing to install {asset_name}: could not fetch SHA256SUMS to verify it ({err})")
+    })?;
+    verify_checksum(data, asset_name, &sums)
 }
 
 fn verify_checksum(data: &[u8], asset_name: &str, sums: &str) -> Result<(), String> {
@@ -302,4 +318,39 @@ fn confirm_prompt() -> Result<bool, String> {
         line.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sums_for(data: &[u8], name: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        format!(
+            "{}  {name}\n",
+            crate::core::hex_util::hex_lower(hasher.finalize().as_ref())
+        )
+    }
+
+    #[test]
+    fn checksum_is_required() {
+        let err = require_checksum(b"bin", "a.tar.gz", Err("HTTP 404".to_string())).unwrap_err();
+        assert!(err.contains("refusing to install"), "{err}");
+    }
+
+    #[test]
+    fn checksum_entry_must_exist_and_match() {
+        let sums = sums_for(b"bin", "other.tar.gz");
+        assert!(require_checksum(b"bin", "a.tar.gz", Ok(sums)).is_err());
+        let sums = sums_for(b"bin", "a.tar.gz");
+        assert!(require_checksum(b"tampered", "a.tar.gz", Ok(sums.clone())).is_err());
+        require_checksum(b"bin", "a.tar.gz", Ok(sums)).unwrap();
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "musl"))]
+    #[test]
+    fn musl_builds_update_to_musl() {
+        assert!(target_triple().unwrap().ends_with("-linux-musl"));
+    }
 }

@@ -3,11 +3,11 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use tar::Builder;
-use ulid::Ulid;
 
 use crate::core::hex_util::hex_lower;
 
@@ -324,19 +324,12 @@ fn verify_bundle(path: Option<&Path>) -> Result<PathBuf, String> {
             return Ok(root.to_path_buf());
         }
         if is_gzip_tarball(path) {
-            let tmp_dir =
-                std::env::temp_dir().join(format!("agentcarousel-bundle-{}", Ulid::new()));
-            if tmp_dir.exists() {
-                fs::remove_dir_all(&tmp_dir).map_err(|err| err.to_string())?;
-            }
-            fs::create_dir_all(&tmp_dir).map_err(|err| err.to_string())?;
-            let archive = fs::File::open(path).map_err(|err| err.to_string())?;
-            let decoder = flate2::read::GzDecoder::new(archive);
-            let mut tar = tar::Archive::new(decoder);
-            tar.unpack(&tmp_dir).map_err(|err| err.to_string())?;
-            let manifest_path = tmp_dir.join("bundle.manifest.json");
-            verify_manifest(&manifest_path, &tmp_dir)?;
-            fs::remove_dir_all(&tmp_dir).ok();
+            // Hardened extraction: regular files and directories only, nothing
+            // outside the temp dir; the temp dir is removed on every return path.
+            let tmp = tempfile::tempdir().map_err(|err| err.to_string())?;
+            super::safe_extract::extract_tar_gz(path, tmp.path()).map_err(|err| err.to_string())?;
+            let manifest_path = tmp.path().join("bundle.manifest.json");
+            verify_manifest(&manifest_path, tmp.path())?;
             return Ok(path.to_path_buf());
         }
         return Err(format!(
@@ -385,12 +378,39 @@ fn verify_manifest(manifest_path: &Path, root: &Path) -> Result<(), String> {
     }
     let contents = fs::read_to_string(manifest_path).map_err(|err| err.to_string())?;
     let manifest: Value = serde_json::from_str(&contents).map_err(|err| err.to_string())?;
-    verify_entries(&manifest, "fixtures", root)?;
-    verify_entries(&manifest, "mocks", root)?;
+    let mut listed = BTreeSet::new();
+    verify_entries(&manifest, "fixtures", root, &mut listed)?;
+    verify_entries(&manifest, "mocks", root, &mut listed)?;
+    if listed.is_empty() {
+        return Err(
+            "bundle.manifest.json lists no fixtures or mocks with hashes; nothing to verify"
+                .to_string(),
+        );
+    }
+    let unlisted = unlisted_files(root, &listed);
+    if !unlisted.is_empty() {
+        let shown: Vec<String> = unlisted
+            .iter()
+            .take(10)
+            .map(|path| path.display().to_string())
+            .collect();
+        let more = unlisted.len().saturating_sub(shown.len());
+        eprintln!(
+            "warning: {} file(s) in the bundle are not covered by bundle.manifest.json and were not verified: {}{}",
+            unlisted.len(),
+            shown.join(", "),
+            if more > 0 { format!(" (+{more} more)") } else { String::new() }
+        );
+    }
     Ok(())
 }
 
-fn verify_entries(manifest: &Value, field: &str, root: &Path) -> Result<(), String> {
+fn verify_entries(
+    manifest: &Value,
+    field: &str,
+    root: &Path,
+    listed: &mut BTreeSet<PathBuf>,
+) -> Result<(), String> {
     let Some(entries) = manifest.get(field).and_then(|value| value.as_array()) else {
         return Ok(());
     };
@@ -408,8 +428,36 @@ fn verify_entries(manifest: &Value, field: &str, root: &Path) -> Result<(), Stri
                 "{field} hash mismatch for {path_value}: expected {expected}, got {actual}"
             ));
         }
+        if let Ok(relative) = file_path.strip_prefix(root) {
+            listed.insert(relative.to_path_buf());
+        }
     }
     Ok(())
+}
+
+/// Regular files under `root` that the manifest does not cover (ignoring the
+/// manifest itself, signatures and dotfiles). Reported, not fatal: `bundle pack`
+/// archives the whole directory, so packs can legitimately carry extra files.
+fn unlisted_files(root: &Path, listed: &BTreeSet<PathBuf>) -> Vec<PathBuf> {
+    walkdir::WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .filter_map(|entry| entry.path().strip_prefix(root).ok().map(Path::to_path_buf))
+        .filter(|relative| {
+            let name = relative
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            name != "bundle.manifest.json"
+                && !name.ends_with(".minisig")
+                && !relative
+                    .components()
+                    .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+        })
+        .filter(|relative| !listed.contains(relative))
+        .collect()
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -473,6 +521,57 @@ mod tests {
         .unwrap();
         let err = verify_bundle(Some(&bundle)).unwrap_err();
         assert!(err.contains("must not contain `..`"), "{err}");
+    }
+
+    fn write_bundle(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join("cases.yaml"), b"cases: []\n").unwrap();
+        fs::write(
+            dir.join("bundle.manifest.json"),
+            serde_json::json!({ "fixtures": [{ "path": "cases.yaml", "sha256": "" }] }).to_string(),
+        )
+        .unwrap();
+        update_manifest_hashes(&dir.join("bundle.manifest.json"), dir).unwrap();
+    }
+
+    #[test]
+    fn packed_bundle_round_trips_through_verify() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("bundle");
+        write_bundle(&bundle);
+        let out = dir.path().join("bundle.tar.gz");
+        pack_bundle(&bundle, Some(&out)).unwrap();
+        verify_bundle(Some(&out)).unwrap();
+        verify_bundle(Some(&bundle)).unwrap();
+    }
+
+    #[test]
+    fn manifest_without_entries_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("bundle.manifest.json"), b"{}").unwrap();
+        let err = verify_bundle(Some(dir.path())).unwrap_err();
+        assert!(err.contains("nothing to verify"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn archive_with_symlink_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("bundle");
+        write_bundle(&bundle);
+        let out = dir.path().join("evil.tar.gz");
+        let file = fs::File::create(&out).unwrap();
+        let mut tar = Builder::new(GzEncoder::new(file, Compression::default()));
+        tar.append_path_with_name(bundle.join("bundle.manifest.json"), "bundle.manifest.json")
+            .unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Symlink);
+        header.set_size(0);
+        tar.append_link(&mut header, "cases.yaml", "/etc/hosts")
+            .unwrap();
+        tar.into_inner().unwrap().finish().unwrap();
+        let err = verify_bundle(Some(&out)).unwrap_err();
+        assert!(err.contains("non-regular entry"), "{err}");
     }
 
     #[cfg(unix)]
