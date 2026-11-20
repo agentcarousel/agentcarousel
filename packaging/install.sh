@@ -1,53 +1,48 @@
 #!/bin/sh
-# Install agentcarousel from GitHub (latest tag).
+# Install agentcarousel from GitHub releases.
 #
-# Usage (slim — no dashboard):
+# Usage:
 #   curl -fsSL https://install.agentcarousel.com | sh
 #
-# Usage (full — includes web dashboard UI):
-#   curl -fsSL https://install.agentcarousel.com | sh -s -- --feature dashboard
-#   AGENTCAROUSEL_FEATURES=dashboard curl -fsSL https://install.agentcarousel.com | sh
+# The release binary includes the web dashboard (`agentcarousel dashboard`).
 #
 # Options:
-#   --feature <name>   Enable an optional feature. Only "dashboard" is recognised today.
-#                      May be repeated; order does not matter.
+#   --feature <name>   Accepted for 0.9.x scripts and ignored: there is one binary now.
 #
 # Environment:
-#   AGENTCAROUSEL_FEATURES      Space-separated feature list (e.g. "dashboard").
+#   AGENTCAROUSEL_VERSION       Install this version (e.g. 0.10.0 or v0.10.0) instead of the latest.
+#   AGENTCAROUSEL_LIBC          Linux only: "musl" (default; static, runs on Alpine and old glibc)
+#                               or "gnu".
 #   AGENTCAROUSEL_INSTALL_DIR   Override installation directory (default: ~/.local/bin).
+#   AGENTCAROUSEL_FEATURES      Ignored (see --feature).
+#
+# The download is verified against the release's SHA256SUMS. The install stops if the
+# checksum file cannot be fetched, has no entry for the archive, or does not match.
 
 set -eu
 
 REPO="agentcarousel/agentcarousel"
 
+fail() {
+  echo "install.sh: $*" >&2
+  exit 1
+}
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
-WANT_DASHBOARD=0
-
-# Seed from env var first so CLI args can override or supplement.
-for env_feat in ${AGENTCAROUSEL_FEATURES:-}; do
-  case "${env_feat}" in
-    dashboard) WANT_DASHBOARD=1 ;;
-  esac
-done
+NOTE_FEATURE=0
+[ -n "${AGENTCAROUSEL_FEATURES:-}" ] && NOTE_FEATURE=1
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --feature)
       shift
-      [ $# -eq 0 ] && { echo "install.sh: --feature requires an argument" >&2; exit 1; }
-      case "$1" in
-        dashboard) WANT_DASHBOARD=1 ;;
-        *) echo "install.sh: unknown feature '${1}' (known: dashboard)" >&2; exit 1 ;;
-      esac
+      [ $# -eq 0 ] && fail "--feature requires an argument"
+      NOTE_FEATURE=1
       shift
       ;;
     --feature=*)
-      feat="${1#--feature=}"
-      case "${feat}" in
-        dashboard) WANT_DASHBOARD=1 ;;
-        *) echo "install.sh: unknown feature '${feat}' (known: dashboard)" >&2; exit 1 ;;
-      esac
+      NOTE_FEATURE=1
       shift
       ;;
     --)
@@ -55,8 +50,7 @@ while [ $# -gt 0 ]; do
       break
       ;;
     -*)
-      echo "install.sh: unknown option '$1'" >&2
-      exit 1
+      fail "unknown option '$1'"
       ;;
     *)
       break
@@ -64,27 +58,26 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# ── Resolve variant ───────────────────────────────────────────────────────────
+if [ "${NOTE_FEATURE}" = "1" ]; then
+  echo "Note: --feature / AGENTCAROUSEL_FEATURES is no longer needed; the release binary includes the dashboard." >&2
+fi
 
-if [ "${WANT_DASHBOARD}" = "1" ]; then
-  VARIANT="full"
-  VARIANT_SUFFIX="-full"
-  VARIANT_LABEL="full (with dashboard)"
+# ── Resolve the release tag ───────────────────────────────────────────────────
+
+if [ -n "${AGENTCAROUSEL_VERSION:-}" ]; then
+  VERSION="${AGENTCAROUSEL_VERSION}"
+  case "${VERSION}" in v*) ;; *) VERSION="v${VERSION}" ;; esac
 else
-  VARIANT="slim"
-  VARIANT_SUFFIX=""
-  VARIANT_LABEL="slim"
+  # The /releases/latest redirect needs no API token and is not rate limited like the API.
+  LATEST_URL="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")" \
+    || fail "could not resolve the latest release for ${REPO}"
+  VERSION="${LATEST_URL##*/}"
 fi
 
-# ── Resolve latest release tag ────────────────────────────────────────────────
-
-VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)"
-
-if [ -z "${VERSION}" ]; then
-  echo "install.sh: could not resolve latest release for ${REPO}" >&2
-  exit 1
-fi
+case "${VERSION}" in
+  v[0-9]*) ;;
+  *) fail "could not determine a release version (got '${VERSION}')" ;;
+esac
 
 # ── Detect platform ───────────────────────────────────────────────────────────
 
@@ -96,27 +89,31 @@ case "${ARCH}" in
   AMD64) ARCH=x86_64 ;;
 esac
 
+LIBC="${AGENTCAROUSEL_LIBC:-musl}"
+case "${LIBC}" in
+  musl|gnu) ;;
+  *) fail "AGENTCAROUSEL_LIBC must be 'musl' or 'gnu' (got '${LIBC}')" ;;
+esac
+
 triple=""
 case "${OS}" in
   Linux)
     case "${ARCH}" in
-      x86_64)  triple=x86_64-unknown-linux-gnu ;;
-      aarch64) triple=aarch64-unknown-linux-gnu ;;
-      arm64)   triple=aarch64-unknown-linux-gnu ;;
-      *) echo "unsupported Linux machine: ${ARCH}" >&2; exit 1 ;;
+      x86_64)          triple="x86_64-unknown-linux-${LIBC}" ;;
+      aarch64|arm64)   triple="aarch64-unknown-linux-${LIBC}" ;;
+      *) fail "unsupported Linux machine: ${ARCH}" ;;
     esac
     ;;
   Darwin)
     case "${ARCH}" in
-      x86_64)  triple=x86_64-apple-darwin ;;
-      arm64)   triple=aarch64-apple-darwin ;;
-      aarch64) triple=aarch64-apple-darwin ;;
-      *) echo "unsupported Darwin machine: ${ARCH}" >&2; exit 1 ;;
+      x86_64)          triple=x86_64-apple-darwin ;;
+      arm64|aarch64)   triple=aarch64-apple-darwin ;;
+      *) fail "unsupported Darwin machine: ${ARCH}" ;;
     esac
     ;;
   *)
     echo "install.sh: only Linux and macOS are supported by this installer (got OS=${OS})." >&2
-    echo "For Windows, download the archive for your architecture from:" >&2
+    echo "For Windows, download agentcarousel-${VERSION}-x86_64-pc-windows-gnu.zip from:" >&2
     echo "  https://github.com/${REPO}/releases/tag/${VERSION}" >&2
     exit 1
     ;;
@@ -124,7 +121,7 @@ esac
 
 # ── Download ──────────────────────────────────────────────────────────────────
 
-ASSET="agentcarousel-${VERSION}-${triple}${VARIANT_SUFFIX}.tar.gz"
+ASSET="agentcarousel-${VERSION}-${triple}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
 SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
 
@@ -132,27 +129,31 @@ TMP="${TMPDIR:-/tmp}/agentcarousel-install.$$"
 mkdir -p "${TMP}"
 trap 'rm -rf "${TMP}"' EXIT INT TERM
 
-echo "Installing agentcarousel ${VERSION} (${VARIANT_LABEL})..."
+echo "Installing agentcarousel ${VERSION} (${triple})..."
 echo "Downloading ${URL} ..."
-curl -fL --retry 3 --retry-delay 1 -o "${TMP}/${ASSET}" "${URL}"
+curl -fL --retry 3 --retry-delay 1 -o "${TMP}/${ASSET}" "${URL}" \
+  || fail "download failed: ${URL}"
 
-# ── Verify checksum ───────────────────────────────────────────────────────────
+# ── Verify checksum (mandatory) ───────────────────────────────────────────────
 
-if curl -fsSL -o "${TMP}/SHA256SUMS" "${SUMS_URL}" 2>/dev/null; then
-  (
-    cd "${TMP}"
-    if command -v sha256sum >/dev/null 2>&1; then
-      grep -F "${ASSET}" SHA256SUMS | sha256sum -c -
-    elif command -v shasum >/dev/null 2>&1; then
-      want="$(grep -F "${ASSET}" SHA256SUMS | awk '{print $1}')"
-      got="$(shasum -a 256 "${ASSET}" | awk '{print $1}')"
-      if [ "${want}" != "${got}" ]; then
-        echo "checksum mismatch for ${ASSET}" >&2
-        exit 1
-      fi
-    fi
-  )
+curl -fsSL --retry 3 --retry-delay 1 -o "${TMP}/SHA256SUMS" "${SUMS_URL}" \
+  || fail "could not fetch ${SUMS_URL}; refusing to install an unverified binary"
+
+want="$(awk -v f="${ASSET}" '$2 == f || $2 == "*" f { print $1; exit }' "${TMP}/SHA256SUMS")"
+[ -n "${want}" ] || fail "no checksum entry for ${ASSET} in SHA256SUMS; refusing to install"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  got="$(sha256sum "${TMP}/${ASSET}" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  got="$(shasum -a 256 "${TMP}/${ASSET}" | awk '{print $1}')"
+else
+  fail "neither sha256sum nor shasum is available; cannot verify the download"
 fi
+
+if [ "${want}" != "${got}" ]; then
+  fail "checksum mismatch for ${ASSET} (expected ${want}, got ${got})"
+fi
+echo "Checksum verified."
 
 # ── Install ───────────────────────────────────────────────────────────────────
 
@@ -176,12 +177,10 @@ fi
 chmod +x "${TMP}/agentcarousel"
 mv -f "${TMP}/agentcarousel" "${INSTALL_DIR}/agentcarousel"
 
-echo "Installed agentcarousel ${VERSION} (${VARIANT_LABEL}) to ${INSTALL_DIR}/agentcarousel"
+echo "Installed agentcarousel ${VERSION} to ${INSTALL_DIR}/agentcarousel"
 echo "Ensure ${INSTALL_DIR} is on your PATH."
 
-if [ "${VARIANT}" = "full" ]; then
-  echo "Dashboard included — run: agentcarousel dashboard"
-fi
+echo "Dashboard included — run: agentcarousel dashboard"
 
 # ── Optional agc alias ────────────────────────────────────────────────────────
 
