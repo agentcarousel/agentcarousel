@@ -33,6 +33,10 @@ agc compliance gaps --framework aiuc-1          # behavioral controls with no ca
 
 To change a label or classification locally, put a JSON array of controls with the same `tag` in `./frameworks/*.json` or `~/.agentcarousel/frameworks/*.json`; entries there replace the bundled ones.
 
+## Attack-category tags
+
+`agc generate --attack-categories` tags generated adversarial cases with AIUC-1 attack category names (`aiuc-1-attack:direct-injection`, `aiuc-1-attack:indirect-injection`, `aiuc-1-attack:persuasion`, `aiuc-1-attack:false-scenario`) alongside OWASP and MITRE ATLAS IDs. Only the category names are used; AIUC's descriptions are not copied. These tags describe how a case attacks the agent. They are separate from the `aiuc-1:<id>` requirement tags above. See the `agc generate` section of the [reference](../reference.md).
+
 ## Requirements
 
 | ID | Label (AgentCarousel wording) | Evidence | Notes |
