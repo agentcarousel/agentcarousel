@@ -185,6 +185,7 @@ fn make_error_result(
         tags,
         skip_reason: None,
         critical: false,
+        severity: None,
     }
 }
 
@@ -345,6 +346,7 @@ fn map_batch_results(
                     tags,
                     skip_reason: None,
                     critical: false,
+                    severity: None,
                 }
             })
             .collect(),
@@ -560,6 +562,7 @@ pub(super) async fn run_eval_cases(
                     tags: case.tags.clone(),
                     skip_reason: None,
                     critical: false,
+                    severity: None,
                 });
 
             if result.status == CaseStatus::Passed {

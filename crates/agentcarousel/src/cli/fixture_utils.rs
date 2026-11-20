@@ -171,6 +171,7 @@ mod tests {
             evaluator_config: None,
             timeout_secs: None,
             seed: None,
+            severity: None,
         }
     }
 

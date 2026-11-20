@@ -1,4 +1,3 @@
-use agentcarousel_core::CaseStatus;
 use agentcarousel_fixtures::load_fixture;
 use agentcarousel_reporters::{persist_run, print_json, print_terminal};
 use agentcarousel_runner::{run_fixtures, GenerationMode, RunnerConfig};
@@ -60,6 +59,11 @@ pub struct TestArgs {
     /// Base URL for a custom agent endpoint (required when generator model is 'custom').
     #[arg(long)]
     generator_endpoint: Option<String>,
+    /// Exit 1 only when a failing case's severity is at or above this level
+    /// (P0 most severe). Failures below it are reported but don't fail the run;
+    /// failures in cases without a severity still fail it. Default: any failure fails.
+    #[arg(long = "fail-on-severity", value_name = "P0|P1|P2|P3")]
+    fail_on_severity: Option<agentcarousel_core::Severity>,
 }
 
 pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions) -> i32 {
@@ -127,12 +131,16 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
 
     let _ = persist_run(&run);
 
-    let failed = run.cases.iter().any(|case| {
-        matches!(
-            case.status,
-            CaseStatus::Failed | CaseStatus::TimedOut | CaseStatus::Error | CaseStatus::Flaky
+    let gate_tally = args.fail_on_severity.map(|gate| {
+        (
+            gate,
+            super::severity::tally(&run.cases, super::severity::is_failed_status),
         )
     });
+    let failed = match &gate_tally {
+        None => run.cases.iter().any(super::severity::is_failed_status),
+        Some((gate, tally)) => tally.fails_gate(*gate),
+    };
 
     if globals.json {
         let value = serde_json::to_value(&run).unwrap_or(serde_json::Value::Null);
@@ -148,6 +156,10 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
                 }
             }
         }
+    }
+
+    if let Some((_, tally)) = &gate_tally {
+        super::severity::print_gate_summary(tally);
     }
 
     if failed {

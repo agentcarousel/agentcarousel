@@ -105,6 +105,9 @@ fn report_show(run_id: &str, json: bool, envelope: bool, verbose: bool) -> i32 {
                 print_json(&run);
             } else {
                 print_terminal(&run, verbose);
+                if let Some(tally) = super::severity::failed_tally(&run.cases) {
+                    println!("{}", tally.summary_line());
+                }
             }
             ExitCode::Ok.as_i32()
         }

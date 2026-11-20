@@ -224,6 +224,7 @@ async fn run_case_inner(
         tags: case.tags,
         skip_reason: None,
         critical: false,
+        severity: None,
     }
 }
 
@@ -249,6 +250,7 @@ pub fn timeout_result(
         tags,
         skip_reason: None,
         critical: false,
+        severity: None,
     }
 }
 

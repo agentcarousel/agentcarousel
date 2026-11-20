@@ -35,6 +35,7 @@ agc eval <fixture-path> [flags]
 | `--runs` | `1` | Number of times to run each case (averages scores) |
 | `--filter` | — | Match cases by `skill/id` prefix |
 | `--filter-tags` | — | Comma-separated tag filter (e.g. `smoke,certification`) |
+| `--fail-on-severity <P0\|P1\|P2\|P3>` | off | Exit 1 only when a failing case's `severity` is at or above this level (P0 is most severe). Failures below it are reported on stderr but don't fail the run; failures in cases without a severity still fail it. Without the flag, any failure exits 1. Also on `agc test` |
 | `--json` | off | Emit structured JSON instead of terminal output |
 
 ```bash

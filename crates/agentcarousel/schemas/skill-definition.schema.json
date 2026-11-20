@@ -68,6 +68,11 @@
           "tags": { "type": "array", "items": { "type": "string" } },
           "timeout_secs": { "type": "integer", "minimum": 1 },
           "seed": { "type": "integer", "minimum": 0 },
+          "severity": {
+            "description": "AgentCarousel severity of a failure of this case: P0 critical, P1 major, P2 significant, P3 minor. P0 also designates the case critical.",
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"]
+          },
           "input": {
             "type": "object",
             "required": ["messages"],
