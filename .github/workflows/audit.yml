@@ -1,46 +1,57 @@
+# Supply-chain gate: RustSec advisories (vulnerable, unmaintained, unsound,
+# yanked), license allowlist, crate sources, and banned/duplicate crates.
+# Policy lives in deny.toml; every ignored advisory there carries a reason and
+# a review date. Runs on PRs and main pushes that touch dependencies, and daily
+# so new advisories against unchanged dependencies are caught.
 name: Security Audit
 
 on:
-  push:
+  pull_request:
     paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/audit.yml"
   schedule:
-    - cron: '0 0 * * *'
+    - cron: "17 6 * * *"
   workflow_dispatch:
-
-concurrency:
-  group: security-audit-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 permissions:
   contents: read
 
+concurrency:
+  group: security-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  audit:
-    name: Cargo Audit
+  deny:
+    name: cargo-deny
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          toolchain: nightly
+          persist-credentials: false
 
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@711e1c3275189d76dcc4d34ddea63bf96ac49090  # v2.76.0
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
         with:
-          tool: cargo-audit
+          tool: cargo-deny@0.22.0
 
-      - name: Security audit (advisories)
-        run: cargo audit --deny warnings
-        continue-on-error: true
+      # Separate steps so the failing category is obvious from the job summary.
+      - name: Advisories (RustSec)
+        run: cargo deny --locked check advisories
 
-      - name: Check for yanked dependencies
-        run: cargo audit --deny yanked
+      - name: Licenses, sources, bans
+        if: success() || failure()
+        run: cargo deny --locked check licenses sources bans
