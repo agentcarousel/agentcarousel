@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Procedural controls are reported as Procedural (behavior change).** Embedded OSCAL catalogs mark governance and process controls with `evidence-type: procedural`, but every control was scored as behavioral, so reports never showed a Procedural row. Those controls (6 in NIST AI RMF, 6 in ISO/IEC 42001) now show as Procedural instead of Gap, and tagged cases no longer count as evidence for them. Totals per status shift; Satisfied counts change only for runs that tag those controls directly (no bundled fixture does). OSCAL Assessment Results drop the open `risks[]` entries those controls produced as gaps, and any findings they produced from tagged cases.
+
 ## 0.9.1 — 2026-11-19
 
 ### Changed
