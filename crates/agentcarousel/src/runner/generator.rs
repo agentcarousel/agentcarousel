@@ -429,9 +429,11 @@ async fn generate_with_gemini(
     turns: &[(String, String)],
     max_tokens: Option<u32>,
 ) -> Result<GenerationResult, GeneratorError> {
+    // The key travels in the `x-goog-api-key` header, never in the URL: reqwest
+    // errors include the request URL, and those errors end up in case results.
     let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model, key
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        model
     );
     let request = GeminiRequest {
         system_instruction: if system.is_empty() {
@@ -464,16 +466,17 @@ async fn generate_with_gemini(
     for attempt in 0..retry.max_attempts {
         let response = client
             .post(&url)
+            .header("x-goog-api-key", key)
             .json(&request)
             .send()
             .await
-            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+            .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
         let status = response.status();
         if status.is_success() {
             let body: GeminiResponse = response
                 .json()
                 .await
-                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+                .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
             let output = body
                 .candidates
                 .as_ref()
@@ -553,13 +556,13 @@ async fn generate_with_openai(
             .json(&request)
             .send()
             .await
-            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+            .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
         let status = response.status();
         if status.is_success() {
             let body: OpenAiResponse = response
                 .json()
                 .await
-                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+                .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
             let output = body
                 .choices
                 .as_ref()
@@ -643,13 +646,13 @@ async fn generate_with_anthropic(
             .json(&request)
             .send()
             .await
-            .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+            .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
         let status = response.status();
         if status.is_success() {
             let body: AnthropicResponse = response
                 .json()
                 .await
-                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+                .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
             let output = body
                 .content
                 .as_ref()
@@ -738,7 +741,7 @@ async fn generate_with_openrouter(
         let response = match send_result {
             Ok(r) => r,
             Err(err) => {
-                last_error = Some(err.to_string());
+                last_error = Some(err.without_url().to_string());
                 break;
             }
         };
@@ -747,7 +750,7 @@ async fn generate_with_openrouter(
             let body: OpenAiResponse = response
                 .json()
                 .await
-                .map_err(|err| GeneratorError::Transient(err.to_string()))?;
+                .map_err(|err| GeneratorError::Transient(err.without_url().to_string()))?;
             let output = body
                 .choices
                 .as_ref()
