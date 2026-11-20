@@ -289,7 +289,13 @@ fn load_embedded_catalogs(registry: &mut FrameworkRegistry) {
                     .map(str::to_string)
                     .unwrap_or_else(|| control.title.to_string()),
                 tag: format!("{name}:{}", control.id),
-                behavioral: true,
+                // OSCAL catalogs mark governance/process controls with
+                // `evidence-type: procedural`; those are validated by procedure,
+                // not by behavioral test cases.
+                behavioral: !control
+                    .props
+                    .iter()
+                    .any(|p| p.name == "evidence-type" && p.value == "procedural"),
                 importance: 1.0,
             });
         }
@@ -322,4 +328,200 @@ fn load_directory_catalogs(registry: &mut FrameworkRegistry, dir: &std::path::Pa
 
 fn home_frameworks_dir() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|h| h.join(".agentcarousel").join("frameworks"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agentcarousel_core::{
+        CaseId, CaseResult, ExecutionTrace, Metrics, OverallStatus, ProviderErrorMetrics, RunId,
+        RunSummary,
+    };
+    use chrono::Utc;
+
+    fn case(id: &str, status: CaseStatus, tags: &[&str]) -> CaseResult {
+        CaseResult {
+            case_id: CaseId(format!("skill/{id}")),
+            status,
+            error: None,
+            trace: ExecutionTrace {
+                steps: Vec::new(),
+                final_output: Some("ok".to_string()),
+                redacted: false,
+            },
+            metrics: Metrics::default(),
+            eval_scores: None,
+            input: vec![],
+            discrimination_score: None,
+            discrimination_label: None,
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            skip_reason: None,
+            critical: false,
+        }
+    }
+
+    fn run_with(cases: Vec<CaseResult>, model: &str) -> Run {
+        let now = Utc::now();
+        Run {
+            id: RunId(format!("run-{model}")),
+            schema_version: 1,
+            started_at: now,
+            finished_at: Some(now),
+            command: "test".to_string(),
+            git_sha: None,
+            agentcarousel_version: env!("CARGO_PKG_VERSION").to_string(),
+            config_hash: "none".to_string(),
+            cases,
+            summary: RunSummary {
+                total: 0,
+                passed: 0,
+                failed: 0,
+                skipped: 0,
+                flaky: 0,
+                errored: 0,
+                timed_out: 0,
+                pass_rate: 0.0,
+                mean_latency_ms: 0.0,
+                mean_effectiveness_score: None,
+                provider_errors: ProviderErrorMetrics::default(),
+                overall_status: OverallStatus::Pass,
+                tokens_in: None,
+                tokens_out: None,
+                mean_tokens_per_judged_case: None,
+                latency_p50_ms: None,
+                latency_p95_ms: None,
+                latency_p99_ms: None,
+                judge_tokens_in: None,
+                judge_tokens_out: None,
+                gen_cost_usd: None,
+                judge_cost_usd: None,
+                total_cost_usd: None,
+                generator_model: Some(model.to_string()),
+                judge_model: None,
+                command_line: None,
+            },
+            fixture_bundle_id: None,
+            fixture_bundle_version: None,
+            skill_or_agent: Some("skill".to_string()),
+            runner_offline: true,
+            runner_mock_strict: false,
+            runner_mock_only: true,
+            prompt_audit: None,
+            subject: None,
+        }
+    }
+
+    fn control(id: &str, behavioral: bool) -> FrameworkControl {
+        FrameworkControl {
+            framework: "fw".to_string(),
+            control_id: id.to_string(),
+            requirement: format!("requirement {id}"),
+            tag: format!("fw:{id}"),
+            behavioral,
+            importance: 1.0,
+        }
+    }
+
+    fn registry(controls: Vec<FrameworkControl>) -> FrameworkRegistry {
+        let mut r = FrameworkRegistry::new();
+        r.insert("fw".to_string(), controls);
+        r
+    }
+
+    fn status_of(scores: &[ControlScore], id: &str) -> ControlCoverageStatus {
+        scores
+            .iter()
+            .find(|s| s.control.control_id == id)
+            .map(|s| s.status.clone())
+            .expect("control scored")
+    }
+
+    #[test]
+    fn coverage_statuses_follow_the_satisfaction_rule() {
+        let reg = registry(vec![
+            control("proc", false),
+            control("gap", true),
+            control("partial", true),
+            control("failed", true),
+            control("satisfied", true),
+        ]);
+        let cases = vec![
+            case("p1", CaseStatus::Passed, &["fw:partial"]),
+            case("p2", CaseStatus::Passed, &["fw:partial"]),
+            case("f1", CaseStatus::Failed, &["fw:failed"]),
+            case("f2", CaseStatus::Failed, &["fw:failed"]),
+            case("f3", CaseStatus::Failed, &["fw:failed"]),
+            case("s1", CaseStatus::Passed, &["fw:satisfied", "fw:proc"]),
+            case("s2", CaseStatus::Passed, &["fw:satisfied"]),
+            case("s3", CaseStatus::Passed, &["fw:satisfied"]),
+        ];
+        let runs = vec![run_with(cases, "m")];
+        let scores = compute_control_scores_with_registry(&reg, &runs, "fw", None, None);
+
+        // Tagged cases never turn a procedural control into a behavioral one.
+        assert_eq!(
+            status_of(&scores, "proc"),
+            ControlCoverageStatus::Procedural
+        );
+        assert_eq!(status_of(&scores, "gap"), ControlCoverageStatus::Gap);
+        assert_eq!(
+            status_of(&scores, "partial"),
+            ControlCoverageStatus::PartialEvidence
+        );
+        assert_eq!(status_of(&scores, "failed"), ControlCoverageStatus::Failed);
+        assert_eq!(
+            status_of(&scores, "satisfied"),
+            ControlCoverageStatus::Satisfied
+        );
+    }
+
+    #[test]
+    fn skipped_cases_are_not_evidence() {
+        let reg = registry(vec![control("c", true)]);
+        let cases = vec![
+            case("a", CaseStatus::Skipped, &["fw:c"]),
+            case("b", CaseStatus::Skipped, &["fw:c"]),
+            case("c", CaseStatus::Skipped, &["fw:c"]),
+        ];
+        let runs = vec![run_with(cases, "m")];
+        let scores = compute_control_scores_with_registry(&reg, &runs, "fw", None, None);
+        assert_eq!(status_of(&scores, "c"), ControlCoverageStatus::Gap);
+    }
+
+    #[test]
+    fn collapse_keeps_best_status_across_models() {
+        let reg = registry(vec![control("c", true)]);
+        let runs = vec![
+            run_with(vec![case("x", CaseStatus::Failed, &["fw:c"])], "weak"),
+            run_with(
+                vec![
+                    case("a", CaseStatus::Passed, &["fw:c"]),
+                    case("b", CaseStatus::Passed, &["fw:c"]),
+                    case("c", CaseStatus::Passed, &["fw:c"]),
+                ],
+                "strong",
+            ),
+        ];
+        let scores = compute_control_scores_with_registry(&reg, &runs, "fw", None, None);
+        assert_eq!(scores.len(), 2, "one score per model");
+        let collapsed = collapse_scores(&scores);
+        assert_eq!(collapsed.len(), 1);
+        assert_eq!(collapsed[0].status, ControlCoverageStatus::Satisfied);
+        assert_eq!(collapsed[0].model_version, "strong");
+    }
+
+    #[test]
+    fn embedded_catalogs_honour_procedural_evidence_type() {
+        let mut reg = FrameworkRegistry::new();
+        load_embedded_catalogs(&mut reg);
+        for (framework, expected_procedural) in [("nist-ai-rmf", 6usize), ("iso-42001", 6usize)] {
+            let controls = controls_for_framework(&reg, framework);
+            assert!(!controls.is_empty(), "{framework} catalog loaded");
+            let procedural = controls.iter().filter(|c| !c.behavioral).count();
+            assert_eq!(
+                procedural, expected_procedural,
+                "{framework}: controls marked evidence-type=procedural"
+            );
+        }
+    }
 }
