@@ -37,7 +37,7 @@ use tokio::sync::Mutex;
 pub use executor::run_case;
 pub use generator::{call_llm, GeneratorProvider};
 pub use sandbox::SandboxError;
-pub use tracer::SecretScrubber;
+pub use tracer::{scrub_case_results, SecretScrubber};
 
 /// How synthetic traces are produced for each case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,6 +127,7 @@ pub async fn run_fixtures(fixtures: Vec<FixtureFile>, config: RunnerConfig) -> R
     };
     aggregation::mark_critical(&mut results, &planned);
     aggregation::append_not_tested(&mut results, &planned, excluded);
+    tracer::scrub_case_results(&mut results);
 
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
@@ -185,6 +186,7 @@ pub async fn run_eval(fixtures: Vec<FixtureFile>, config: EvalConfig) -> Run {
         orchestration::run_eval_cases(cases, &mock_engine, &config, &run_id, judge_cache).await;
     aggregation::mark_critical(&mut results, &planned);
     aggregation::append_not_tested(&mut results, &planned, excluded);
+    tracer::scrub_case_results(&mut results);
     let summary = aggregation::build_summary(&results);
     let git_sha = git_revision::resolve_git_sha();
 

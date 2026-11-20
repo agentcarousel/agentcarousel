@@ -245,6 +245,26 @@ fn export_last_n(
     Ok(paths)
 }
 
+/// Written to REDACTION_POLICY.md in every evidence pack. Keep in step with the
+/// patterns in `runner/tracer.rs`.
+const REDACTION_POLICY: &str = "\
+Redaction policy
+
+Before a run is stored, and again whenever a stored run is read for display,
+export, or upload, agentcarousel replaces recognisable credentials with
+[REDACTED] in trace outputs, tool-call arguments and results, and case error
+messages. Detected shapes: OpenAI, Anthropic and OpenRouter `sk-` keys, Google
+`AIza` API keys, GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`,
+`github_pat_`), AWS access key ids, `Bearer` authorization values, and API keys
+passed as URL query parameters (`key`, `api_key`, `apikey`, `access_token`,
+`token`).
+
+Redaction is pattern-based and best effort: credentials in other formats are not
+detected. System prompts are replaced by their SHA-256 digest unless the export
+was made with --include-prompt; other case inputs and agent outputs are included
+as recorded.
+";
+
 pub(crate) fn export_run_artifact(run_id: &str, out: Option<&Path>) -> Result<PathBuf, String> {
     export_run_artifact_with(run_id, out, &ExportOptions::default())
 }
@@ -321,7 +341,7 @@ pub(crate) fn export_run_artifact_with(
 
     let redaction_path = root.join("REDACTION_POLICY.md");
     let mut file = fs::File::create(&redaction_path).map_err(|err| err.to_string())?;
-    file.write_all(b"Redaction policy: trace outputs are scrubbed of common secrets and tokens.\n")
+    file.write_all(REDACTION_POLICY.as_bytes())
         .map_err(|err| err.to_string())?;
 
     // Compute compliance metrics for this run's skill and embed in the tarball.

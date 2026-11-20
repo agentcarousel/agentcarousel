@@ -85,11 +85,7 @@ pub fn list_full_runs(limit: usize) -> Result<Vec<Run>, HistoryError> {
     let rows = stmt
         .query_map([limit as i64], |row| row.get::<_, String>(0))
         .map_err(|source| HistoryError::QueryError { source })?;
-    rows.flatten()
-        .map(|json| {
-            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })
-        })
-        .collect()
+    rows.flatten().map(|json| parse_stored_run(&json)).collect()
 }
 
 /// Like `list_full_runs` but filters to a specific skill before applying the limit,
@@ -107,11 +103,7 @@ pub fn list_full_runs_by_skill(skill: &str, limit: usize) -> Result<Vec<Run>, Hi
     let rows = stmt
         .query_map(params![skill, limit as i64], |row| row.get::<_, String>(0))
         .map_err(|source| HistoryError::QueryError { source })?;
-    rows.flatten()
-        .map(|json| {
-            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })
-        })
-        .collect()
+    rows.flatten().map(|json| parse_stored_run(&json)).collect()
 }
 
 /// Returns the most recent run for `skill_or_agent` that is older than `before_run_id`.
@@ -140,8 +132,7 @@ pub fn find_previous_run(
         .query_map([&anchor], |row| row.get::<_, String>(0))
         .map_err(|source| HistoryError::QueryError { source })?;
     for json in rows.flatten() {
-        let run: Run =
-            serde_json::from_str(&json).map_err(|source| HistoryError::ParseError { source })?;
+        let run: Run = parse_stored_run(&json)?;
         if run.skill_or_agent.as_deref() == Some(skill_or_agent) {
             return Ok(Some(run));
         }
@@ -205,11 +196,21 @@ pub fn fetch_run(run_id: &str) -> Result<Run, HistoryError> {
         });
 
     match json {
-        Some(j) => serde_json::from_str(&j).map_err(|source| HistoryError::ParseError { source }),
+        Some(j) => parse_stored_run(&j),
         None => Err(HistoryError::QueryError {
             source: rusqlite::Error::QueryReturnedNoRows,
         }),
     }
+}
+
+/// Deserialize a stored run and re-apply secret scrubbing, so runs recorded
+/// before a redaction pattern existed are never shown, exported, or uploaded
+/// with the secret intact.
+fn parse_stored_run(json: &str) -> Result<Run, HistoryError> {
+    let mut run: Run =
+        serde_json::from_str(json).map_err(|source| HistoryError::ParseError { source })?;
+    crate::runner::scrub_case_results(&mut run.cases);
+    Ok(run)
 }
 
 fn open_connection() -> Result<Connection, HistoryError> {

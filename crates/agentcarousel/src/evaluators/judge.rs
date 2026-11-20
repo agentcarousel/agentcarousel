@@ -323,9 +323,10 @@ fn call_gemini_blocking(
     system_prompt: String,
     user_prompt: String,
 ) -> Result<JudgeCallOutput, EvaluatorError> {
+    // The key travels in the `x-goog-api-key` header, never in the URL (see generator.rs).
     let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model, judge_key
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        model
     );
     let request = GeminiRequest {
         system_instruction: Some(GeminiSystemInstruction {
@@ -349,15 +350,18 @@ fn call_gemini_blocking(
     for attempt in 0..retry.max_attempts {
         let response = client
             .post(&url)
+            .header("x-goog-api-key", judge_key)
             .json(&request)
             .send()
-            .map_err(|err| EvaluatorError::JudgeFailed(redact_api_key(&err.to_string())))?;
+            .map_err(|err| {
+                EvaluatorError::JudgeFailed(redact_api_key(&err.without_url().to_string()))
+            })?;
 
         let status = response.status();
         if status.is_success() {
             let parsed = response
                 .json::<GeminiResponse>()
-                .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
+                .map_err(|err| EvaluatorError::InvalidOutput(err.without_url().to_string()))?;
             let text = parsed
                 .candidates
                 .as_ref()
@@ -449,12 +453,14 @@ fn call_openai_blocking(
             .bearer_auth(judge_key)
             .json(&request)
             .send()
-            .map_err(|err| EvaluatorError::JudgeFailed(redact_api_key(&err.to_string())))?;
+            .map_err(|err| {
+                EvaluatorError::JudgeFailed(redact_api_key(&err.without_url().to_string()))
+            })?;
         let status = response.status();
         if status.is_success() {
             let parsed = response
                 .json::<OpenAiResponse>()
-                .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
+                .map_err(|err| EvaluatorError::InvalidOutput(err.without_url().to_string()))?;
             let text = parsed
                 .choices
                 .as_ref()
@@ -541,12 +547,14 @@ fn call_anthropic_blocking(
             .header("anthropic-beta", "prompt-caching-2024-07-31")
             .json(&request)
             .send()
-            .map_err(|err| EvaluatorError::JudgeFailed(redact_api_key(&err.to_string())))?;
+            .map_err(|err| {
+                EvaluatorError::JudgeFailed(redact_api_key(&err.without_url().to_string()))
+            })?;
         let status = response.status();
         if status.is_success() {
             let parsed = response
                 .json::<AnthropicResponse>()
-                .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
+                .map_err(|err| EvaluatorError::InvalidOutput(err.without_url().to_string()))?;
             let text = parsed
                 .content
                 .as_ref()
@@ -632,12 +640,14 @@ fn call_openrouter_blocking(
             .header("X-Title", "agentcarousel")
             .json(&request)
             .send()
-            .map_err(|err| EvaluatorError::JudgeFailed(redact_api_key(&err.to_string())))?;
+            .map_err(|err| {
+                EvaluatorError::JudgeFailed(redact_api_key(&err.without_url().to_string()))
+            })?;
         let status = response.status();
         if status.is_success() {
             let parsed = response
                 .json::<OpenAiResponse>()
-                .map_err(|err| EvaluatorError::InvalidOutput(err.to_string()))?;
+                .map_err(|err| EvaluatorError::InvalidOutput(err.without_url().to_string()))?;
             let text = parsed
                 .choices
                 .as_ref()

@@ -1,0 +1,52 @@
+# cargo-deny policy. Run locally with: cargo deny --locked check
+# CI: .github/workflows/audit.yml (PRs and main pushes touching dependencies, plus daily).
+#
+# Every ignored advisory must say why it is safe to ship with, which issue
+# tracks the real fix, and when the ignore must be reviewed again. Remove the
+# entry as soon as the fix lands; an ignore that no longer matches anything is
+# reported as a warning.
+
+[graph]
+# Check every feature the release binaries enable (dashboard, watch).
+all-features = true
+
+[advisories]
+yanked = "deny"
+unmaintained = "all"
+unsound = "all"
+ignore = [
+  { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained (no patched release). Used for timestamps only; no known vulnerability. Blocked on oscal 0.2 dropping chrono; migration to jiff tracked in agc-47i8. Review by 2027-02-01." },
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml (via deprecated serde_yaml) is unmaintained; no known vulnerability. Parser replacement (serde_norway vs serde-saphyr) tracked in agc-gmdl. Review by 2027-02-01." },
+]
+
+[licenses]
+# Permissive licenses only, plus MPL-2.0 (file-level copyleft; option-ext via dirs).
+# CC0-1.0 is notify (watch feature).
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

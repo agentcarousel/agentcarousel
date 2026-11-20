@@ -1,5 +1,4 @@
 use clap::Parser;
-use flate2::read::GzDecoder;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::fs;
@@ -239,37 +238,12 @@ fn check_conformance(root: &Path, listed: &BTreeSet<String>) -> Result<&'static 
     }
 }
 
-/// Extract only regular files and directories; `unpack_in` refuses paths that
-/// escape `dest`, and links are rejected outright.
+/// Extract the evidence archive with the shared hardened extractor.
 fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), VerifyError> {
-    let file = fs::File::open(archive).map_err(|e| VerifyError::Runtime(e.to_string()))?;
-    let mut tar = tar::Archive::new(GzDecoder::new(file));
-    let entries = tar
-        .entries()
-        .map_err(|e| VerifyError::Runtime(format!("not a readable .tar.gz: {e}")))?;
-    for entry in entries {
-        let mut entry =
-            entry.map_err(|e| VerifyError::Runtime(format!("not a readable .tar.gz: {e}")))?;
-        let kind = entry.header().entry_type();
-        if !(kind.is_file() || kind.is_dir()) {
-            let name = entry
-                .path()
-                .map(|p| p.display().to_string())
-                .unwrap_or_default();
-            return Err(VerifyError::Failed(vec![format!(
-                "archive contains a non-regular entry: {name}"
-            )]));
-        }
-        let ok = entry
-            .unpack_in(dest)
-            .map_err(|e| VerifyError::Runtime(format!("extract failed: {e}")))?;
-        if !ok {
-            return Err(VerifyError::Failed(vec![
-                "archive contains a path outside the evidence directory".to_string(),
-            ]));
-        }
-    }
-    Ok(())
+    super::safe_extract::extract_tar_gz(archive, dest).map_err(|err| match err {
+        super::safe_extract::ExtractError::Rejected(msg) => VerifyError::Failed(vec![msg]),
+        super::safe_extract::ExtractError::Io(msg) => VerifyError::Runtime(msg),
+    })
 }
 
 /// The bundle root is the directory holding MANIFEST.json: either `dir` itself or
