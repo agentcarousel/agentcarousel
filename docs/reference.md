@@ -79,8 +79,23 @@ agc generate [flags]
 | `--model <model>` | Generator model |
 | `--distribution` | Category mix, e.g. `happy:2,edge:2,failure:1` |
 | `--difficulty` | Bias toward harder cases (`easy`, `medium`, `hard`) |
+| `--attack-categories <keys>` | Attack categories assigned round-robin to adversarial slots (default: all): `prompt-injection-direct`, `prompt-injection-indirect`, `system-prompt-extraction`, `jailbreak-roleplay`, `sensitive-data-disclosure`, `persuasion`, `false-scenario`. Unknown keys exit 3 |
 | `--domain-context` | Extra context injected into the generation prompt |
 | `--seed-cases <path>` | Existing cases to use as style reference |
+
+**Attack-category tags.** `agc generate` adds these tags to each adversarial case itself, so they don't depend on the model. `security`, `ai-safety` and `prompt-injection` also count toward adversarial coverage in `agc metrics`.
+
+| Key | Tags |
+|---|---|
+| `prompt-injection-direct` | `security`, `prompt-injection`, `owasp-llm:LLM01`, `mitre-atlas:AML.T0051.000`, `aiuc-1-attack:direct-injection` |
+| `prompt-injection-indirect` | `security`, `prompt-injection`, `owasp-llm:LLM01`, `mitre-atlas:AML.T0051.001`, `aiuc-1-attack:indirect-injection` |
+| `system-prompt-extraction` | `security`, `owasp-llm:LLM07`, `mitre-atlas:AML.T0056` |
+| `jailbreak-roleplay` | `security`, `ai-safety`, `mitre-atlas:AML.T0054` |
+| `sensitive-data-disclosure` | `security`, `owasp-llm:LLM02`, `mitre-atlas:AML.T0057` |
+| `persuasion` | `ai-safety`, `aiuc-1-attack:persuasion` |
+| `false-scenario` | `ai-safety`, `aiuc-1-attack:false-scenario` |
+
+Pinned: OWASP Top 10 for LLM Applications 2025; MITRE ATLAS 5.6.0; AIUC-1 attack category names (2026-Q4, names only).
 
 ```bash
 # From a prompt file
