@@ -349,7 +349,7 @@ fn fail(globals: &GlobalOptions, code: ExitCode, kind: &'static str, msg: String
 }
 
 /// The fixture file in `dir`: `cases.yaml` or `cases.yml`.
-fn fixture_in(dir: &Path) -> Option<PathBuf> {
+pub(crate) fn fixture_in(dir: &Path) -> Option<PathBuf> {
     ["cases.yaml", "cases.yml"]
         .iter()
         .map(|name| dir.join(name))

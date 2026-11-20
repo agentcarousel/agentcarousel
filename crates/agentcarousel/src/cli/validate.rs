@@ -177,11 +177,8 @@ fn validate_scope_in(dir: &Path) -> Option<ValidationReport> {
             })
         }
     };
-    let fixture = ["cases.yaml", "cases.yml"]
-        .iter()
-        .map(|name| dir.join(name))
-        .find(|p| p.is_file())
-        .and_then(|p| agentcarousel_fixtures::load_fixture(&p).ok());
+    let fixture =
+        super::scope::fixture_in(dir).and_then(|p| agentcarousel_fixtures::load_fixture(&p).ok());
     let issues = super::scope::check_profile(&profile, fixture.as_ref());
     Some(ValidationReport {
         path,
