@@ -426,3 +426,19 @@ jobs:
             git commit -m "Update agentcarousel to ${TAG}"
             git push
           fi
+
+  smoke:
+    name: Smoke-test the published release
+    needs: [gate, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      # A release created with GITHUB_TOKEN does not fire `release: published`, so start
+      # smoke.yml directly (workflow_dispatch is allowed with GITHUB_TOKEN).
+      - name: Dispatch smoke.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+        run: gh workflow run smoke.yml --ref main -f version="${RELEASE_TAG}"

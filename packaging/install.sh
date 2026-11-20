@@ -185,7 +185,9 @@ echo "Dashboard included — run: agentcarousel dashboard"
 # ── Optional agc alias ────────────────────────────────────────────────────────
 
 setup_alias() {
-  if [ ! -r /dev/tty ]; then
+  # `-r /dev/tty` is true even without a controlling terminal (CI, containers), where
+  # opening it fails; test that it can really be opened.
+  if ! ( : < /dev/tty ) 2>/dev/null; then
     echo "Skipping alias setup (non-interactive install)."
     return
   fi
