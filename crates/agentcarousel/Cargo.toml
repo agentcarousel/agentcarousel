@@ -40,7 +40,7 @@ globset = "0.4"
 indicatif = "0.18.4"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
-rusqlite = "0.39"
+rusqlite = "0.43"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
@@ -63,10 +63,10 @@ jsonschema = { version = "0.61.2", default-features = false }
 # (cross-compile to aarch64-gnu has no arm64 libsqlite; musl already needed bundled).
 # macOS uses the default (system SQLite).
 [target.'cfg(target_os = "linux")'.dependencies]
-rusqlite = { version = "0.39", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-rusqlite = { version = "0.39", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 
 [dev-dependencies]
 assert_cmd = "2"
