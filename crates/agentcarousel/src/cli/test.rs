@@ -131,10 +131,15 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
 
     let _ = persist_run(&run);
 
-    let tally = super::severity::tally(&run.cases, super::severity::is_failed_status);
-    let failed = match args.fail_on_severity {
+    let gate_tally = args.fail_on_severity.map(|gate| {
+        (
+            gate,
+            super::severity::tally(&run.cases, super::severity::is_failed_status),
+        )
+    });
+    let failed = match &gate_tally {
         None => run.cases.iter().any(super::severity::is_failed_status),
-        Some(gate) => tally.fails_gate(gate),
+        Some((gate, tally)) => tally.fails_gate(*gate),
     };
 
     if globals.json {
@@ -153,15 +158,8 @@ pub fn run_test(args: TestArgs, config: &ResolvedConfig, globals: &GlobalOptions
         }
     }
 
-    // Summary goes to stderr so it never mixes with JSON on stdout.
-    if args.fail_on_severity.is_some() {
-        eprintln!("{}", tally.summary_line());
-        if tally.unrated > 0 {
-            eprintln!(
-                "note: {} failure(s) without severity counted as failing",
-                tally.unrated
-            );
-        }
+    if let Some((_, tally)) = &gate_tally {
+        super::severity::print_gate_summary(tally);
     }
 
     if failed {

@@ -541,15 +541,7 @@ For fixtures that set judge per case, use --evaluator all (and keep --judge).",
         None => has_eval_failures(&run, threshold),
         Some(gate) => {
             let tally = super::severity::tally(&run.cases, |case| case_fails_eval(case, threshold));
-            // Summary goes to stderr so it never mixes with JSON on stdout.
-            eprintln!("{}", tally.summary_line());
-            if tally.unrated > 0 {
-                eprintln!(
-                    "{} {} failure(s) without severity counted as failing",
-                    style("note:").yellow().bold(),
-                    tally.unrated
-                );
-            }
+            super::severity::print_gate_summary(&tally);
             tally.fails_gate(gate)
         }
     };

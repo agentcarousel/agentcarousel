@@ -194,8 +194,7 @@ pub(crate) fn build_evidence(run: &Run, disclosure: Disclosure) -> Result<Value,
     });
     // Severity is not part of spec 0.1 cases; carry the tally as a top-level
     // extension, only when the suite assigns severities.
-    if run.cases.iter().any(|c| c.severity.is_some()) {
-        let tally = super::severity::tally(&run.cases, super::severity::is_failed_status);
+    if let Some(tally) = super::severity::failed_tally(&run.cases) {
         evidence[SEVERITY_EXTENSION] = json!({
             "scale": "agentcarousel",
             "failed": {

@@ -602,8 +602,7 @@ fn render_markdown_report(run: &Run, metrics_section: &str) -> String {
         let _ = writeln!(md);
     }
 
-    if run.cases.iter().any(|c| c.severity.is_some()) {
-        let tally = super::severity::tally(&run.cases, super::severity::is_failed_status);
+    if let Some(tally) = super::severity::failed_tally(&run.cases) {
         let _ = writeln!(md, "### Open findings by severity");
         let _ = writeln!(md);
         let _ = writeln!(md, "AgentCarousel severity scale, set per case by the suite author: P0 critical, P1 major, P2 significant, P3 minor.");

@@ -56,6 +56,26 @@ pub(crate) fn is_failed_status(case: &CaseResult) -> bool {
     )
 }
 
+/// Failed cases by severity, or `None` when the suite assigns no severities.
+pub(crate) fn failed_tally(cases: &[CaseResult]) -> Option<SeverityTally> {
+    cases
+        .iter()
+        .any(|c| c.severity.is_some())
+        .then(|| tally(cases, is_failed_status))
+}
+
+/// Print the `--fail-on-severity` summary to stderr, so it never mixes with JSON on stdout.
+pub(crate) fn print_gate_summary(tally: &SeverityTally) {
+    eprintln!("{}", tally.summary_line());
+    if tally.unrated > 0 {
+        eprintln!(
+            "{} {} failure(s) without severity counted as failing",
+            console::style("note:").yellow().bold(),
+            tally.unrated
+        );
+    }
+}
+
 /// Count the cases `is_failure` selects, by severity.
 pub(crate) fn tally<'a>(
     cases: impl IntoIterator<Item = &'a CaseResult>,

@@ -179,15 +179,6 @@ impl Severity {
     pub fn meets(self, threshold: Severity) -> bool {
         self <= threshold
     }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Severity::P0 => "P0",
-            Severity::P1 => "P1",
-            Severity::P2 => "P2",
-            Severity::P3 => "P3",
-        }
-    }
 }
 
 impl std::str::FromStr for Severity {
