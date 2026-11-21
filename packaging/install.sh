@@ -131,9 +131,9 @@ trap 'rm -rf "${TMP}"' EXIT INT TERM
 curl -fsSL --retry 3 --retry-delay 1 -o "${TMP}/SHA256SUMS" "${BASE_URL}/SHA256SUMS" \
   || fail "could not fetch ${BASE_URL}/SHA256SUMS; refusing to install an unverified binary"
 
-# From 0.10.0 the unsuffixed archive is the one binary, dashboard included. Older releases
-# ship a slim unsuffixed archive and the dashboard build as "-full" (0.10.0 publishes both,
-# identical). Prefer "-full" when the release lists it, so every version gets the dashboard.
+# From 0.10.1 the unsuffixed archive is the one binary, dashboard included, and "-full" is an
+# identical copy. 0.10.0 and older ship a slim unsuffixed archive and the dashboard build as
+# "-full". Prefer "-full" when the release lists it, so every version gets the dashboard.
 ASSET="agentcarousel-${VERSION}-${triple}.tar.gz"
 if grep -qF " agentcarousel-${VERSION}-${triple}-full.tar.gz" "${TMP}/SHA256SUMS"; then
   ASSET="agentcarousel-${VERSION}-${triple}-full.tar.gz"

@@ -4,6 +4,10 @@ use agentcarousel::{fetch_run, ScoreSource, StepKind, TraceSource};
 use assert_cmd::Command;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+
+/// `AGENTCAROUSEL_HISTORY_DB` is process-global; serialize the tests that set it.
+static HISTORY_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 const CASES: &str = r#"schema_version: 1
 skill_or_agent: provenance-demo
@@ -67,9 +71,13 @@ fn mock_eval_records_trace_and_score_sources() {
         .unwrap_or_else(|e| panic!("eval JSON envelope ({e}): {stdout}"));
     let run_id = envelope["data"]["id"].as_str().expect("run id").to_string();
 
-    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
-    let run = fetch_run(&run_id).expect("fetch run");
-    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+    let run = {
+        let _guard = HISTORY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
+        let run = fetch_run(&run_id);
+        std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+        run.expect("fetch run")
+    };
 
     let case = &run.cases[0];
     let tool_call = case
@@ -166,9 +174,13 @@ fn filtered_out_cases_are_recorded_as_not_tested() {
     let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("json envelope");
     let run_id = envelope["data"]["id"].as_str().expect("run id").to_string();
 
-    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
-    let run = fetch_run(&run_id).expect("fetch run");
-    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+    let run = {
+        let _guard = HISTORY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
+        let run = fetch_run(&run_id);
+        std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+        run.expect("fetch run")
+    };
 
     assert_eq!(run.cases.len(), 2, "every suite case appears in the run");
     let filtered = run
@@ -248,9 +260,13 @@ fn runs_record_subject_digests_and_declared_agent() {
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout).to_string();
     let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("json envelope");
     let run_id = envelope["data"]["id"].as_str().expect("run id").to_string();
-    std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
-    let run = fetch_run(&run_id).expect("fetch run");
-    std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+    let run = {
+        let _guard = HISTORY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("AGENTCAROUSEL_HISTORY_DB", &history);
+        let run = fetch_run(&run_id);
+        std::env::remove_var("AGENTCAROUSEL_HISTORY_DB");
+        run.expect("fetch run")
+    };
 
     let subject = run.subject.expect("run subject");
     assert_eq!(subject.generation_mode.as_deref(), Some("mock"));

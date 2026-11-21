@@ -29,9 +29,13 @@ cmd_pack() {
   fi
 
   if [[ "${bin_path}" == *.exe ]]; then
-    # Windows ships a single .zip (there is no -full alias: the updater never fetched one).
     cp "${bin_path}" "${tmp}/agentcarousel.exe"
     (cd "${tmp}" && zip -q -X "${outdir_abs}/${asset_base}.zip" agentcarousel.exe)
+    # 0.10.0 and earlier shipped Windows as .tar.gz and -full.tar.gz. Keep both names
+    # (same binary) so download links and scripts keep working; remove them in a later
+    # minor release, with a CHANGELOG notice.
+    (cd "${tmp}" && tar czf "${outdir_abs}/${asset_base}.tar.gz" agentcarousel.exe)
+    cp "${outdir_abs}/${asset_base}.tar.gz" "${outdir_abs}/${asset_base}-full.tar.gz"
   else
     cp "${bin_path}" "${tmp}/agentcarousel"
     chmod +x "${tmp}/agentcarousel"

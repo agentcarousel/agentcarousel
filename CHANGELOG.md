@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.1 — 2026-11-21
+
+This release changes how binaries are built and shipped. Commands, flags and output formats are unchanged. Every download name that 0.10.0 published is still published, so `agc update` from 0.9.x and 0.10.0 still finds its archive.
+
+### Changed
+
+- **One binary per platform, dashboard included.** `agentcarousel-<tag>-<target>.tar.gz` is now the dashboard build. `-full.tar.gz` is still published as an identical copy for 0.9.x `agc update --feature dashboard`. `--feature dashboard` still works on `agc update` and the installer, but is no longer needed.
+- **On Linux the installer defaults to the static musl build**, which runs on any distribution whatever its glibc. Set `AGENTCAROUSEL_LIBC=gnu` to install the glibc build. `agc update` keeps an existing install on the build it already has.
+- **Homebrew installs the prebuilt release binaries** instead of building from source, so it no longer needs Rust (`brew tap agentcarousel/agentcarousel && brew install agentcarousel`). On Linux the formula uses the musl build. The formula no longer has a `--HEAD` build.
+- **Windows is also published as a `.zip`.** The `.tar.gz` and `-full.tar.gz` names from 0.10.0 are still published.
+- **glibc Linux builds need glibc 2.34 or newer** (0.10.0 needed 2.39).
+- **Release binaries are built with stable Rust 1.100.0**, pinned in `rust-toolchain.toml`, instead of nightly. `cargo install agentcarousel` still needs Rust 1.95 or newer.
+- **Release assets have GitHub build provenance attestations.** To check one, run `gh attestation verify <file> --repo agentcarousel/agentcarousel`. `SHA256SUMS` now also covers `install.sh`.
+- **Dependency updates** within semver-compatible ranges: chrono, clap, clap_complete, console, flate2, globset, indicatif, regex, serde, serde_json, sha2, similar, tar, tokio-stream, toml and uuid.
+
+### CI and release pipeline
+
+- Actions are pinned by commit SHA, and workflow tokens are read-only unless a job needs more. Dependabot is configured for cargo, GitHub Actions and VS Code extension updates, but paused for now.
+- A release fails unless the tag matches the crate version and CHANGELOG.md has a section for it. Before building, the release also runs fmt, clippy, tests, `cargo deny check advisories` and `cargo publish --dry-run`. Each build job warns when an archive is more than 10% larger than in the previous release.
+- Pull requests now also check the MSRV (1.95) and run the tests with all features, so the dashboard and watch code is tested.
+- The nightly KPI pipeline and the scheduled smoke test of published releases are off until there is an API to run them against. `smoke.yml` can still be dispatched by hand.
+
 ## 0.10.0 — 2026-11-20
 
 ### Security
