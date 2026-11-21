@@ -30,7 +30,7 @@ watch = ["dep:notify"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
-dirs = "6"
+dirs = "7"
 oscal = "0.1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
