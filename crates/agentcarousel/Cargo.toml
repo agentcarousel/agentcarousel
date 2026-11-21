@@ -54,7 +54,7 @@ tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 axum = { version = "0.8", optional = true }
 notify = { version = "6", optional = true }
 toml = "1.1.2"
-ulid = "1"
+ulid = "3"
 uuid = "1"
 walkdir = "2"
 jsonschema = { version = "0.61.2", default-features = false }
