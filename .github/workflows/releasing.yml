@@ -258,7 +258,12 @@ jobs:
           TARGET: ${{ matrix.target }}
           RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
         run: |
-          ARCHIVE="$(ls dist/agentcarousel-"${RELEASE_TAG}"-"${TARGET}".{tar.gz,zip} 2>/dev/null | head -n1)"
+          # A file test, not `ls a.tar.gz a.zip`: one of the two never exists, and under
+          # this shell's errexit + pipefail that failing `ls` would fail the build.
+          ARCHIVE=""
+          for f in "dist/agentcarousel-${RELEASE_TAG}-${TARGET}.tar.gz" "dist/agentcarousel-${RELEASE_TAG}-${TARGET}.zip"; do
+            if [ -f "${f}" ]; then ARCHIVE="${f}"; break; fi
+          done
           if [ -z "${ARCHIVE}" ]; then
             echo "::warning::size budget: no archive found for ${TARGET}"
             exit 0
