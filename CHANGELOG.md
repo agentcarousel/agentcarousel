@@ -17,7 +17,7 @@ This release changes how binaries are built and shipped. Commands, flags and out
 
 ### CI and release pipeline
 
-- Actions are pinned by commit SHA, and workflow tokens are read-only unless a job needs more. Dependabot proposes cargo, GitHub Actions and VS Code extension updates.
+- Actions are pinned by commit SHA, and workflow tokens are read-only unless a job needs more. Dependabot is configured for cargo, GitHub Actions and VS Code extension updates, but paused for now.
 - A release fails unless the tag matches the crate version and CHANGELOG.md has a section for it. Before building, the release also runs fmt, clippy, tests, `cargo deny check advisories` and `cargo publish --dry-run`. Each build job warns when an archive is more than 10% larger than in the previous release.
 - Pull requests now also check the MSRV (1.95) and run the tests with all features, so the dashboard and watch code is tested.
 - The nightly KPI pipeline and the scheduled smoke test of published releases are off until there is an API to run them against. `smoke.yml` can still be dispatched by hand.

@@ -1,9 +1,12 @@
+# Version updates are paused (open-pull-requests-limit: 0) until the release pipeline
+# settles (agc-a1cq). To resume, delete the open-pull-requests-limit lines.
 version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
     cooldown:
       default-days: 3
     groups:
@@ -13,6 +16,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
     cooldown:
       default-days: 3
     groups:
@@ -22,5 +26,6 @@ updates:
     directory: /vscode-extension
     schedule:
       interval: monthly
+    open-pull-requests-limit: 0
     cooldown:
       default-days: 3
