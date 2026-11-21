@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 pack <release-tag> <rust-triple> <path-to-binary> <out-dir> [full]" >&2
+  echo "usage: $0 pack <release-tag> <rust-triple> <path-to-binary> <out-dir>" >&2
   echo "       $0 checksums <release-assets-dir>" >&2
   echo "       $0 scan-release-dir <release-assets-dir>" >&2
 }
@@ -14,16 +14,13 @@ cmd_pack() {
   local target="$2"
   local bin_path="$3"
   local outdir="$4"
-  local variant="${5:-}"
-  local suffix=""
-  [[ "${variant}" == "full" ]] && suffix="-full"
-  local asset="agentcarousel-${tag}-${target}${suffix}.tar.gz"
+  local asset_base="agentcarousel-${tag}-${target}"
   local tmp
   local outdir_abs
   tmp="$(mktemp -d)"
 
   mkdir -p "${outdir}"
-  # Tar runs under cd "${tmp}"; a relative outdir would resolve inside tmp and fail to open the archive.
+  # The archive step runs under cd "${tmp}"; a relative outdir would resolve inside tmp.
   outdir_abs="$(cd "${outdir}" && pwd)"
   if [[ ! -f "${bin_path}" ]]; then
     echo "publish-distribution: binary not found: ${bin_path}" >&2
@@ -32,12 +29,17 @@ cmd_pack() {
   fi
 
   if [[ "${bin_path}" == *.exe ]]; then
+    # Windows ships a single .zip (there is no -full alias: the updater never fetched one).
     cp "${bin_path}" "${tmp}/agentcarousel.exe"
-    (cd "${tmp}" && tar czf "${outdir_abs}/${asset}" agentcarousel.exe)
+    (cd "${tmp}" && zip -q -X "${outdir_abs}/${asset_base}.zip" agentcarousel.exe)
   else
     cp "${bin_path}" "${tmp}/agentcarousel"
     chmod +x "${tmp}/agentcarousel"
-    (cd "${tmp}" && tar czf "${outdir_abs}/${asset}" agentcarousel)
+    (cd "${tmp}" && tar czf "${outdir_abs}/${asset_base}.tar.gz" agentcarousel)
+    # There is one binary per target and it includes the dashboard. 0.9.x `agc update
+    # --feature dashboard` requests the -full name, so publish an identical alias. Remove
+    # it in a later minor release, with a CHANGELOG notice.
+    cp "${outdir_abs}/${asset_base}.tar.gz" "${outdir_abs}/${asset_base}-full.tar.gz"
   fi
   rm -rf "${tmp}"
 }

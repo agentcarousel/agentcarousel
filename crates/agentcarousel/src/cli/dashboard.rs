@@ -9,7 +9,7 @@ use super::GlobalOptions;
 
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc dashboard                        # http://localhost:7421\n  agc dashboard --port 8080            # custom port\n  agc dashboard --db path/to/history.db\n\nExit codes:\n  0  server exited cleanly\n  4  runtime error (port in use, IO error)\n\nNote: agc dashboard is only available in the full binary variant.\n  Install: curl -fsSL https://install.agentcarousel.com | sh -s -- --feature dashboard\n  Upgrade: agc update --feature dashboard"
+    after_help = "Examples:\n  agc dashboard                        # http://localhost:7421\n  agc dashboard --port 8080            # custom port\n  agc dashboard --db path/to/history.db\n\nExit codes:\n  0  server exited cleanly\n  4  runtime error (port in use, IO error)\n\nNote: the dashboard is included in release binaries (install.agentcarousel.com, GitHub releases, Homebrew).\n  Building from source needs the feature: cargo install agentcarousel --features dashboard"
 )]
 pub struct DashboardArgs {
     /// Port to listen on (default: 7421).

@@ -1,0 +1,8 @@
+# One toolchain for local builds, CI and releases. Bump it deliberately (and fix any new
+# clippy lints in the same PR) instead of letting `stable` drift under CI. The declared
+# MSRV (rust-version in crates/agentcarousel/Cargo.toml) is checked separately by the
+# `msrv` CI job.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
