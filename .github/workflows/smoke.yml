@@ -1,15 +1,22 @@
 name: smoke
 
-# Prove binaries against curated fixtures (no API keys).
-# Prefers a released tarball when GitHub Releases exist; otherwise builds from source.
+# Test what was actually released: download the published archives and the installer,
+# verify their checksums, and run them on real platforms. No API keys, no building.
+#
+# Triggers:
+#   - release published: covers releases created by hand. A release created with the
+#     workflow's GITHUB_TOKEN does not fire this event, so releasing.yml also dispatches
+#     this workflow for the tag it just published.
+#   - weekly: catches a platform or hosted-runner change that breaks an old release.
+#   - manual: `version` empty means the latest release.
 
 on:
-  push:
-    branches: [main, master]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag (e.g. v0.4.3); leave empty for latest GitHub release, or build-from-source if none"
+        description: "Release tag (e.g. v0.10.0); empty for the latest release"
         required: false
         type: string
   schedule:
@@ -19,101 +26,166 @@ permissions:
   contents: read
 
 concurrency:
-  group: smoke-${{ github.workflow }}-${{ github.ref }}
+  group: smoke-${{ github.event.release.tag_name || inputs.version || github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  smoke:
+  resolve:
+    name: Resolve release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          TAG="${RELEASE_TAG:-${INPUT_VERSION}}"
+          if [ -z "${TAG}" ]; then
+            TAG="$(gh release view --json tagName --jq .tagName)"
+          fi
+          case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
+          if ! [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'${TAG}' is not a release tag"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
+          echo "Smoke-testing ${TAG}"
+
+  binary:
+    name: Binary (${{ matrix.name }})
+    needs: resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            triple: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            triple: aarch64-apple-darwin
-    runs-on: ${{ matrix.os }}
+          - { name: linux-x86_64-gnu,   os: ubuntu-latest,    triple: x86_64-unknown-linux-gnu,    ext: tar.gz, exe: "" }
+          - { name: linux-aarch64-gnu,  os: ubuntu-24.04-arm, triple: aarch64-unknown-linux-gnu,   ext: tar.gz, exe: "" }
+          # The musl build runs inside an Alpine container on an ubuntu host.
+          - { name: alpine-x86_64-musl, os: ubuntu-latest,    triple: x86_64-unknown-linux-musl,   ext: tar.gz, exe: "", container: "alpine:3.22" }
+          - { name: macos-arm64,        os: macos-15,         triple: aarch64-apple-darwin,        ext: tar.gz, exe: "" }
+          - { name: macos-x86_64,       os: macos-15-intel,   triple: x86_64-apple-darwin,         ext: tar.gz, exe: "" }
+          - { name: windows-x86_64,     os: windows-latest,   triple: x86_64-pc-windows-gnu,       ext: zip,    exe: ".exe" }
     env:
-      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      TRIPLE: ${{ matrix.triple }}
+      EXT: ${{ matrix.ext }}
+      EXE: ${{ matrix.exe }}
+      CONTAINER: ${{ matrix.container }}
     steps:
-      - uses: actions/checkout@v4
+      # Fixtures at the released tag, so they match the binary.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
 
-      - name: Resolve release tag or build-from-source
-        id: ver
-        shell: bash
-        env:
-          INPUT_VERSION: ${{ github.event.inputs.version }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download and verify the release archive
         run: |
-          set -euo pipefail
-          if [ -n "${INPUT_VERSION}" ]; then
-            TAG="${INPUT_VERSION}"
-            case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
-            echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
-            echo "source=release" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          # Authenticated request: higher rate limits and stable behavior on GHA runners.
-          tmp="$(mktemp)"
-          code="$(curl -sS -w "%{http_code}" -o "${tmp}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/repos/${REPO}/releases/latest")"
-          if [ "${code}" = "200" ]; then
-            TAG="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[\"tag_name\"])" "${tmp}")"
-            rm -f "${tmp}"
-            case "${TAG}" in v*) ;; *) TAG="v${TAG}" ;; esac
-            echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
-            echo "source=release" >> "${GITHUB_OUTPUT}"
+          ASSET="agentcarousel-${TAG}-${TRIPLE}.${EXT}"
+          mkdir -p dl bin
+          gh release download "${TAG}" --dir dl --pattern "${ASSET}" --pattern SHA256SUMS
+          # macOS runners have shasum, not GNU sha256sum.
+          if command -v sha256sum >/dev/null 2>&1; then SUMCHECK=(sha256sum -c -); else SUMCHECK=(shasum -a 256 -c -); fi
+          (cd dl && grep -F " ${ASSET}" SHA256SUMS | "${SUMCHECK[@]}")
+          if [ "${EXT}" = "zip" ]; then
+            powershell -NoProfile -Command "Expand-Archive -Path 'dl/${ASSET}' -DestinationPath bin"
           else
-            rm -f "${tmp}"
-            echo "No GitHub release found (HTTP ${code}); building agentcarousel from source." >&2
-            echo "source=build" >> "${GITHUB_OUTPUT}"
+            tar -xzf "dl/${ASSET}" -C bin
           fi
+          ls -l bin
+          [ -f "bin/agentcarousel${EXE}" ]
 
-      - name: Download and extract release binary
-        if: steps.ver.outputs.source == 'release'
-        shell: bash
-        env:
-          TAG: ${{ steps.ver.outputs.tag }}
-          TRIPLE: ${{ matrix.triple }}
+      - name: Run the binary
         run: |
-          set -euo pipefail
-          ASSET="agentcarousel-${TAG}-${TRIPLE}.tar.gz"
-          URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
-          echo "Downloading ${URL}"
-          curl -fL --retry 3 --retry-delay 1 -o "dist.tar.gz" "${URL}"
-          tar -xzf "dist.tar.gz"
-          chmod +x agentcarousel
-          echo "${PWD}" >> "${GITHUB_PATH}"
+          RUN=""
+          if [ -n "${CONTAINER}" ]; then
+            RUN="docker run --rm -v ${PWD}:/w -w /w ${CONTAINER}"
+          fi
+          AGC="./bin/agentcarousel${EXE}"
 
-      - name: Install Rust (build fallback)
-        if: steps.ver.outputs.source == 'build'
-        uses: dtolnay/rust-toolchain@stable
+          # shellcheck disable=SC2086
+          ${RUN} ${AGC} --version | tee version.txt
+          grep -F "${VERSION}" version.txt
 
-      - name: Build agentcarousel from source
-        if: steps.ver.outputs.source == 'build'
-        run: cargo build --release -p agentcarousel
+          # shellcheck disable=SC2086
+          ${RUN} ${AGC} validate fixtures/prompt-injection-detector/cases.yaml
+          # shellcheck disable=SC2086
+          ${RUN} ${AGC} bundle verify fixtures/prompt-injection-detector
+          # shellcheck disable=SC2086
+          ${RUN} ${AGC} test fixtures/prompt-injection-detector/ --filter-tags smoke --offline true
+          # The dashboard is part of the one release binary.
+          # shellcheck disable=SC2086
+          ${RUN} ${AGC} dashboard --help > /dev/null
 
-      - name: Use binary from cargo build
-        if: steps.ver.outputs.source == 'build'
-        run: echo "$(pwd)/target/release" >> "${GITHUB_PATH}"
-
-      - name: Validate good fixture
-        run: agentcarousel validate fixtures/prompt-injection-detector/cases.yaml
-
-      - name: Validate bad fixture (expect failure)
-        shell: bash
-        run: |
+          # A bad fixture must fail validation.
           set +e
-          agentcarousel validate .github/test-fixtures/invalid-skill.yaml
+          # shellcheck disable=SC2086
+          ${RUN} ${AGC} validate .github/test-fixtures/invalid-skill.yaml
           code=$?
           set -e
           if [ "${code}" -eq 0 ]; then
-            echo "expected validate to fail for invalid-skill fixture"
+            echo "::error::validate accepted the invalid fixture"
             exit 1
           fi
 
-      - name: Smoke tests
-        run: agentcarousel test fixtures/prompt-injection-detector/cases.yaml --filter-tags smoke
+  installer:
+    name: Installer (${{ matrix.name }})
+    needs: resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ubuntu,  os: ubuntu-latest }
+          - { name: alpine,  os: ubuntu-latest, container: "alpine:3.22" }
+          - { name: macos,   os: macos-15 }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      CONTAINER: ${{ matrix.container }}
+    steps:
+      - name: Download the release's install.sh
+        run: |
+          mkdir -p inst
+          gh release download "${TAG}" --dir inst --pattern install.sh
+
+      - name: Install the pinned version and run it
+        run: |
+          cat > inst/run.sh <<'EOS'
+          set -eu
+          export AGENTCAROUSEL_VERSION="$1" AGENTCAROUSEL_INSTALL_DIR="$2/out"
+          sh "$2/inst/install.sh" </dev/null
+          "$2/out/agentcarousel" --version
+          EOS
+          if [ -n "${CONTAINER}" ]; then
+            docker run --rm -v "${PWD}:/w" "${CONTAINER}" \
+              sh -c "apk add --no-cache curl >/dev/null && sh /w/inst/run.sh '${VERSION}' /w" | tee version.txt
+          else
+            sh inst/run.sh "${VERSION}" "${PWD}" | tee version.txt
+          fi
+          grep -F "${VERSION}" version.txt
+
+      - name: The latest-release path resolves without the API
+        if: ${{ !matrix.container }}
+        run: |
+          # No version pin: exercises the /releases/latest redirect. Only meaningful when the
+          # tag under test is the latest release, so just check it resolves to some release.
+          AGENTCAROUSEL_INSTALL_DIR="${PWD}/out-latest" sh inst/install.sh </dev/null
+          "${PWD}/out-latest/agentcarousel" --version

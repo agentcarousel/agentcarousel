@@ -579,7 +579,7 @@ agc dashboard --port 8080
 agc dashboard --db path/to/history.db
 ```
 
-Available in the `--feature dashboard` flag.
+Included in release binaries. When building from source, enable it with `cargo install agentcarousel --features dashboard`.
 
 ---
 

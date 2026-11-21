@@ -1,10 +1,18 @@
 name: releasing
 
-# Build release binaries on tag or manual dispatch, then publish a GitHub Release
-# on this repository.
+# Build release binaries on a version tag (or a manual dispatch), then publish a GitHub
+# Release, a crates.io release and a Homebrew tap update.
 #
-# Required secret: none beyond the automatic GITHUB_TOKEN (contents: write granted below).
-# Optional secret: AGENTCAROUSEL_JUDGE_KEY — needed only for the nightly eval job in agentcarousel.yml.
+#   - Tag push `v*`: the full release.
+#   - Manual dispatch: `dry_run` defaults to true (build, smoke-test and package only).
+#     A real release can only be dispatched from main.
+#
+# Secrets and variables (all used only by the jobs that need them):
+#   HOMEBREW_TAP_TOKEN      update-tap: fine-grained PAT, contents:write on the tap repo.
+#   CARGO_REGISTRY_TOKEN    publish-crates: used unless trusted publishing is enabled.
+#   vars.CRATES_IO_TRUSTED_PUBLISHING=true   publish-crates: use OIDC trusted publishing.
+#
+# The publish, publish-crates and update-tap jobs run in the `release` environment.
 
 on:
   push:
@@ -13,304 +21,401 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag (e.g. v0.2.0 or 0.2.0)"
+        description: "Release tag (e.g. v0.10.1 or 0.10.1); must equal the crate version"
         required: true
         type: string
       dry_run:
-        description: "Build and package only; do not create GitHub release"
+        description: "Build, test and package only; create no release, publish nothing"
         required: false
-        default: false
+        default: true
         type: boolean
 
-permissions:
-  contents: write
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+# Never cancel a release in flight.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   gate:
-    name: Release gate (fmt, clippy, test)
+    name: Release gate (preflight, fmt, clippy, test, deny)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       release_tag: ${{ steps.meta.outputs.release_tag }}
+      version: ${{ steps.meta.outputs.version }}
+      dry_run: ${{ steps.meta.outputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Format check
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Test
-        run: cargo test
-
-      - name: Check bundle manifest hashes are current
-        run: |
-          cargo build --release -p agentcarousel
-          for bundle_dir in fixtures/*/; do
-            ./target/release/agentcarousel bundle pack "${bundle_dir%/}"
-          done
-          if ! git diff --exit-code fixtures/*/bundle.manifest.json; then
-            echo "::error::Bundle manifest sha256 values are stale. Run 'agentcarousel bundle pack' on each bundle and commit the updated manifests."
-            exit 1
-          fi
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install --profile minimal
 
       - id: meta
-        name: Resolve release tag
+        name: Preflight (tag, crate version, changelog, branch)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RAW="${{ github.event.inputs.version }}"
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            RAW="${INPUT_VERSION}"
+            DRY_RUN="${INPUT_DRY_RUN}"
           else
-            RAW="${GITHUB_REF_NAME}"
+            RAW="${REF_NAME}"
+            DRY_RUN="false"
           fi
           case "${RAW}" in
             v*) TAG="${RAW}" ;;
             *) TAG="v${RAW}" ;;
           esac
-          echo "release_tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          VERSION="${TAG#v}"
+
+          if ! [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'${TAG}' is not a release tag (expected vMAJOR.MINOR.PATCH[-pre])"
+            exit 1
+          fi
+
+          CRATE_VERSION="$(cargo metadata --no-deps --format-version 1 --locked \
+            | jq -r '.packages[] | select(.name == "agentcarousel") | .version')"
+          if [ "${VERSION}" != "${CRATE_VERSION}" ]; then
+            echo "::error::Tag ${TAG} does not match the agentcarousel crate version ${CRATE_VERSION}. Bump Cargo.toml first."
+            exit 1
+          fi
+
+          if ! grep -q "^## ${VERSION} " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## ${VERSION} — date' section"
+            exit 1
+          fi
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${DRY_RUN}" != "true" ] && [ "${REF}" != "refs/heads/main" ]; then
+            echo "::error::A real release can only be dispatched from main (got ${REF}). Use dry_run=true to test a branch."
+            exit 1
+          fi
+
+          {
+            echo "release_tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "dry_run=${DRY_RUN}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Releasing ${TAG} (crate ${CRATE_VERSION}), dry_run=${DRY_RUN}"
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --all-features
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: cargo-deny
+
+      - name: Dependency advisories
+        run: cargo deny --locked check advisories
+
+      - name: Publish dry run (package contents and build)
+        run: cargo publish --dry-run --locked -p agentcarousel
 
   build:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     needs: gate
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        # Cross-compile aarch64-unknown-linux-gnu from ubuntu-latest (see install step below)
-        # rather than using ubuntu-*-arm runners, which have a smaller free-tier pool.
-        # macos-13 is retired. Prefer x86_64-apple-darwin on macos-latest (ARM): same runner pool as
-        # aarch64-apple-darwin; avoids Intel-only labels that can queue or require larger runners.
         include:
-          # Linux x64 (gnu)
+          # Linux gnu: built on the oldest hosted runner for the lowest glibc floor (2.35).
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            archive: tar.gz
-            name: linux_amd64
+            os: ubuntu-22.04
             can_run: true
-            linker: ""
-          # Linux x64 (musl) — statically linked, no glibc dependency
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+            can_run: true
+          # Linux musl: static; the installer's default (Alpine, any glibc).
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            archive: tar.gz
-            name: linux_musl_amd64
             can_run: true
-            linker: ""
-          # Linux ARM64 (gnu)
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            archive: tar.gz
-            name: linux_arm64
-            can_run: false
-            linker: aarch64-linux-gnu-gcc
-          # Linux ARM64 (musl) — statically linked, no glibc dependency
-          # (Alpine Linux on aarch64 needs this; #284)
           - target: aarch64-unknown-linux-musl
             os: ubuntu-24.04-arm
-            archive: tar.gz
-            name: linux_musl_arm64
             can_run: true
-            linker: ""
-          # macOS Intel
-          - target: x86_64-apple-darwin
-            os: macos-15
-            archive: tar.gz
-            name: darwin_amd64
-            can_run: true
-            linker: ""
-          # macOS Apple Silicon (native)
           - target: aarch64-apple-darwin
             os: macos-15
-            archive: tar.gz
-            name: darwin_arm64
             can_run: true
-            linker: ""
-          # Windows x64
+          # Cross-built on the arm64 runner; exercised by smoke.yml on macos-15-intel after release.
+          - target: x86_64-apple-darwin
+            os: macos-15
+            can_run: false
+          # Cross-built with mingw; exercised by smoke.yml on windows-latest after release.
           - target: x86_64-pc-windows-gnu
             os: ubuntu-latest
-            archive: zip
-            name: windows_amd64
             can_run: false
-            linker: x86_64-w64-mingw32-gcc
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          toolchain: nightly
-          targets: ${{ matrix.target }}
+          persist-credentials: false
 
-      - name: Ensure target is installed
-        run: rustup target add ${{ matrix.target }}
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup show active-toolchain || rustup toolchain install --profile minimal
+          rustup target add "${TARGET}"
 
-      - name: Install musl-tools (for musl targets)
+      - name: Install musl-tools
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Install cross toolchains
-        if: matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-gnu'
-        run: |
-          sudo apt-get update
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-          elif [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
-            sudo apt-get install -y mingw-w64 zip
-          fi
-
-      - name: Fix MinGW import library case
+      - name: Install mingw (Windows target)
         if: matrix.target == 'x86_64-pc-windows-gnu'
         run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 zip
+          # mingw ships libkernel32.a but some crates link against libKernel32.a.
           libkernel32="$(x86_64-w64-mingw32-gcc -print-file-name=libkernel32.a)"
-          libdir="$(dirname "$libkernel32")"
-          if [ "$libkernel32" = "libkernel32.a" ] || [ ! -f "$libkernel32" ]; then
-            echo "Could not locate libkernel32.a"
+          if [ "${libkernel32}" = "libkernel32.a" ] || [ ! -f "${libkernel32}" ]; then
+            echo "::error::Could not locate libkernel32.a"
             exit 1
           fi
-          sudo ln -sf "$libkernel32" "$libdir/libKernel32.a"
+          sudo ln -sf "${libkernel32}" "$(dirname "${libkernel32}")/libKernel32.a"
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc" >> "${GITHUB_ENV}"
 
-      - name: Configure cross linker
-        if: matrix.linker != ''
+      # One binary per target, dashboard included. No cache action here on purpose: a release
+      # build must not restore state a PR could have written.
+      - name: Build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked -p agentcarousel --target "${TARGET}" --features dashboard
+
+      - name: Smoke-test the binary
+        if: matrix.can_run
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          case "${{ matrix.target }}" in
-            aarch64-unknown-linux-gnu)
-              echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=${{ matrix.linker }}" >> "$GITHUB_ENV"
-              ;;
-            x86_64-pc-windows-gnu)
-              echo "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=${{ matrix.linker }}" >> "$GITHUB_ENV"
-              ;;
-          esac
+          BIN="target/${TARGET}/release/agentcarousel"
+          "${BIN}" --version | tee version.txt
+          grep -F "${VERSION}" version.txt
+          "${BIN}" validate fixtures/
+          "${BIN}" bundle verify fixtures/prompt-injection-detector
+          "${BIN}" test fixtures/prompt-injection-detector/ --filter-tags smoke --offline true
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
-        with:
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}
-
-      - name: Build slim binary
-        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}"
-
-      - name: Record cross-build verification strategy
+      - name: Note cross-built target
         if: ${{ !matrix.can_run }}
-        run: |
-          echo "Cross-built target ${{ matrix.target }} cannot be executed on ${{ runner.os }}."
-          echo "Relying on tag/Cargo.toml preflight and successful link output instead."
-
-      - name: Package slim artifact
-        shell: bash
         env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          echo "${TARGET} is cross-built and not executed here; smoke.yml tests the released asset on a native runner."
+
+      - name: Package
+        env:
+          TARGET: ${{ matrix.target }}
           RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
         run: |
-          mkdir -p dist
-          if [[ "${{ matrix.target }}" == *-windows-* ]]; then
-            BIN="target/${{ matrix.target }}/release/agentcarousel.exe"
+          if [[ "${TARGET}" == *-windows-* ]]; then
+            BIN="target/${TARGET}/release/agentcarousel.exe"
           else
-            BIN="target/${{ matrix.target }}/release/agentcarousel"
+            BIN="target/${TARGET}/release/agentcarousel"
           fi
-          bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist
+          bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${TARGET}" "${BIN}" dist
+          {
+            echo "### ${TARGET}"
+            echo ""
+            echo "| File | Bytes |"
+            echo "|---|---|"
+            echo "| uncompressed binary | $(wc -c < "${BIN}" | tr -d ' ') |"
+            for f in dist/*; do
+              echo "| $(basename "${f}") | $(wc -c < "${f}" | tr -d ' ') |"
+            done
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Build full binary (--features dashboard)
-        run: cargo build --release -p agentcarousel --target "${{ matrix.target }}" --features dashboard
-
-      - name: Package full artifact
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
-        run: |
-          if [[ "${{ matrix.target }}" == *-windows-* ]]; then
-            BIN="target/${{ matrix.target }}/release/agentcarousel.exe"
-          else
-            BIN="target/${{ matrix.target }}/release/agentcarousel"
-          fi
-          bash packaging/publish-distribution.sh pack "${RELEASE_TAG}" "${{ matrix.target }}" "${BIN}" dist full
-
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ matrix.target }}
           path: dist/*
+          retention-days: 7
 
-  publish:
-    name: Checksums, scan, and GitHub release
+  package:
+    name: Checksums
     needs: [gate, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: dist-*
           merge-multiple: true
           path: release-assets
 
-      - name: Attach install.sh to release assets
+      - name: Attach install.sh to the release assets
         run: cp packaging/install.sh release-assets/install.sh
 
-      - name: Write SHA256SUMS and scan
+      - name: Write SHA256SUMS and check the directory
         run: |
           bash packaging/publish-distribution.sh checksums release-assets
           bash packaging/publish-distribution.sh scan-release-dir release-assets
-          ls -la release-assets
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: release-assets/*
+          retention-days: 7
+
+  publish:
+    name: GitHub release
+    needs: [gate, package]
+    if: needs.gate.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: release-assets
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release-assets/agentcarousel-*
+            release-assets/install.sh
+            release-assets/SHA256SUMS
+
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          awk -v v="${VERSION}" '
+            $0 ~ "^## " v " " { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::CHANGELOG section for ${VERSION} is empty"
+            exit 1
+          fi
 
       - name: Create GitHub release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          set -euxo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
-            echo "Dry run: skipping gh release create."
-            exit 0
+          if [ "${EVENT_NAME}" = "push" ]; then
+            TARGET_FLAG=(--verify-tag)
+          else
+            TARGET_FLAG=(--target "${GITHUB_SHA}")
           fi
           gh release create "${RELEASE_TAG}" release-assets/* \
             --title "${RELEASE_TAG}" \
-            --notes "Binary release for ${RELEASE_TAG}. See install.sh or README for installation."
+            --notes-file release-notes.md \
+            "${TARGET_FLAG[@]}"
 
   publish-crates:
     name: Publish to crates.io
     needs: [gate, publish]
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install --profile minimal
+
+      - name: Is this version already on crates.io?
+        id: exists
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          code="$(curl -sS -o /dev/null -w '%{http_code}' -A 'agentcarousel-release-workflow' \
+            "https://crates.io/api/v1/crates/agentcarousel/${VERSION}")"
+          case "${code}" in
+            200) echo "published=true" >> "${GITHUB_OUTPUT}"; echo "agentcarousel ${VERSION} is already on crates.io; skipping." ;;
+            404) echo "published=false" >> "${GITHUB_OUTPUT}" ;;
+            *) echo "::error::Unexpected HTTP ${code} from crates.io"; exit 1 ;;
+          esac
+
+      - name: Authenticate with crates.io (trusted publishing)
+        id: auth
+        if: steps.exists.outputs.published == 'false' && vars.CRATES_IO_TRUSTED_PUBLISHING == 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
 
       - name: Publish agentcarousel
-        uses: katyo/publish-crates@v2
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          path: './crates/agentcarousel'
+        if: steps.exists.outputs.published == 'false'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        # The gate already ran `cargo publish --dry-run`, which builds the package.
+        run: cargo publish --locked --no-verify -p agentcarousel
 
   update-tap:
-    name: Update Homebrew Tap
+    name: Update Homebrew tap
     needs: [gate, publish]
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+    environment: release
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Checkout Tap Repository
-        uses: actions/checkout@v4
+      - name: Checkout tap repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: agentcarousel/homebrew-agentcarousel
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
+          # Credentials are kept: the commit step below pushes to the tap.
+          persist-credentials: true
 
-      - name: Update Formula
-        run: |
-          TAG=${{ needs.gate.outputs.release_tag }}
-          bash packaging/update-homebrew.sh "${TAG}" "homebrew-tap/Formula/agentcarousel.rb"
+      - name: Update formula
+        env:
+          TAG: ${{ needs.gate.outputs.release_tag }}
+        run: bash packaging/update-homebrew.sh "${TAG}" homebrew-tap/Formula/agentcarousel.rb
 
-      - name: Commit and Push
+      - name: Commit and push
         working-directory: homebrew-tap
+        env:
+          TAG: ${{ needs.gate.outputs.release_tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -318,6 +423,22 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to formula."
           else
-            git commit -m "Update agentcarousel to ${{ needs.gate.outputs.release_tag }}"
+            git commit -m "Update agentcarousel to ${TAG}"
             git push
           fi
+
+  smoke:
+    name: Smoke-test the published release
+    needs: [gate, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      # A release created with GITHUB_TOKEN does not fire `release: published`, so start
+      # smoke.yml directly (workflow_dispatch is allowed with GITHUB_TOKEN).
+      - name: Dispatch smoke.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+        run: gh workflow run smoke.yml --ref main -f version="${RELEASE_TAG}"

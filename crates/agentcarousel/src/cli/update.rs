@@ -12,7 +12,7 @@ const DL_BASE: &str = "https://github.com";
 
 #[derive(Debug, Parser)]
 #[command(
-    after_help = "Examples:\n  agc update                          # upgrade slim binary in-place\n  agc update --check                  # print available version without installing\n  agc update --feature dashboard      # upgrade to the full binary (includes web dashboard)\n  agc update --yes                    # skip confirmation prompt (CI)\n  agc update --feature dashboard -y   # non-interactive full upgrade"
+    after_help = "Examples:\n  agc update           # upgrade in-place (release binaries include the dashboard)\n  agc update --check   # print available version without installing\n  agc update --yes     # skip confirmation prompt (CI)"
 )]
 /// Check for and install updates to the agentcarousel CLI.
 pub struct UpdateArgs {
@@ -22,7 +22,8 @@ pub struct UpdateArgs {
     /// Skip the confirmation prompt (useful for CI/non-interactive shells).
     #[arg(short = 'y', long)]
     pub yes: bool,
-    /// Enable an optional feature in the downloaded binary (e.g. `--feature dashboard`).
+    /// Deprecated, kept for 0.9.x scripts: release binaries always include the dashboard.
+    /// Passing `--feature dashboard` to a binary built without it installs the release binary.
     #[arg(long = "feature", value_name = "FEATURE")]
     pub features: Vec<String>,
 }
@@ -45,8 +46,13 @@ fn update(args: UpdateArgs) -> Result<(), String> {
 
     let want_dashboard = args.features.iter().any(|f| f == "dashboard");
     let have_dashboard = cfg!(feature = "dashboard");
+    if want_dashboard && have_dashboard {
+        eprintln!("note: release binaries always include the dashboard; --feature dashboard is no longer needed.");
+    }
     let version_current = current == latest;
-    let variant_current = want_dashboard == have_dashboard;
+    // A binary built without the dashboard (for example `cargo install`) can still ask for
+    // the release binary, which has it.
+    let variant_current = !want_dashboard || have_dashboard;
 
     if version_current && variant_current {
         println!("agentcarousel {current} is already up to date.");
@@ -56,9 +62,7 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     if args.check {
         if version_current {
             println!(
-                "variant change available: {} → {}  (run `agentcarousel update --feature dashboard` to install)",
-                if have_dashboard { "full" } else { "slim" },
-                if want_dashboard { "full" } else { "slim" },
+                "this build has no dashboard; run `agentcarousel update --feature dashboard` to install the release binary, which includes it"
             );
         } else {
             println!(
@@ -69,11 +73,7 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     }
 
     if version_current {
-        println!(
-            "switching variant: {} → {}",
-            if have_dashboard { "full" } else { "slim" },
-            if want_dashboard { "full" } else { "slim" },
-        );
+        println!("switching to the release binary (includes the dashboard)");
     } else {
         println!("update available: {current} → {latest}");
     }
@@ -84,8 +84,7 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     }
 
     let triple = target_triple()?;
-    let variant = resolve_variant(&args);
-    let asset = asset_name(&tag, triple, variant);
+    let asset = asset_name(&tag, triple);
     let tarball_url = format!("{DL_BASE}/{REPO}/releases/download/{tag}/{asset}");
     let sums_url = format!("{DL_BASE}/{REPO}/releases/download/{tag}/SHA256SUMS");
 
@@ -106,20 +105,10 @@ fn update(args: UpdateArgs) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_variant(args: &UpdateArgs) -> &'static str {
-    if args.features.iter().any(|f| f == "dashboard") {
-        "full"
-    } else {
-        "slim"
-    }
-}
-
-fn asset_name(tag: &str, triple: &str, variant: &str) -> String {
-    if variant == "full" {
-        format!("agentcarousel-{tag}-{triple}-full.tar.gz")
-    } else {
-        format!("agentcarousel-{tag}-{triple}.tar.gz")
-    }
+/// One archive per target: the release binary includes the dashboard. (`-full` aliases of the
+/// same archive exist only for 0.9.x updaters.)
+fn asset_name(tag: &str, triple: &str) -> String {
+    format!("agentcarousel-{tag}-{triple}.tar.gz")
 }
 
 fn fetch_latest_tag() -> Result<String, String> {
@@ -331,6 +320,14 @@ mod tests {
             "{}  {name}\n",
             crate::core::hex_util::hex_lower(hasher.finalize().as_ref())
         )
+    }
+
+    #[test]
+    fn asset_is_the_single_unsuffixed_archive() {
+        assert_eq!(
+            asset_name("v1.2.3", "x86_64-unknown-linux-musl"),
+            "agentcarousel-v1.2.3-x86_64-unknown-linux-musl.tar.gz"
+        );
     }
 
     #[test]
