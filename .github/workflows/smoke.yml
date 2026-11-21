@@ -98,7 +98,9 @@ jobs:
           ASSET="agentcarousel-${TAG}-${TRIPLE}.${EXT}"
           mkdir -p dl bin
           gh release download "${TAG}" --dir dl --pattern "${ASSET}" --pattern SHA256SUMS
-          (cd dl && grep -F " ${ASSET}" SHA256SUMS | sha256sum -c -)
+          # macOS runners have shasum, not GNU sha256sum.
+          if command -v sha256sum >/dev/null 2>&1; then SUMCHECK=(sha256sum -c -); else SUMCHECK=(shasum -a 256 -c -); fi
+          (cd dl && grep -F " ${ASSET}" SHA256SUMS | "${SUMCHECK[@]}")
           if [ "${EXT}" = "zip" ]; then
             powershell -NoProfile -Command "Expand-Archive -Path 'dl/${ASSET}' -DestinationPath bin"
           else

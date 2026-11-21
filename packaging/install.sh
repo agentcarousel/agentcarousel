@@ -119,28 +119,33 @@ case "${OS}" in
     ;;
 esac
 
-# ── Download ──────────────────────────────────────────────────────────────────
+# ── Download and verify ───────────────────────────────────────────────────────
 
-ASSET="agentcarousel-${VERSION}-${triple}.tar.gz"
-URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
-SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
+BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
 TMP="${TMPDIR:-/tmp}/agentcarousel-install.$$"
 mkdir -p "${TMP}"
 trap 'rm -rf "${TMP}"' EXIT INT TERM
 
-echo "Installing agentcarousel ${VERSION} (${triple})..."
-echo "Downloading ${URL} ..."
-curl -fL --retry 3 --retry-delay 1 -o "${TMP}/${ASSET}" "${URL}" \
-  || fail "download failed: ${URL}"
+# The checksum file comes first: it is mandatory, and it also tells us which archive to fetch.
+curl -fsSL --retry 3 --retry-delay 1 -o "${TMP}/SHA256SUMS" "${BASE_URL}/SHA256SUMS" \
+  || fail "could not fetch ${BASE_URL}/SHA256SUMS; refusing to install an unverified binary"
 
-# ── Verify checksum (mandatory) ───────────────────────────────────────────────
-
-curl -fsSL --retry 3 --retry-delay 1 -o "${TMP}/SHA256SUMS" "${SUMS_URL}" \
-  || fail "could not fetch ${SUMS_URL}; refusing to install an unverified binary"
+# From 0.10.0 the unsuffixed archive is the one binary, dashboard included. Older releases
+# ship a slim unsuffixed archive and the dashboard build as "-full" (0.10.0 publishes both,
+# identical). Prefer "-full" when the release lists it, so every version gets the dashboard.
+ASSET="agentcarousel-${VERSION}-${triple}.tar.gz"
+if grep -qF " agentcarousel-${VERSION}-${triple}-full.tar.gz" "${TMP}/SHA256SUMS"; then
+  ASSET="agentcarousel-${VERSION}-${triple}-full.tar.gz"
+fi
 
 want="$(awk -v f="${ASSET}" '$2 == f || $2 == "*" f { print $1; exit }' "${TMP}/SHA256SUMS")"
 [ -n "${want}" ] || fail "no checksum entry for ${ASSET} in SHA256SUMS; refusing to install"
+
+echo "Installing agentcarousel ${VERSION} (${triple})..."
+echo "Downloading ${BASE_URL}/${ASSET} ..."
+curl -fL --retry 3 --retry-delay 1 -o "${TMP}/${ASSET}" "${BASE_URL}/${ASSET}" \
+  || fail "download failed: ${BASE_URL}/${ASSET}"
 
 if command -v sha256sum >/dev/null 2>&1; then
   got="$(sha256sum "${TMP}/${ASSET}" | awk '{print $1}')"
