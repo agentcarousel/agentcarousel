@@ -250,6 +250,45 @@ jobs:
             echo ""
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      # Warn (never fail) when an archive grows by more than 10% over the previous release.
+      - name: Size budget
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ matrix.target }}
+          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
+        run: |
+          # A file test, not `ls a.tar.gz a.zip`: one of the two never exists, and under
+          # this shell's errexit + pipefail that failing `ls` would fail the build.
+          ARCHIVE=""
+          for f in "dist/agentcarousel-${RELEASE_TAG}-${TARGET}.tar.gz" "dist/agentcarousel-${RELEASE_TAG}-${TARGET}.zip"; do
+            if [ -f "${f}" ]; then ARCHIVE="${f}"; break; fi
+          done
+          if [ -z "${ARCHIVE}" ]; then
+            echo "::warning::size budget: no archive found for ${TARGET}"
+            exit 0
+          fi
+          PREV="$(gh release list --exclude-drafts --exclude-pre-releases --limit 3 --json tagName --jq '.[].tagName' \
+            | grep -vx "${RELEASE_TAG}" | head -n1 || true)"
+          if [ -z "${PREV}" ]; then
+            echo "size budget: no previous release to compare with"
+            exit 0
+          fi
+          OLD="$(gh release view "${PREV}" --json assets \
+            --jq ".assets[] | select(.name == \"agentcarousel-${PREV}-${TARGET}.tar.gz\" or .name == \"agentcarousel-${PREV}-${TARGET}.zip\") | .size" \
+            | head -n1 || true)"
+          if [ -z "${OLD}" ] || [ "${OLD}" -eq 0 ]; then
+            echo "size budget: ${PREV} has no ${TARGET} archive"
+            exit 0
+          fi
+          NEW="$(wc -c < "${ARCHIVE}" | tr -d ' ')"
+          PCT=$(( (NEW - OLD) * 100 / OLD ))
+          echo "size budget: ${TARGET} ${PREV} ${OLD} -> ${RELEASE_TAG} ${NEW} bytes (${PCT}%)"
+          echo "Archive vs ${PREV}: ${OLD} -> ${NEW} bytes (${PCT}%)" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${PCT}" -gt 10 ]; then
+            echo "::warning title=Size budget (${TARGET})::${ARCHIVE##*/} grew ${PCT}% over ${PREV} (${OLD} -> ${NEW} bytes)"
+          fi
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ matrix.target }}
