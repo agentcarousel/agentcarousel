@@ -1,13 +1,14 @@
-# PR and main-branch CI for the Rust workspace, plus the nightly KPI pipeline.
+# PR and main-branch CI for the Rust workspace, plus the KPI pipeline (eval-nightly).
 # Enable secret scanning and dependency review in the repository Settings.
+#
+# The nightly schedule (cron "0 3 * * *") is off until there is a registry API and judge
+# keys for it (agc-qcjk); eval-nightly still runs on workflow_dispatch, with the CI jobs.
 name: agentcarousel
 
 on:
   pull_request:
   push:
     branches: [main]
-  schedule:
-    - cron: "0 3 * * *"
   workflow_dispatch:
 
 permissions:

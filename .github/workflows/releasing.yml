@@ -162,11 +162,11 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-15
             can_run: true
-          # Cross-built on the arm64 runner; exercised by smoke.yml on macos-15-intel after release.
+          # Cross-built on the arm64 runner; run `smoke.yml` by hand to execute it on macos-15-intel.
           - target: x86_64-apple-darwin
             os: macos-15
             can_run: false
-          # Cross-built with mingw; exercised by smoke.yml on windows-latest after release.
+          # Cross-built with mingw; run `smoke.yml` by hand to execute it on windows-latest.
           - target: x86_64-pc-windows-gnu
             os: ubuntu-latest
             can_run: false
@@ -225,7 +225,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: |
-          echo "${TARGET} is cross-built and not executed here; smoke.yml tests the released asset on a native runner."
+          echo "${TARGET} is cross-built and not executed here; dispatch smoke.yml after release to test it on a native runner."
 
       - name: Package
         env:
@@ -426,19 +426,3 @@ jobs:
             git commit -m "Update agentcarousel to ${TAG}"
             git push
           fi
-
-  smoke:
-    name: Smoke-test the published release
-    needs: [gate, publish]
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      # A release created with GITHUB_TOKEN does not fire `release: published`, so start
-      # smoke.yml directly (workflow_dispatch is allowed with GITHUB_TOKEN).
-      - name: Dispatch smoke.yml
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.gate.outputs.release_tag }}
-        run: gh workflow run smoke.yml --ref main -f version="${RELEASE_TAG}"

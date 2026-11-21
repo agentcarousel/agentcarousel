@@ -3,24 +3,18 @@ name: smoke
 # Test what was actually released: download the published archives and the installer,
 # verify their checksums, and run them on real platforms. No API keys, no building.
 #
-# Triggers:
-#   - release published: covers releases created by hand. A release created with the
-#     workflow's GITHUB_TOKEN does not fire this event, so releasing.yml also dispatches
-#     this workflow for the tag it just published.
-#   - weekly: catches a platform or hosted-runner change that breaks an old release.
-#   - manual: `version` empty means the latest release.
+# Manual only for now (`version` empty means the latest release): the release-published
+# and weekly triggers, and the dispatch from releasing.yml, are turned off until nightly
+# and scheduled jobs are back on (agc-qcjk). Run it by hand after a release:
+#   gh workflow run smoke.yml -f version=vX.Y.Z
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       version:
         description: "Release tag (e.g. v0.10.0); empty for the latest release"
         required: false
         type: string
-  schedule:
-    - cron: "0 15 * * 1"
 
 permissions:
   contents: read
