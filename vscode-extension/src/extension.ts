@@ -64,8 +64,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('agentcarousel.lintFixtures', async () => {
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: 'AgentCarousel: linting fixtures…' },
-        () => diagnostics.lintAll(),
+        { location: vscode.ProgressLocation.Window, title: 'AgentCarousel: validating fixtures…' },
+        () => diagnostics.validateAll(),
       );
     }),
 
@@ -97,7 +97,7 @@ export function activate(context: vscode.ExtensionContext): void {
       StatsPanel.show(context).catch((err: unknown) => {
         const msg = String(err);
         if (msg.includes('unrecognized subcommand')) {
-          vscode.window.showErrorMessage('agc stats requires agc >= 0.5.3. Run `agc update` to upgrade.');
+          vscode.window.showErrorMessage('`agc stats` was removed in agc 0.6.4. Run `agc metrics` for drift, flakiness and calibration, or `agc dashboard` for pass-rate and latency trends.');
         } else {
           vscode.window.showErrorMessage(`AgentCarousel Stats: ${msg}`);
         }

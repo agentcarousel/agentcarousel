@@ -39,6 +39,12 @@ The audit block is hidden when no audit has been run for a case, so the panel st
 ### Live Reload
 The tree auto-refreshes whenever you save a fixture YAML. No manual refresh required.
 
+### Validation Diagnostics
+Saving a fixture runs `agc validate --json` on it and shows the CLI's warnings in the Problems panel. If validation fails, the file gets one warning; run `agc validate <file>` in a terminal for the details. **AgentCarousel: Validate Fixtures** checks every fixture in the workspace. Diagnostics need the `agc` (or `agentcarousel`) CLI on your `PATH`. Outside the AgentCarousel repository, `agc validate` also needs the fixture schema in `./schemas/` (see the [CLI reference](https://github.com/agentcarousel/agentcarousel/blob/main/docs/reference.md#agc-validate)).
+
+### Run History, Doctor
+**Show Run History** lists recent runs from `agc report list` and opens one with `agc report show`. **Run Doctor** prints `agc doctor` output. **Show Stats** relied on `agc stats`, which was removed in agc 0.6.4; use `agc metrics` or `agc dashboard` instead.
+
 ### Empty State & Onboarding
 If no fixtures are found, the panel guides you to the right directory and lets you configure the fixture glob pattern directly from the welcome screen.
 
@@ -57,7 +63,8 @@ If no fixtures are found, the panel guides you to the right directory and lets y
 ## Requirements
 
 - VS Code `^1.85.0` (or any compatible fork — Cursor, Windsurf, etc.)
-- A workspace containing `fixtures/skills/**/*.yaml` files that conform to the [AgentCarousel fixture schema](https://agentcarousel.com)
+- A workspace containing `fixtures/**/*.yaml` files that conform to the [AgentCarousel fixture schema](https://github.com/agentcarousel/agentcarousel/blob/main/docs/fixture-format.md)
+- For diagnostics and run history: the `agc` CLI ([install](https://github.com/agentcarousel/agentcarousel#quickstart))
 
 ---
 
@@ -65,30 +72,22 @@ If no fixtures are found, the panel guides you to the right directory and lets y
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `agentcarousel.fixtureGlob` | `fixtures/skills/**/*.yaml` | Glob pattern for fixture discovery (relative to workspace root) |
+| `agentcarousel.fixtureGlob` | `fixtures/**/*.yaml` | Glob pattern for fixture discovery (relative to workspace root) |
+| `agentcarousel.agcPath` | `agc` | Path to the CLI. With the default, the extension also tries `agentcarousel` |
 
-You can also change the glob via **AgentCarousel: Configure Fixture Glob** in the Command Palette (`Cmd+Shift+P`).
+You can also change the glob via **AgentCarousel: Change Fixture File Pattern** in the Command Palette (`Cmd+Shift+P`).
 
 ---
 
-## Certification Tracks
+## Certification Track Badge
 
-AgentCarousel uses a four-tier certification model:
-
-| Track | Meaning |
-|-------|---------|
-| `trusted` | Production-certified; passed full adversarial suite |
-| `stable` | Validated; suitable for staging and pre-production |
-| `candidate` | Under evaluation; passes smoke tests |
-| `none` | No certification track assigned |
+The badge shows the fixture's optional `certification_track` field: `none`, `candidate`, `stable`, or `trusted`. It is a label the fixture's author declares about where the suite stands. It is not a certification: the CLI only checks that the value is one of these four, and the field is not part of the [AgentCarousel Specification](https://github.com/agentcarousel/assurance-spec).
 
 ---
 
 ## About AgentCarousel
 
-[AgentCarousel](https://agentcarousel.com) provides enterprise-grade quality assurance and trust infrastructure for autonomous AI agents. Our platform stress-tests agents against adversarial scenarios, certifies reliability and safety, and gives AI teams the confidence to deploy in production.
-
-> *"Train and Trust Your Agentic Workforce"*
+[AgentCarousel](https://agentcarousel.com) is an open-source CLI for writing behavioral tests for AI agents, running them in CI, and exporting evidence bundles that anyone can verify offline.
 
 ---
 

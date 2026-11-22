@@ -106,7 +106,7 @@ The pipeline automates the full onboarding and improvement lifecycle for a skill
 `agc pipeline improve <skill>` runs an iterative loop: eval the current cases, analyze failures, optimize the prompt, re-eval, and repeat until the effectiveness score reaches the target (default 85%) or the round limit is hit. Each round's result is compared to the baseline so you can see whether the prompt changes are actually helping.
 
 ```bash
-agc pipeline onboard my-skill --model ollama/qwen3:8b \
+agc pipeline onboard my-skill --target-model ollama/qwen3:8b \
   --target-endpoint "http://localhost:11434/api/generate" \
   --judge-model gpt-4o \
   --target-score 0.65 

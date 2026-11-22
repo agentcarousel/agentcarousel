@@ -39,7 +39,7 @@ Open an issue with the title `Fixture proposal: <skill-or-agent-id>` and fill in
 | **Cases** | Table or list: case id, one-line description, tags (`smoke`, `happy-path`, `error-handling`). |
 | **Tool calls** | Names and trigger conditions, or "none". |
 
-After issue acceptance, scaffold with `agentcarousel init`, then follow the `init → validate → test` loop before opening a PR.
+After issue acceptance, scaffold the fixture with `agentcarousel generate --skill <skill-or-agent-id>` (without `--model` it calls no LLM), or copy [templates/fixture-skeleton.yaml](templates/fixture-skeleton.yaml). Then run `validate` and `test` until both pass before opening a PR.
 
 See [docs/getting-started.md](docs/getting-started.md) for the full process and [docs/fixture-format.md](docs/fixture-format.md) for field reference.
 
@@ -79,4 +79,4 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-The installed binary lands in `~/.cargo/bin/agentcarousel`. For the pre-built installer, see the **Install** section in [README.md](README.md) (curl installer and GitHub releases).
+The installed binary lands in `~/.cargo/bin/agentcarousel`. For pre-built binaries, see [Quickstart](README.md#quickstart) in the README (curl installer, Homebrew, and GitHub releases).

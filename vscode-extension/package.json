@@ -2,7 +2,7 @@
   "name": "agentcarousel-fixture-navigator",
   "displayName": "AgentCarousel Fixtures",
   "description": "Quality Assurance and Trust for Autonomous AI — navigate, inspect, and understand your AgentCarousel fixture files with a rich, human-readable interface right inside your editor.",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "publisher": "agentcarousel",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -89,7 +89,7 @@
       },
       {
         "command": "agentcarousel.lintFixtures",
-        "title": "Lint Fixtures",
+        "title": "Validate Fixtures",
         "icon": "$(warning)",
         "category": "AgentCarousel"
       },
@@ -133,7 +133,7 @@
         "agentcarousel.agcPath": {
           "type": "string",
           "default": "agc",
-          "description": "Path to the agc (agentcarousel) CLI binary. Defaults to 'agc' on PATH.",
+          "description": "Path to the agc (agentcarousel) CLI binary. Defaults to 'agc' on PATH, then 'agentcarousel'.",
           "order": 2
         }
       }

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `LICENSE` names AgentCarousel as the copyright holder, as the specification, VS Code extension and oscal-rs licenses already do. The license terms (MIT) are unchanged.
+
+### Fixed
+
+- **VS Code extension 0.3.4: diagnostics and run history work again.** The extension called `agc validate --format json` and `agc lint`, which don't exist, and dropped the errors, so no diagnostics ever appeared. It also read `agc report` JSON without its envelope. It now runs `agc validate --json`, reads the envelope's `data`, and falls back to `agentcarousel` when `agc` is not on `PATH`. See `vscode-extension/CHANGELOG.md`.
+
+### Documentation
+
+- **`docs/reference.md` matches the 0.10.1 binary.** It documented commands that don't exist (`agc lint`, `agc compliance generate-cases`, `agc batch submit|retrieve|list|cancel`) and flags that don't exist (`pipeline --model`, `optimize --run-id`, `batch --provider`, `compliance report|gaps --model`). It now has a section for every command in `agc --help`, including `test`, `candidates`, `audit`, `bundle`, `trust-check`, `completions` and `update`. `agc watch` is marked as needing a source build with `--features watch`. The batch flow is documented as `agc eval --execution-mode batch` followed by `agc batch status|fetch`. The new Bundles and registry section says which URL each registry command uses.
+- **`docs/getting-started.md` told users to `export CLAUDE_API_KEY` for the judge.** No version reads that variable; Claude models use `ANTHROPIC_API_KEY`. The prerequisites now name the right key for the generator and the judge. Sample output lists the fixture's real 12 cases, `agc export` is no longer called a signed bundle unless `--sign-key` is passed, and `agc pipeline onboard` examples there and in `docs/concepts.md` use `--target-model`, not `--model`.
+- README links the AgentCarousel Specification, which `evidence.json` and the in-toto statement follow, and adds the fixture-format, scope-profile and methodology docs to "Learn more". It notes that `cargo install` needs `--features dashboard` for `agc dashboard`. CONTRIBUTING no longer tells contributors to run `agentcarousel init`, which doesn't exist; `agentcarousel generate --skill <id>` scaffolds a fixture.
+- Corrected the 0.8.0 entry below. OSCAL types came from the `oscal` crate on crates.io, not a `crates/oscal` workspace crate. The command is `agc compliance generate`, and `compliance report` never had a `--model` flag.
+
 ## 0.10.1 — 2026-11-21
 
 This release changes how binaries are built and shipped. Commands, flags and output formats are unchanged. Every download name that 0.10.0 published is still published, so `agc update` from 0.9.x and 0.10.0 still finds its archive.
@@ -106,16 +123,16 @@ Multi-turn fixture conversations are now sent to providers as native message arr
 
 **Theme: OSCAL-native compliance attestation.**
 
-`agc` can now produce machine-readable compliance evidence that auditors and GRC tools accept directly. A new `crates/oscal` workspace crate implements the OSCAL data model; a tag-driven scoring engine maps fixture cases to control IDs; and three new CLI commands surface the results.
+`agc` can now produce machine-readable compliance evidence that auditors and GRC tools accept directly. The [`oscal`](https://crates.io/crates/oscal) crate, from [oscal-rs](https://github.com/agentcarousel/oscal-rs), implements the OSCAL data model; a tag-driven scoring engine maps fixture cases to control IDs; and three new CLI commands surface the results.
 
 ### Added
 
-- **`crates/oscal`** — new workspace crate with Serde types for the full OSCAL data model: `Catalog`, `Group`, `Control`, `Part`, `ComponentDefinition`, `ControlImplementation`, `ImplementedRequirement`, `AssessmentResults`, `Finding`, `FindingTarget`, `Observation`, and `RelevantEvidence`. Round-trip JSON parse tested against bundled community catalogs.
-- **Bundled OSCAL catalogs** — NIST SP 800-171, 800-172, 800-207, NIST AI RMF, EU AI Act, ISO 42001, HIPAA, and FDA SaMD catalog JSON files shipped inside `crates/oscal/catalogs/`; loaded at runtime via `load_catalog()`.
+- **`oscal` crate** — new dependency ([oscal-rs](https://github.com/agentcarousel/oscal-rs)) with Serde types for the full OSCAL data model: `Catalog`, `Group`, `Control`, `Part`, `ComponentDefinition`, `ControlImplementation`, `ImplementedRequirement`, `AssessmentResults`, `Finding`, `FindingTarget`, `Observation`, and `RelevantEvidence`. Round-trip JSON parse tested against bundled community catalogs.
+- **Bundled OSCAL catalogs** — NIST SP 800-171, 800-172, 800-207, NIST AI RMF, EU AI Act, ISO 42001, HIPAA, and FDA SaMD catalog JSON files shipped inside the `oscal` crate; loaded at runtime via `load_catalog()`.
 - **`CaseResult.tags`** — tags field added to `CaseResult` (core/models.rs) and populated from `Case.tags` at all eight orchestration construction sites, giving every scored case its control-ID annotations.
-- **`agc compliance report`** — Markdown compliance report: per-control pass/fail table with effectiveness scores, case counts, gap advisory, and overall framework attestation status. `--framework` accepts `nist-ai-rmf`, `nist-800-171`, `nist-800-172`, `eu-ai-act`, `iso-42001`, `hipaa`, `fda-samd`, `nist-800-207`, or `all`. `--model` scopes scoring to a specific generator model. `--json` emits a structured envelope for pipeline use.
+- **`agc compliance report`** — Markdown compliance report: per-control pass/fail table with effectiveness scores, case counts, gap advisory, and overall framework attestation status. `--framework` accepts `nist-ai-rmf`, `nist-800-171`, `nist-800-172`, `eu-ai-act`, `iso-42001`, `hipaa`, `fda-samd`, `nist-800-207`, or `all`. Scoring uses the configured generator model; `--all-models` includes every model in history. `--json` emits a structured envelope for pipeline use.
 - **`agc compliance gaps`** — Lists controls that are `NotSatisfied` or `PartialEvidence` with suggested case improvements. Designed for remediation workflows.
-- **`agc compliance generate-cases`** — Generates fixture cases pre-tagged with control IDs for a specified framework, accelerating coverage of compliance gaps.
+- **`agc compliance generate`** — Generates fixture cases pre-tagged with control IDs for a specified framework, accelerating coverage of compliance gaps.
 - **OSCAL Assessment Results export** — `serialize_assessment_results()` produces a valid `assessment-results.oscal.json` artifact; included in every evidence tarball alongside `metrics.json`. Findings carry `status`, `reason`, and `relevant-evidence` links.
 - **`--framework` on `agc metrics`** — `framework_controls` field on `MetricResult` replaces the old `compliance_hook`; `agc metrics --framework <id>` scopes the control table to a single framework.
 - **Satisfaction threshold** — Documented at 0.80 (configurable per-framework); requires a minimum of three cases before a control can receive `Satisfied` status.

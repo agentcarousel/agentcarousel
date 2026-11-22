@@ -19,7 +19,7 @@ curl -fsSL https://install.agentcarousel.com | sh
 # Homebrew
 brew tap agentcarousel/agentcarousel && brew install agentcarousel
 
-# Cargo
+# Cargo (add --features dashboard for `agc dashboard`)
 cargo install agentcarousel
 ```
 
@@ -73,7 +73,7 @@ You describe what your agent should and shouldn't do in a YAML fixture. `agc eva
 
 Every run is saved to a local history database. `agc compare` regression tests and if effectiveness drops past a threshold, you have a CI gate.
 
-`agc export` packages the run with a SHA-256 manifest for auditors and compliance teams; add `--sign-key` to sign it with minisign, and anyone can check it with `agc verify`.
+`agc export` packages the run with a SHA-256 manifest for auditors and compliance teams; add `--sign-key` to sign it with minisign, and anyone can check it with `agc verify`. The bundle's `evidence.json` and in-toto statement follow the open [AgentCarousel Specification](https://github.com/agentcarousel/assurance-spec), and `agc verify` also checks that they conform, offline.
 
 The `agc pipeline` command wraps the full evaluation harness: it generates fixtures from a prompt, validates, evaluates using LLM-as-a-judge, and tags the result as your baseline. `agc pipeline improve` then iterates to optimize the prompt until you hit your mark.
 
@@ -81,7 +81,7 @@ For details on rubric scoring, judge reliability, and what the signed bundle doe
 
 ---
 
-## Compliance reports (new in 0.8.0)
+## Compliance reports
 
 Tag fixture cases with control IDs and `agc` scores your eval history against bundled OSCAL catalogs: NIST AI RMF, EU AI Act, ISO 42001, HIPAA, FDA SaMD, and NIST SP 800-171/172/207. An [AIUC-1 crosswalk](docs/frameworks/aiuc-1.md) (control IDs, our own labels and links) is bundled too.
 
@@ -117,5 +117,8 @@ A control is reported `satisfied` only with three or more cases and effectivenes
 - [Getting started](docs/getting-started.md) — write your first fixture and get a passing eval in 10 minutes
 - [Concepts](docs/concepts.md) — what fixtures, rubrics, evaluators, and pipelines actually are
 - [Reference](docs/reference.md) — every `agc` subcommand, flag, and exit code
+- [Fixture format](docs/fixture-format.md) and [scope profiles](docs/scope-profile.md) — field reference for `cases.yaml` and `scope.yaml`
+- [Methodology](METHODOLOGY.md) — what a score and a signed bundle do and don't prove
+- [AgentCarousel Specification](https://github.com/agentcarousel/assurance-spec) — the open format for the evidence `agc export` writes
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)

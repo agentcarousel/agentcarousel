@@ -34,7 +34,7 @@ export class StatsPanel {
       const msg = String(err);
       this.panel.webview.html = errorHtml(
         msg.includes('unrecognized subcommand')
-          ? 'agc stats requires agc >= 0.5.3 — run `agc update` to upgrade.'
+          ? '`agc stats` was removed in agc 0.6.4. Run `agc metrics` for drift, flakiness and calibration, or `agc dashboard` for pass-rate and latency trends.'
           : msg,
       );
     }

@@ -1,30 +1,8 @@
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
+import { unwrapData, validateOutcome, type ValidateOutcome } from './agcOutput';
 
-export interface ValidateMessage {
-  file: string;
-  line: number;
-  col: number;
-  level: 'error' | 'warning' | 'info';
-  message: string;
-}
-
-export interface ValidateResult {
-  messages: ValidateMessage[];
-  atf_summary?: Record<string, unknown>;
-}
-
-export interface LintMessage {
-  file: string;
-  line: number;
-  col: number;
-  level: 'error' | 'warning' | 'info';
-  message: string;
-}
-
-export interface LintResult {
-  messages: LintMessage[];
-}
+export type { ValidateMessage, ValidateOutcome } from './agcOutput';
 
 export interface RunListing {
   id: string;
@@ -84,53 +62,69 @@ export interface DoctorResult {
   checks: { name: string; status: 'ok' | 'warn' | 'fail'; message?: string }[];
 }
 
-function findAgcBinary(): string {
-  return vscode.workspace.getConfiguration('agentcarousel').get<string>('agcPath') || 'agc';
+/**
+ * Binaries to try, in order. `agc` is the default, but the curl installer only offers it as a
+ * shell alias, which spawn() cannot see, so the default falls back to `agentcarousel`.
+ */
+function agcBinaries(): string[] {
+  const configured = vscode.workspace.getConfiguration('agentcarousel').get<string>('agcPath') || 'agc';
+  return configured === 'agc' ? ['agc', 'agentcarousel'] : [configured];
 }
 
 function cwd(): string {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 }
 
-function run(args: string[], workingDir: string): Promise<string> {
+function run(args: string[], workingDir: string, okCodes: number[] = [0, 1]): Promise<string> {
+  return spawnFirst(agcBinaries(), ['--no-color', ...args], workingDir, okCodes);
+}
+
+function spawnFirst(bins: string[], args: string[], workingDir: string, okCodes: number[]): Promise<string> {
+  const [bin, ...fallbacks] = bins;
   return new Promise((resolve, reject) => {
-    const bin = findAgcBinary();
-    const proc = cp.spawn(bin, ['--no-color', ...args], { cwd: workingDir });
+    let settled = false;
+    const proc = cp.spawn(bin, args, { cwd: workingDir });
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
     proc.stdout.on('data', (d: Buffer) => chunks.push(d));
     proc.stderr.on('data', (d: Buffer) => errChunks.push(d));
     proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
       const stdout = Buffer.concat(chunks).toString('utf8');
-      if (code === 0 || code === 1) {
+      if (code !== null && okCodes.includes(code)) {
         resolve(stdout);
       } else {
         const stderr = Buffer.concat(errChunks).toString('utf8');
-        reject(new Error(`agc exited ${code}: ${stderr || stdout}`));
+        reject(new Error(`${bin} exited ${code}: ${stderr || stdout}`));
       }
     });
-    proc.on('error', (err) => reject(new Error(`Failed to spawn agc: ${err.message}`)));
+    proc.on('error', (err: NodeJS.ErrnoException) => {
+      if (settled) return;
+      settled = true;
+      if (err.code === 'ENOENT' && fallbacks.length > 0) {
+        spawnFirst(fallbacks, args, workingDir, okCodes).then(resolve, reject);
+      } else {
+        reject(new Error(`Failed to spawn ${bin}: ${err.message}`));
+      }
+    });
   });
 }
 
-export async function validate(filePath: string, format: 'json' | 'sarif' = 'json'): Promise<ValidateResult> {
-  const out = await run(['validate', '--format', format, filePath], cwd());
-  return JSON.parse(out) as ValidateResult;
-}
-
-export async function lint(paths: string[]): Promise<LintResult> {
-  const out = await run(['lint', '--format', 'json', ...paths], cwd());
-  return JSON.parse(out) as LintResult;
+/** Runs `agc validate --json` on one file. Exit 2 means validation failed. */
+export async function validate(filePath: string): Promise<ValidateOutcome> {
+  const out = await run(['validate', '--json', filePath], cwd(), [0, 2]);
+  return validateOutcome(out);
 }
 
 export async function reportList(limit = 50): Promise<RunListing[]> {
   const out = await run(['report', 'list', '--limit', String(limit), '--json'], cwd());
-  return JSON.parse(out) as RunListing[];
+  return unwrapData<{ runs: RunListing[] }>(out).runs;
 }
 
 export async function reportShow(runId: string): Promise<RunDetail> {
   const out = await run(['report', 'show', '--json', runId], cwd());
-  return JSON.parse(out) as RunDetail;
+  return unwrapData<RunDetail>(out);
 }
 
 export async function runStats(skill?: string): Promise<StatsResult> {
@@ -142,16 +136,4 @@ export async function runStats(skill?: string): Promise<StatsResult> {
 
 export async function runDoctor(): Promise<string> {
   return run(['doctor', '--json'], cwd());
-}
-
-export async function runTest(paths: string[], filter?: string): Promise<string> {
-  const args = ['test', '--format', 'json', ...paths];
-  if (filter) args.push('--filter', filter);
-  return run(args, cwd());
-}
-
-export async function runEval(paths: string[], filter?: string): Promise<string> {
-  const args = ['eval', '--format', 'json', ...paths];
-  if (filter) args.push('--filter', filter);
-  return run(args, cwd());
 }
