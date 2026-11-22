@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- `LICENSE` names AgentCarousel as the copyright holder, as the specification, VS Code extension and oscal-rs licenses already do. The license terms (MIT) are unchanged.
+
 ### Documentation
 
 - **`docs/reference.md` matches the 0.10.1 binary.** It documented commands that don't exist (`agc lint`, `agc compliance generate-cases`, `agc batch submit|retrieve|list|cancel`) and flags that don't exist (`pipeline --model`, `optimize --run-id`, `batch --provider`, `compliance report|gaps --model`). It now has a section for every command in `agc --help`, including `test`, `candidates`, `audit`, `bundle`, `trust-check`, `completions` and `update`. `agc watch` is marked as needing a source build with `--features watch`. The batch flow is documented as `agc eval --execution-mode batch` followed by `agc batch status|fetch`. The new Bundles and registry section says which URL each registry command uses.
