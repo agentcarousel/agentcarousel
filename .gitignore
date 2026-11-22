@@ -5,15 +5,6 @@
 .dirac-symbol-index/
 .idea/
 
-# --- Internal process / planning (never ship) ---
-authorizing-packages/
-docs/designs/
-docs/launch/
-docs/api/
-fixtures/intake/
-reports/carousel-runs/
-reports/*.md
-
 # --- Local run output (never commit) ---
 agentcarousel-evidence-*/
 reports/
@@ -115,10 +106,6 @@ temp/
 *.pub
 *.key
 
-# Temp Ignore
-docs/rba/
-*.ubsignore
-
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
@@ -136,5 +123,3 @@ agentcarousel.local.toml
 
 # bv (beads viewer) local config and caches
 .bv/
-crates/agentcarousel/src/cli/experimental/
-packs/
